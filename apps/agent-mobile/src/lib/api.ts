@@ -41,6 +41,7 @@ export async function patchTimezone(
 export async function fetchIconSuggestions(
   getToken: TokenGetter,
   input: { title: string; description?: string | null },
+  signal?: AbortSignal,
   baseUrl: string = API_BASE_URL,
 ): Promise<string[]> {
   const res = await apiFetch(
@@ -50,6 +51,7 @@ export async function fetchIconSuggestions(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+      signal,
     },
     baseUrl,
   );

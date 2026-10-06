@@ -10,7 +10,7 @@ import { TaskFields } from "@/components/task-fields";
 import { reportTodoError } from "@/lib/todo-feedback";
 import { useLocalDay } from "@/lib/local-day";
 import { useTodoData } from "@/lib/todo-data";
-import { requestIconSuggestions } from "@/lib/icon-suggestions";
+import { useNewProjectIcon } from "@/lib/new-project-icon";
 import { useProjectSuggestion } from "@/lib/project-suggestion";
 
 export type TodoAddKind = "task" | "project" | "waiting" | "after";
@@ -48,12 +48,13 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
     tasks,
     enabled: authenticatedFeatures && kind === "task" && contextProjectId == null,
   });
+  const projectIcon = useNewProjectIcon({ title: kind === "project" ? text : "", enabled: authenticatedFeatures && kind === "project" });
   const projectId = projectChoice.selection.projectId;
   const context = projects.find((project) => project.id === contextProjectId);
   const kinds: TodoAddKind[] = contextProjectId ? ["task", "waiting", "after", "project"] : ["task", "project"];
   const placeholder = kind === "project" ? "Name an outcome" : kind === "waiting" ? "What are you waiting for?" : "Add a task";
   const reset = () => {
-    setDraft(TaskDraft.create()); projectChoice.reset(contextSelection); onDraftChange?.(false);
+    setDraft(TaskDraft.create()); projectChoice.reset(contextSelection); projectIcon.reset(); onDraftChange?.(false);
   };
 
   const finish = () => {
@@ -91,10 +92,9 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
         if (!contextProjectId) return;
         await persist(replica.waits.addWaiting(contextProjectId, title));
       } else if (kind === "project") {
-        const tx = replica.projects.add(title);
+        const tx = replica.projects.add(title, projectIcon.choice.icon);
         const id = String(tx.mutations[0]?.key);
         await persist(tx, () => {
-          if (authenticatedFeatures) void requestIconSuggestions(id, { title, description: null });
           if (initialKind === "project" && !contextProjectId) void navigate(`/projects/${id}`);
           else toast("Project created", { description: title, action: { label: "View", onPress: () => void navigate(`/projects/${id}`) } });
         });
@@ -132,7 +132,14 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
           trailing={<Button type="submit" disabled={pending || (kind === "task" ? draftView.commit.kind !== "ready" : !effectiveText.trim())}>{pending ? "Saving…" : "Add"}</Button>}
           dateField={kind === "task" ? { onPick: (next) => setDraft((current) => current.pickCreationDate(next, today)) } : undefined}
           projectField={kind === "task" ? { projects, tasks, conditions, projectId, suggested: projectChoice.selection.source === "suggested", onPick: projectChoice.pick } : undefined}
+          leading={kind === "project" && authenticatedFeatures ? <span aria-label={`Icon ${projectIcon.choice.icon}`} role="img" className="flex size-9 shrink-0 items-center justify-center text-xl">{projectIcon.choice.icon}</span> : undefined}
         />
+        {kind === "project" && projectIcon.choice.icons.length > 0 ? <div role="group" aria-label="Suggested icons" className="flex flex-wrap items-center gap-0.5">
+          {projectIcon.choice.source === "suggested" ? <span className="mr-1 text-xs font-medium text-muted-foreground">Suggested</span> : null}
+          {projectIcon.choice.icons.map((emoji) => <button key={emoji} type="button" aria-label={`Use icon ${emoji}`} aria-pressed={emoji === projectIcon.choice.icon}
+            onClick={() => projectIcon.pick(emoji)}
+            className={`flex size-8 items-center justify-center rounded-md text-lg hover:bg-accent ${emoji === projectIcon.choice.icon ? "bg-accent ring-1 ring-ring" : ""}`}>{emoji}</button>)}
+        </div> : null}
       </>}
     </fieldset>
     {retryAddition ? <div className="flex flex-col gap-2"><p role="alert" className="text-sm text-destructive">Your addition is still in memory. Save it again before continuing.</p><Button type="submit" disabled={pending}>{pending ? "Saving…" : "Try saving again"}</Button></div> : null}

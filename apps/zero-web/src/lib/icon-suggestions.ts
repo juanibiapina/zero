@@ -27,11 +27,12 @@ let cache: Store = load();
 const subscribers = new Set<() => void>();
 const inFlight = new Set<string>();
 
-async function fetchIconSuggestions(input: IconSuggestionBasis): Promise<string[]> {
+export async function fetchIconSuggestions(input: IconSuggestionBasis, signal?: AbortSignal): Promise<string[]> {
   const res = await fetch("/api/projects/icon-suggestions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+    signal,
   });
   if (!res.ok) throw new Error(`POST /api/projects/icon-suggestions failed: ${res.status}`);
   return ((await res.json()) as { icons: string[] }).icons;
@@ -63,9 +64,9 @@ const subscribe = (cb: () => void): (() => void) => {
   };
 };
 
-// Fire a suggestion request for a project and cache the result. Shared by the
-// create-time pre-warm and the picker's fetch-on-open (both no-op when an entry
-// already exists) and by Refresh (`force`, which always re-fires). Never throws:
+// Fire a suggestion request for a project and cache the result. Used by the
+// picker's fetch-on-open (a no-op when an entry already exists) and by Refresh
+// (`force`, which always re-fires). Never throws:
 // a failed request lands as `status: "error"` so the manual picker still stands.
 export const requestIconSuggestions = async (
   id: string,

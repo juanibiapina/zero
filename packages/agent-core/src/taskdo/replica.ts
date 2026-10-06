@@ -59,7 +59,7 @@ export type TodoTasks = {
 
 export type TodoProjects = {
   collection: Collection<Project, string>;
-  add: (title: string) => Transaction;
+  add: (title: string, icon?: string) => Transaction;
   setState: (id: string, state: ProjectState) => Transaction;
   reopen: (project: Project) => Transaction;
   edit: (id: string, fields: ProjectEditFields) => Transaction;
@@ -354,8 +354,8 @@ export function createTaskdoReplica({
   };
   const projectActions: TodoProjects = {
     collection: projects,
-    add: (title) => projects.insert({
-      id: randomId(), title, icon: "📁", description: null, state: "in-play",
+    add: (title, icon = "📁") => projects.insert({
+      id: randomId(), title, icon, description: null, state: "in-play",
       createdAt: now().toISOString(),
     }),
     edit: (id, fields: ProjectEditFields) => projects.update(id, (draft) => { Object.assign(draft, fields); }),

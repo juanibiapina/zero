@@ -251,10 +251,9 @@ function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
   );
 }
 
-// The pre-warmed AI icon suggestions, shown above the manual picker inside the
+// The AI icon suggestions, shown above the manual picker inside the
 // icon popover. The row only mounts when the popover opens, so its mount effect
-// is the fetch-on-open fallback: a cache miss here (a different device, an
-// eviction, an offline creation) fetches now; a warmed cache shows instantly.
+// fetches on open; an earlier answer for this device shows instantly.
 // A failed or empty result degrades to the manual picker below with no blocking.
 function SuggestedIconRow({
   project,
@@ -269,8 +268,7 @@ function SuggestedIconRow({
   );
   const cached = useIconSuggestions(project.id);
 
-  // Fetch-on-open: no-ops when an entry already exists (the create-time warm),
-  // so this only fires on a genuine cache miss.
+  // Fetch-on-open: no-ops when an entry already exists.
   useEffect(() => {
     void requestIconSuggestions(project.id, basis);
   }, [project.id, basis]);
@@ -397,7 +395,7 @@ function ProjectHeader({
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-fit p-0">
-            {/* Pre-warmed AI suggestions sit above the full manual picker: an
+            {/* AI suggestions sit above the full manual picker: an
                 additive shortcut, never a replacement. */}
             {authenticatedFeatures ? <SuggestedIconRow project={project} onPick={applyIcon} /> : null}
             <EmojiPicker.Root

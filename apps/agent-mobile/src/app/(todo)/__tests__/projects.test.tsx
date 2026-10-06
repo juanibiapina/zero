@@ -92,6 +92,49 @@ describe('ProjectsScreen', () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith(`/projects/${created?.id}`));
   });
 
+  describe('icon suggestions while typing', () => {
+    let icons: string[] = [];
+    const respond = async () => new Response(JSON.stringify({ icons }), { status: 200 });
+    const createdIcon = (screen: Awaited<ReturnType<typeof renderScreen>>, title: string) =>
+      [...screen.data.replica!.projects.collection.values()].find((item) => item.title === title)?.icon;
+
+    it('creates the Project with the top suggestion', async () => {
+      icons = ['🌟', '🚀'];
+      const fetch = jest.spyOn(global, 'fetch').mockImplementation(respond);
+      const screen = await renderScreen();
+      await fireEvent.press(screen.getByLabelText('Add'));
+      const input = screen.getByPlaceholderText('Name an outcome');
+      await fireEvent.changeText(input, 'Run a 5K');
+
+      await waitFor(() => expect(screen.getByText('Suggested')).toBeTruthy());
+      expect(screen.getByLabelText('Use icon 🌟').props.accessibilityState).toMatchObject({ selected: true });
+      await fireEvent(input, 'submitEditing');
+
+      await waitFor(() => expect(createdIcon(screen, 'Run a 5K')).toBe('🌟'));
+      fetch.mockRestore();
+    });
+
+    it('keeps a picked icon while suggestions keep updating', async () => {
+      icons = ['🌟', '🚀'];
+      const fetch = jest.spyOn(global, 'fetch').mockImplementation(respond);
+      const screen = await renderScreen();
+      await fireEvent.press(screen.getByLabelText('Add'));
+      const input = screen.getByPlaceholderText('Name an outcome');
+      await fireEvent.changeText(input, 'Run a 5K');
+      await waitFor(() => expect(screen.getByLabelText('Use icon 🚀')).toBeTruthy());
+      await fireEvent.press(screen.getByLabelText('Use icon 🚀'));
+
+      icons = ['🏃', '👟'];
+      await fireEvent.changeText(input, 'Run a 5K in May');
+      await waitFor(() => expect(screen.getByLabelText('Use icon 🏃')).toBeTruthy());
+      expect(screen.getByLabelText('Icon 🚀')).toBeTruthy();
+      await fireEvent(input, 'submitEditing');
+
+      await waitFor(() => expect(createdIcon(screen, 'Run a 5K in May')).toBe('🚀'));
+      fetch.mockRestore();
+    });
+  });
+
   it('creates a guest project without requesting account-only icon suggestions', async () => {
     const fetch = jest.spyOn(global, 'fetch');
     const screen = await renderScreen({}, true);

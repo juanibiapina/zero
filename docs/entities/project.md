@@ -58,7 +58,8 @@ Several relationships read `2 projects` / `after 2 projects`.
 
 ## Behavior
 
-- **Add** — create by title with state In-play, icon 📁, and null description.
+- **Add** — create by title and icon (default 📁) with state In-play and null
+  description.
 - **List** — return every non-Done Project, oldest first.
 - **Set state** — persist In-play, Backlog, or Done.
 - **Edit** — update supplied title, icon, or description fields.
@@ -66,7 +67,10 @@ Several relationships read `2 projects` / `after 2 projects`.
   emoji for a title and optional description, through the shared
   `@zeroapps/emoji-suggest` package and TypeSafe's Jev (`jev-1.13.0`, key
   `TYPESAFE_API_KEY`). See `packages/emoji-suggest/README.md` for how it picks
-  them. Any failure returns no icons. Each request logs
+  them. Signed-in create composers on web and mobile call it after a pause in
+  typing the title, use the top icon unless the user taps another, and keep a
+  tapped icon while suggestions refresh; the icon picker calls it on open.
+  Any failure returns no icons. Each request logs
   `project_icon_suggested` with its count, input tokens, and latency. On
   2026-10-06 it suggested the hand-picked icon for 15 of 19 real Projects (the
   previous LLM: 14), gave all 12 test titles naming a country, city, people, or

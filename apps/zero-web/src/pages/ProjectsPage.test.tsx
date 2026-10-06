@@ -759,21 +759,53 @@ describe("project icon suggestions", () => {
     respondIcons(["🌟", "🚀"]);
   });
 
-  it("pre-warms suggestions when a project is created", async () => {
-    setApi([]);
-    renderApp();
-    fireEvent.change(await screen.findByRole("textbox", { name: "Name an outcome" }), {
-      target: { value: "Run a 5K" },
-    });
+  const typeTitle = async (value: string) => {
+    fireEvent.change(await screen.findByRole("textbox", { name: "Name an outcome" }), { target: { value } });
+  };
+  const addProject = async () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
     });
-    await waitFor(() => expect(suggestionCalls().length).toBe(1));
+  };
+  const createdIcon = (title: string) =>
+    h.replica!.snapshot().projects.find((item) => item.title === title)?.icon;
+
+  it("suggests icons while the title is typed and creates the Project with the top one", async () => {
+    setApi([]);
+    renderApp();
+    await typeTitle("Run a 5K");
+    expect(await screen.findByRole("button", { name: "Use icon 🌟" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Suggested")).toBeInTheDocument();
     const [, init] = suggestionCalls()[0] as [string, RequestInit];
-    expect(JSON.parse(init.body as string)).toEqual({
-      title: "Run a 5K",
-      description: null,
-    });
+    expect(JSON.parse(init.body as string)).toEqual({ title: "Run a 5K", description: null });
+
+    await addProject();
+    await waitFor(() => expect(createdIcon("Run a 5K")).toBe("🌟"));
+    expect(suggestionCalls().length).toBe(1);
+  });
+
+  it("keeps a picked icon while suggestions keep updating", async () => {
+    setApi([]);
+    renderApp();
+    await typeTitle("Run a 5K");
+    fireEvent.click(await screen.findByRole("button", { name: "Use icon 🚀" }));
+    respondIcons(["🏃", "👟"]);
+    await typeTitle("Run a 5K in May");
+    expect(await screen.findByRole("button", { name: "Use icon 🏃" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("img", { name: "Icon 🚀" })).toBeInTheDocument();
+
+    await addProject();
+    await waitFor(() => expect(createdIcon("Run a 5K in May")).toBe("🚀"));
+  });
+
+  it("creates the Project with the default icon when suggestions fail", async () => {
+    fetchMock.mockRejectedValue(new Error("network down"));
+    setApi([]);
+    renderApp();
+    await typeTitle("Run a 5K");
+    await waitFor(() => expect(suggestionCalls().length).toBe(1));
+    await addProject();
+    await waitFor(() => expect(createdIcon("Run a 5K")).toBe("📁"));
   });
 
   it("fetches on open when the cache is empty and shows chips", async () => {

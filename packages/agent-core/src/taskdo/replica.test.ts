@@ -33,6 +33,16 @@ describe("TaskDO replica adapter", () => {
     await replica.close();
   });
 
+  it("creates a Project with the given icon, or 📁 without one", async () => {
+    const { replica } = setup();
+    await replica.projects.add("Trip to Japan", "🇯🇵").isPersisted.promise;
+    await replica.projects.add("Taxes").isPersisted.promise;
+    expect(replica.snapshot().projects.map(({ title, icon }) => [title, icon])).toEqual(
+      expect.arrayContaining([["Trip to Japan", "🇯🇵"], ["Taxes", "📁"]]),
+    );
+    await replica.close();
+  });
+
   it("exposes TodoTasks mutations through persisted TanStack transactions", async () => {
     const { replica, store, saves } = setup();
     await replica.projects.add("Project").isPersisted.promise;

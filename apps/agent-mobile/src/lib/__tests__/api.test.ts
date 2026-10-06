@@ -68,6 +68,7 @@ describe('mobile HTTP API', () => {
       fetchIconSuggestions(
         getToken,
         { title: 'Ship it', description: 'Release the app' },
+        undefined,
         'https://example.test',
       ),
     ).resolves.toEqual(['🚀', '🎯']);

@@ -1,6 +1,5 @@
 import {
   ADD_MODE_PLACEHOLDER,
-  DEFAULT_ICON,
   defaultToastController,
   messageOf,
   TaskDraft,
@@ -24,7 +23,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Fab } from '@/components/ui/fab';
 import { Text } from '@/components/ui/text';
 import type { TokenGetter } from '@/lib/api';
-import { requestIconSuggestions } from '@/lib/icon-suggestions';
+import { useNewProjectIcon } from '@/lib/new-project-icon';
 import { useProjectSuggestion } from '@/lib/project-suggestion';
 import { useLocalDay } from '@/lib/local-day';
 import { showTaskDestination } from '@/lib/task-feedback';
@@ -120,6 +119,12 @@ export function useQuickAdd({
   });
   const addProjectId = projectChoice.selection.projectId;
   const resetProject = projectChoice.reset;
+  const projectIcon = useNewProjectIcon({
+    getToken,
+    title: adding && mode === 'project' ? drafts.project : '',
+    enabled: authenticatedFeatures && adding && mode === 'project',
+  });
+  const resetProjectIcon = projectIcon.reset;
   const setText = useCallback(
     (next: string) => {
       if (mode === 'task') setTaskDraft((current) => current.change(next));
@@ -136,12 +141,13 @@ export function useQuickAdd({
     setConfirmingDiscard(false);
     setAdding(false);
     resetProject(NO_PROJECT);
+    resetProjectIcon();
     setSchedulingAdd(false);
     setPickingProject(false);
     setPickingAfter(false);
     setMode(modes[0] ?? 'task');
     onClosed?.();
-  }, [modes, onClosed, resetProject]);
+  }, [modes, onClosed, resetProject, resetProjectIcon]);
 
   const open = useCallback(
     (options?: { initialMode?: AddMode; projectId?: string }) => {
@@ -192,22 +198,17 @@ export function useQuickAdd({
     }
 
     if (mode === 'project') {
-      const tx = projectsApi.add(trimmed);
+      const icon = projectIcon.choice.icon;
+      const tx = projectsApi.add(trimmed, icon);
       tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
       const id = String(tx.mutations[0]?.key);
-      if (authenticatedFeatures) {
-        void requestIconSuggestions(getToken, id, {
-          title: trimmed,
-          description: null,
-        });
-      }
       if (onProjectCreated) {
         closeAdd();
         onProjectCreated(id);
         return;
       }
       toast('Project created', {
-        description: `${DEFAULT_ICON} ${trimmed}`,
+        description: `${icon} ${trimmed}`,
         action: {
           label: 'View',
           onPress: () =>
@@ -258,8 +259,7 @@ export function useQuickAdd({
     scope,
     contextProject,
     projectsApi,
-    getToken,
-    authenticatedFeatures,
+    projectIcon.choice.icon,
     onProjectCreated,
     taskView,
     tasksApi,
@@ -371,6 +371,46 @@ export function useQuickAdd({
         collapsedFabLabel={fabLabel}
         inputRef={inputRef}
         inputAccessibilityLabel={mode === 'waiting' ? 'Waiting on' : undefined}
+        leading={
+          mode === 'project' && authenticatedFeatures ? (
+            <Text
+              accessibilityLabel={`Icon ${projectIcon.choice.icon}`}
+              className="w-6 text-center text-[20px]"
+            >
+              {projectIcon.choice.icon}
+            </Text>
+          ) : undefined
+        }
+        secondaryContent={
+          mode === 'project' && projectIcon.choice.icons.length > 0 ? (
+            <View
+              accessibilityLabel="Suggested icons"
+              className="flex-row flex-wrap items-center gap-2 px-screen-x pb-3"
+            >
+              {projectIcon.choice.source === 'suggested' ? (
+                <Text className="text-[12px] font-medium text-foreground-muted">
+                  Suggested
+                </Text>
+              ) : null}
+              {projectIcon.choice.icons.map((emoji) => {
+                const selected = emoji === projectIcon.choice.icon;
+                return (
+                  <Pressable
+                    key={emoji}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use icon ${emoji}`}
+                    accessibilityState={{ selected }}
+                    hitSlop={6}
+                    onPress={() => projectIcon.pick(emoji)}
+                    className={selected ? 'rounded-md bg-surface-muted px-1.5 py-1' : 'rounded-md px-1.5 py-1'}
+                  >
+                    <Text className="text-[22px]">{emoji}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : undefined
+        }
         modeSelector={
           modes.length > 1 ? (
             <AddModeSelector

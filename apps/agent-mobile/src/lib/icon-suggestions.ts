@@ -30,7 +30,7 @@ const emit = () => {
 };
 
 // AsyncStorage is async, so the cache hydrates after the first render. Entries
-// written before hydration finishes (a create-time warm at cold start) win over
+// written before hydration finishes (a picker fetch at cold start) win over
 // the stored copy, so an in-flight request is never clobbered by a stale disk read.
 const hydrate = async () => {
   if (hydrated) return;
@@ -71,10 +71,10 @@ const subscribe = (cb: () => void): (() => void) => {
   };
 };
 
-// Fire a suggestion request for a project and cache the result. Shared by the
-// create-time pre-warm and the picker's fetch-on-open (both no-op when an entry
-// already exists) and by Refresh (`force`, which always re-fires). Never throws:
-// a failed request lands as `status: "error"` so the manual picker still stands.
+// Fire a suggestion request for a project and cache the result. Used by the
+// picker's fetch-on-open (a no-op when an entry already exists) and by Refresh
+// (`force`, which always re-fires). Never throws: a failed request lands as
+// `status: "error"` so the manual picker still stands.
 export const requestIconSuggestions = async (
   getToken: TokenGetter,
   id: string,

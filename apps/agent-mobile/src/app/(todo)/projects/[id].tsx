@@ -495,7 +495,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
   );
 }
 
-// One combined icon-picker surface, mirroring the web popover: the pre-warmed AI
+// One combined icon-picker surface, mirroring the web popover: the AI
 // suggestions on top, the full searchable emoji grid directly below, in a single
 // bottom sheet — no extra hop. It is a plain RN bottom sheet (a Modal + backdrop
 // + a tall bottom-anchored panel), NOT an @expo/ui native sheet, because it hosts
@@ -519,9 +519,8 @@ function IconPickerSheet({
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  // The pre-warmed AI suggestions. Opening the sheet is the fetch-on-open
-  // fallback: a cache miss (a different device, an eviction, an offline creation)
-  // fetches now; a warmed cache shows instantly.
+  // The AI suggestions. Opening the sheet fetches them; an earlier answer for
+  // this device shows instantly.
   const basis = useMemo(
     () => ({ title: project.title, description: project.description }),
     [project.title, project.description],

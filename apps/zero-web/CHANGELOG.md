@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-06: Add suggested icons while you name a new project. The best one is used unless you tap another, and a tapped icon stays as you keep typing.
+
 - 2026-10-06: Change suggested project icons to appear almost at once, drawn from every emoji, including your destination's flag for trips.
 
 - 2026-10-05: Add a suggested project when you type a new task on Home. Pick another project or No project to change it.

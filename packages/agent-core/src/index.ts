@@ -43,6 +43,12 @@ export {
   type IconSuggestionStatus,
   type CachedIconSuggestions,
 } from "./projects/icon-suggestions";
+export {
+  IconSuggester,
+  type IconChoice,
+  type IconChoiceSource,
+  type IconSuggestionRequest,
+} from "./projects/icon-suggester";
 
 // The Project data layer (Projects list).
 export type {
