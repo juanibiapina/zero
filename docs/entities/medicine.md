@@ -28,7 +28,7 @@ Taking the morning dose leaves afternoon and evening doses scheduled. Simultaneo
 
 Dose deadlines use Android alarm-clock scheduling, which wakes the device through normal Battery Saver and Doze and exposes an upcoming-alarm indicator. The wake-up posts an ordinary notification. Early reminders use exact allow-while-idle scheduling; Android throttles these alarms per app in idle, so closely spaced early reminders can be delayed. These schedulers require exact-alarm access on relevant Android versions.
 
-For reliable delivery, open App battery usage through reminder settings and choose Unrestricted if available. Manufacturer power controls can impose additional restrictions. The app reports detected background restrictions and battery optimization exemption separately; an exemption does not prove every manufacturer restriction is disabled. Missing exemption alone does not report reminders as blocked.
+For reliable delivery, open App battery usage through reminder settings and choose Unrestricted if available. Manufacturer power controls can impose additional restrictions. The app warns only when Android reports a background restriction, so the absence of a warning does not prove every manufacturer restriction is disabled.
 
 Reboot clears Android's scheduled alarms. Saved definitions restore future delivery when the phone starts, without reopening the app. Package replacement, clock/timezone changes, and restored exact-alarm access also restore scheduling.
 

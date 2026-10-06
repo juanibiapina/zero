@@ -79,6 +79,6 @@ class MedicineNotificationsTest {
     channel.setSound(null, null)
     manager.createNotificationChannel(channel)
     MedicineEngine.channels(context)
-    assertEquals(false, MedicineEngine.capabilities(context)["channelSound"])
+    assertNull(manager.getNotificationChannel(MedicineEngine.ALERTS).sound)
   }
 }

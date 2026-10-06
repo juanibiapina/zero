@@ -3,10 +3,8 @@ package expo.modules.medicinereminders
 import android.app.*
 import android.content.*
 import android.media.AudioAttributes
-import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
-import android.os.PowerManager
 import android.provider.Settings
 import org.json.JSONArray
 import org.json.JSONObject
@@ -46,15 +44,10 @@ internal object MedicineEngine {
     channels(c)
     val manager = notificationManager(c)
     val channel = manager.getNotificationChannel(ALERTS)
-    val audio = c.getSystemService(AudioManager::class.java)
     return mapOf("notifications" to manager.areNotificationsEnabled(),
       "exactAlarms" to (Build.VERSION.SDK_INT < 31 || alarmManager(c).canScheduleExactAlarms()),
       "alertChannel" to (groupEnabled(c) && channel.importance != NotificationManager.IMPORTANCE_NONE),
-      "alertChannelImportance" to channel.importance, "channelSound" to (channel.sound != null),
-      "notificationVolume" to audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION),
-      "ringerNormal" to (audio.ringerMode == AudioManager.RINGER_MODE_NORMAL),
-      "backgroundRestricted" to (Build.VERSION.SDK_INT >= 28 && c.getSystemService(ActivityManager::class.java).isBackgroundRestricted),
-      "batteryExempt" to c.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(c.packageName))
+      "backgroundRestricted" to (Build.VERSION.SDK_INT >= 28 && c.getSystemService(ActivityManager::class.java).isBackgroundRestricted))
   }
   fun channels(c: Context) = synchronized(lock) {
     val manager = notificationManager(c)
@@ -71,10 +64,10 @@ internal object MedicineEngine {
     val state = load(c)
     if (state.optString("workspace") != workspace) "[]" else array(state, "receipts").toString()
   }
-  fun acknowledge(c: Context, workspace: String, ids: String) = synchronized(lock) {
+  fun acknowledge(c: Context, workspace: String, ids: List<String>) = synchronized(lock) {
     val state = load(c)
     if (state.optString("workspace") != workspace) return@synchronized
-    val idsArray = JSONArray(ids); val consumed = (0 until idsArray.length()).map { idsArray.getString(it) }.toSet()
+    val consumed = ids.toSet()
     val remaining = JSONArray(); val receipts = array(state, "receipts")
     for (i in 0 until receipts.length()) if (!consumed.contains(receipts.getJSONObject(i).getString("actionId"))) remaining.put(receipts.getJSONObject(i))
     state.put("receipts", remaining); save(c, state)

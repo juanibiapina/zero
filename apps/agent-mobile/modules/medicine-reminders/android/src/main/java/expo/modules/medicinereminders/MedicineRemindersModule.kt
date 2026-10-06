@@ -16,7 +16,7 @@ class MedicineRemindersModule : Module() {
     AsyncFunction("silenceProof") { MedicineEngine.silenceProof(context) }
     AsyncFunction("replace") { workspace: String, payload: String -> MedicineEngine.replace(context, workspace, payload) }
     AsyncFunction("receipts") { workspace: String -> MedicineEngine.receipts(context, workspace) }
-    AsyncFunction("acknowledge") { workspace: String, ids: String -> MedicineEngine.acknowledge(context, workspace, ids) }
+    AsyncFunction("acknowledge") { workspace: String, ids: List<String> -> MedicineEngine.acknowledge(context, workspace, ids) }
     AsyncFunction("take") { workspace: String, dose: String -> MedicineEngine.taken(context, workspace, dose) }
     AsyncFunction("quiesce") { workspace: String -> MedicineEngine.quiesce(context, workspace) }
     AsyncFunction("clear") { workspace: String -> MedicineEngine.clear(context, workspace) }
@@ -25,9 +25,6 @@ class MedicineRemindersModule : Module() {
     }
     Function("openExactAlarmSettings") {
       if (Build.VERSION.SDK_INT >= 31) context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-    Function("openSoundSettings") {
-      context.startActivity(Intent(Settings.ACTION_SOUND_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
     Function("openBatterySettings") {
       context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
