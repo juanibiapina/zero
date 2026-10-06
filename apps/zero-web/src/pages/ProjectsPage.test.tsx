@@ -791,10 +791,23 @@ describe("project icon suggestions", () => {
     respondIcons(["🏃", "👟"]);
     await typeTitle("Run a 5K in May");
     expect(await screen.findByRole("button", { name: "Use icon 🏃" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("img", { name: "Icon 🚀" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change icon, 🚀" })).toBeInTheDocument();
 
     await addProject();
     await waitFor(() => expect(createdIcon("Run a 5K in May")).toBe("🚀"));
+  });
+
+  it("opens the full emoji picker from the new Project's icon", async () => {
+    setApi([]);
+    renderApp();
+    await typeTitle("Graduate");
+    await screen.findByRole("button", { name: "Use icon 🌟" });
+    fireEvent.click(screen.getByRole("button", { name: "Change icon, 🌟" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Set icon 🎓" }));
+    expect(screen.getByRole("button", { name: "Change icon, 🎓" })).toBeInTheDocument();
+
+    await addProject();
+    await waitFor(() => expect(createdIcon("Graduate")).toBe("🎓"));
   });
 
   it("creates the Project with the default icon when suggestions fail", async () => {

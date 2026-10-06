@@ -17,6 +17,7 @@ import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Keyboard, Pressable, View } from 'react-native';
 
+import { EmojiPickerSheet } from '@/components/emoji-picker-sheet';
 import { ProjectPickerSheet, ScheduleSheet } from '@/components/task-detail';
 import { AddModeSelector, TaskEditorSheet } from '@/components/task-editor-sheet';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -98,6 +99,7 @@ export function useQuickAdd({
   const [schedulingAdd, setSchedulingAdd] = useState(false);
   const [pickingProject, setPickingProject] = useState(false);
   const [pickingAfter, setPickingAfter] = useState(false);
+  const [pickingIcon, setPickingIcon] = useState(false);
   const inputRef = useRef<{ focus: () => void }>(null);
   const ignoreNextKeyboardHide = useRef(false);
 
@@ -145,6 +147,7 @@ export function useQuickAdd({
     setSchedulingAdd(false);
     setPickingProject(false);
     setPickingAfter(false);
+    setPickingIcon(false);
     setMode(modes[0] ?? 'task');
     onClosed?.();
   }, [modes, onClosed, resetProject, resetProjectIcon]);
@@ -271,6 +274,18 @@ export function useQuickAdd({
     waitForPersist,
   ]);
 
+  const closeIconPicker = useCallback(() => {
+    setPickingIcon(false);
+    inputRef.current?.focus();
+  }, []);
+  const pickIcon = useCallback(
+    (emoji: string) => {
+      projectIcon.pick(emoji);
+      closeIconPicker();
+    },
+    [projectIcon, closeIconPicker],
+  );
+
   const requestClose = useCallback(() => {
     if (confirmingDiscard) {
       setConfirmingDiscard(false);
@@ -291,6 +306,7 @@ export function useQuickAdd({
       confirmingDiscard ||
       pickingAfter ||
       pickingProject ||
+      pickingIcon ||
       schedulingAdd
     ) {
       return;
@@ -301,6 +317,7 @@ export function useQuickAdd({
     confirmingDiscard,
     pickingAfter,
     pickingProject,
+    pickingIcon,
     schedulingAdd,
     requestClose,
   ]);
@@ -316,6 +333,10 @@ export function useQuickAdd({
     }
     if (pickingProject) {
       setPickingProject(false);
+      return true;
+    }
+    if (pickingIcon) {
+      closeIconPicker();
       return true;
     }
     if (schedulingAdd) {
@@ -335,6 +356,8 @@ export function useQuickAdd({
     confirmingDiscard,
     pickingAfter,
     pickingProject,
+    pickingIcon,
+    closeIconPicker,
     schedulingAdd,
     adding,
     hasDraft,
@@ -372,38 +395,25 @@ export function useQuickAdd({
         inputRef={inputRef}
         inputAccessibilityLabel={mode === 'waiting' ? 'Waiting on' : undefined}
         leading={
-          mode === 'project' && authenticatedFeatures ? (
-            <Text
-              accessibilityLabel={`Icon ${projectIcon.choice.icon}`}
-              className="w-6 text-center text-[20px]"
+          mode === 'project' ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Change icon, ${projectIcon.choice.icon}`}
+              hitSlop={8}
+              onPress={() => setPickingIcon(true)}
+              className="h-9 w-9 items-center justify-center rounded-md"
             >
-              {projectIcon.choice.icon}
-            </Text>
+              <Text className="text-[22px]">{projectIcon.choice.icon}</Text>
+            </Pressable>
           ) : undefined
         }
         secondaryContent={
-          mode === 'project' && projectIcon.choice.icons.length > 0 ? (
-            <View
-              accessibilityLabel="Suggested icons"
-              className="flex-row flex-wrap items-center gap-2 px-screen-x pb-3"
-            >
-              {projectIcon.choice.icons.map((emoji) => {
-                const selected = emoji === projectIcon.choice.icon;
-                return (
-                  <Pressable
-                    key={emoji}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Use icon ${emoji}`}
-                    accessibilityState={{ selected }}
-                    hitSlop={6}
-                    onPress={() => projectIcon.pick(emoji)}
-                    className={selected ? 'rounded-md bg-surface-muted px-1.5 py-1' : 'rounded-md px-1.5 py-1'}
-                  >
-                    <Text className="text-[22px]">{emoji}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+          mode === 'project' && authenticatedFeatures ? (
+            <IconStrip
+              icons={projectIcon.choice.icons}
+              chosen={projectIcon.choice.icon}
+              onPick={projectIcon.pick}
+            />
           ) : undefined
         }
         modeSelector={
@@ -506,6 +516,21 @@ export function useQuickAdd({
         }
       />
 
+      <EmojiPickerSheet
+        open={pickingIcon}
+        onClose={closeIconPicker}
+        onPick={pickIcon}
+        header={
+          projectIcon.choice.icons.length > 0 ? (
+            <IconStrip
+              icons={projectIcon.choice.icons}
+              chosen={projectIcon.choice.icon}
+              onPick={pickIcon}
+            />
+          ) : null
+        }
+      />
+
       <ScheduleSheet
         open={schedulingAdd}
         showUpDate={taskView.pickerDate}
@@ -572,6 +597,45 @@ export function useQuickAdd({
       schedulingAdd ||
       pickingProject ||
       pickingAfter ||
+      pickingIcon ||
       confirmingDiscard,
   };
+}
+
+function IconStrip({
+  icons,
+  chosen,
+  onPick,
+}: {
+  icons: string[];
+  chosen: string;
+  onPick: (emoji: string) => void;
+}) {
+  return (
+    <View
+      accessibilityLabel="Suggested icons"
+      className="h-12 flex-row items-center gap-2 overflow-hidden px-screen-x"
+    >
+      {icons.map((emoji) => {
+        const selected = emoji === chosen;
+        return (
+          <Pressable
+            key={emoji}
+            accessibilityRole="button"
+            accessibilityLabel={`Use icon ${emoji}`}
+            accessibilityState={{ selected }}
+            hitSlop={6}
+            onPress={() => onPick(emoji)}
+            className={
+              selected
+                ? 'h-10 w-10 items-center justify-center rounded-md bg-surface-muted'
+                : 'h-10 w-10 items-center justify-center rounded-md'
+            }
+          >
+            <Text className="text-[22px]">{emoji}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }

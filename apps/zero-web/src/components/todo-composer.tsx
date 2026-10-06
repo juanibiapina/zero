@@ -5,6 +5,8 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { TaskDraft, toast, type ProjectSelection, type TaskdoReplica } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { EmojiGrid, IconStrip } from "@/components/icon-picker";
 import { ProjectOptionList } from "@/components/ProjectOptionList";
 import { TaskFields } from "@/components/task-fields";
 import { reportTodoError } from "@/lib/todo-feedback";
@@ -30,6 +32,7 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
   const [draft, setDraft] = useState(() => TaskDraft.create());
   const text = draft.text;
   const [pending, setPending] = useState(false);
+  const [pickingIcon, setPickingIcon] = useState(false);
   const [retryAddition, setRetryAddition] = useState<(() => Promise<void>) | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const saveErrorToast = useRef<string | null>(null);
@@ -132,13 +135,18 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
           trailing={<Button type="submit" disabled={pending || (kind === "task" ? draftView.commit.kind !== "ready" : !effectiveText.trim())}>{pending ? "Saving…" : "Add"}</Button>}
           dateField={kind === "task" ? { onPick: (next) => setDraft((current) => current.pickCreationDate(next, today)) } : undefined}
           projectField={kind === "task" ? { projects, tasks, conditions, projectId, suggested: projectChoice.selection.source === "suggested", onPick: projectChoice.pick } : undefined}
-          leading={kind === "project" && authenticatedFeatures ? <span aria-label={`Icon ${projectIcon.choice.icon}`} role="img" className="flex size-9 shrink-0 items-center justify-center text-xl">{projectIcon.choice.icon}</span> : undefined}
+          leading={kind === "project" ? <Popover open={pickingIcon} onOpenChange={setPickingIcon}>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label={`Change icon, ${projectIcon.choice.icon}`}
+                className="flex size-9 shrink-0 items-center justify-center rounded-md text-xl hover:bg-accent">{projectIcon.choice.icon}</button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-fit p-0" onCloseAutoFocus={(event) => { event.preventDefault(); input.current?.focus(); }}>
+              {projectIcon.choice.icons.length > 0 ? <div className="border-b px-2 py-1"><IconStrip icons={projectIcon.choice.icons} chosen={projectIcon.choice.icon} onPick={(emoji) => { projectIcon.pick(emoji); setPickingIcon(false); }} /></div> : null}
+              <EmojiGrid onPick={(emoji) => { projectIcon.pick(emoji); setPickingIcon(false); }} />
+            </PopoverContent>
+          </Popover> : undefined}
         />
-        {kind === "project" && projectIcon.choice.icons.length > 0 ? <div role="group" aria-label="Suggested icons" className="flex flex-wrap items-center gap-0.5">
-          {projectIcon.choice.icons.map((emoji) => <button key={emoji} type="button" aria-label={`Use icon ${emoji}`} aria-pressed={emoji === projectIcon.choice.icon}
-            onClick={() => projectIcon.pick(emoji)}
-            className={`flex size-8 items-center justify-center rounded-md text-lg hover:bg-accent ${emoji === projectIcon.choice.icon ? "bg-accent ring-1 ring-ring" : ""}`}>{emoji}</button>)}
-        </div> : null}
+        {kind === "project" && authenticatedFeatures ? <IconStrip icons={projectIcon.choice.icons} chosen={projectIcon.choice.icon} onPick={projectIcon.pick} /> : null}
       </>}
     </fieldset>
     {retryAddition ? <div className="flex flex-col gap-2"><p role="alert" className="text-sm text-destructive">Your addition is still in memory. Save it again before continuing.</p><Button type="submit" disabled={pending}>{pending ? "Saving…" : "Try saving again"}</Button></div> : null}

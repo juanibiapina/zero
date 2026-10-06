@@ -39,13 +39,11 @@ import {
 import {
   Alert,
   BackHandler,
-  Modal,
   Pressable,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EmojiKeyboard, type EmojiType } from 'rn-emoji-keyboard';
+import { EmojiPickerSheet } from '@/components/emoji-picker-sheet';
 import { Input } from '@/components/ui/input';
 import { useProjectAdd } from '@/components/project-add';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
@@ -495,14 +493,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
   );
 }
 
-// One combined icon-picker surface, mirroring the web popover: the AI
-// suggestions on top, the full searchable emoji grid directly below, in a single
-// bottom sheet — no extra hop. It is a plain RN bottom sheet (a Modal + backdrop
-// + a tall bottom-anchored panel), NOT an @expo/ui native sheet, because it hosts
-// the raw-RN `EmojiKeyboard` (the inline, non-modal build of rn-emoji-keyboard);
-// hosting RN rows inside the @expo/ui native tree is the very bug this screen
-// avoids. The panel is fixed at 85% height so the keyboard's search bar (rendered
-// at the top with categoryPosition="top") stays above the on-screen keyboard.
+// The Project page's icon picker: the AI suggestions above the full emoji grid.
 function IconPickerSheet({
   project,
   open,
@@ -516,8 +507,6 @@ function IconPickerSheet({
 }) {
   const { getToken } = useAuth();
   const authenticatedFeatures = useTodoDataContext()?.signedIn ?? false;
-  const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
 
   // The AI suggestions. Opening the sheet fetches them; an earlier answer for
   // this device shows instantly.
@@ -538,104 +527,56 @@ function IconPickerSheet({
   const refresh = () =>
     void requestIconSuggestions(getToken, project.id, basis, { force: true });
 
-  // rn-emoji-keyboard is themed by literal colors, not CSS vars — resolve the app
-  // tokens the same way the rest of the screen does.
-  const emojiTheme = {
-    backdrop: useColor('--color-scrim'),
-    knob: useColor('--color-divider'),
-    container: useColor('--color-surface'),
-    header: useColor('--color-foreground'),
-    skinTonesContainer: useColor('--color-surface-muted'),
-    category: {
-      icon: useColor('--color-foreground-muted'),
-      iconActive: useColor('--color-accent'),
-      container: useColor('--color-surface'),
-      containerActive: useColor('--color-surface-muted'),
-    },
-    search: {
-      background: useColor('--color-surface-muted'),
-      text: useColor('--color-foreground'),
-      placeholder: useColor('--color-placeholder'),
-      icon: useColor('--color-foreground-muted'),
-    },
-    emoji: { selected: useColor('--color-surface-muted') },
-  };
-
   return (
-    <Modal
-      visible={open}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close icon picker"
-        className="flex-1 bg-scrim"
-        onPress={onClose}
-      />
-      <View
-        style={{ height: Math.round(height * 0.85), paddingBottom: insets.bottom }}
-        className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface"
-      >
-        {authenticatedFeatures ? <>
-          {/* Suggested row on top — additive over the full grid below. */}
-          <View className="flex-row flex-wrap items-center gap-2 px-4 pt-3 pb-2">
-          <Text className="text-[12px] font-medium text-foreground-muted">
-            Suggested
-          </Text>
-          {loading ? (
-            <Text className="text-foreground-muted">Loading suggested icons…</Text>
-          ) : icons.length > 0 ? (
-            icons.map((emoji) => (
-              <Pressable
-                key={emoji}
-                accessibilityRole="button"
-                accessibilityLabel={`Use suggested icon ${emoji}`}
-                hitSlop={6}
-                onPress={() => onPick(emoji)}
-                className="rounded-md px-1.5 py-1"
-              >
-                <Text className="text-[22px]">{emoji}</Text>
-              </Pressable>
-            ))
-          ) : (
-            <Text className="text-foreground-muted">
-              Couldn&apos;t load suggestions
-            </Text>
-          )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Refresh suggested icons"
-            hitSlop={8}
-            onPress={refresh}
-            className="ml-auto rounded-md px-2 py-1"
-          >
-            <Text
-              className={
-                stale
-                  ? 'text-[16px] text-foreground'
-                  : 'text-[16px] text-foreground-muted'
-              }
+    <EmojiPickerSheet
+      open={open}
+      onClose={onClose}
+      onPick={onPick}
+      header={authenticatedFeatures ? (
+        <View className="flex-row flex-wrap items-center gap-2 px-4 pt-3 pb-2">
+        <Text className="text-[12px] font-medium text-foreground-muted">
+          Suggested
+        </Text>
+        {loading ? (
+          <Text className="text-foreground-muted">Loading suggested icons…</Text>
+        ) : icons.length > 0 ? (
+          icons.map((emoji) => (
+            <Pressable
+              key={emoji}
+              accessibilityRole="button"
+              accessibilityLabel={`Use suggested icon ${emoji}`}
+              hitSlop={6}
+              onPress={() => onPick(emoji)}
+              className="rounded-md px-1.5 py-1"
             >
-              ↻
-            </Text>
-          </Pressable>
-          </View>
-          <View className="h-px bg-divider" />
-        </> : null}
-        {/* The full searchable picker, inline (not its own modal), filling the
-            rest of the sheet. */}
-        <View className="flex-1">
-          <EmojiKeyboard
-            onEmojiSelected={(picked: EmojiType) => onPick(picked.emoji)}
-            enableSearchBar
-            enableRecentlyUsed={false}
-            theme={emojiTheme}
-          />
+              <Text className="text-[22px]">{emoji}</Text>
+            </Pressable>
+          ))
+        ) : (
+          <Text className="text-foreground-muted">
+            Couldn&apos;t load suggestions
+          </Text>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh suggested icons"
+          hitSlop={8}
+          onPress={refresh}
+          className="ml-auto rounded-md px-2 py-1"
+        >
+          <Text
+            className={
+              stale
+                ? 'text-[16px] text-foreground'
+                : 'text-[16px] text-foreground-muted'
+            }
+          >
+            ↻
+          </Text>
+        </Pressable>
         </View>
-      </View>
-    </Modal>
+      ) : null}
+    />
   );
 }
 

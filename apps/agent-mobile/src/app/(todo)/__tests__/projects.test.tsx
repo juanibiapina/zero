@@ -19,6 +19,18 @@ jest.mock('@clerk/expo', () => ({
   useUser: () => ({ user: null }),
 }));
 
+function MockEmojiKeyboard({ onEmojiSelected }: { onEmojiSelected: (picked: { emoji: string }) => void }) {
+  const { Pressable } = jest.requireActual<typeof import('react-native')>('react-native');
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Pick 🎓"
+      onPress={() => onEmojiSelected({ emoji: '🎓' })}
+    />
+  );
+}
+jest.mock('rn-emoji-keyboard', () => ({ EmojiKeyboard: MockEmojiKeyboard }));
+
 const project = (id: string, title: string, over: Partial<Project> = {}): Project => ({
   id,
   title,
@@ -128,12 +140,28 @@ describe('ProjectsScreen', () => {
       icons = ['🏃', '👟'];
       await fireEvent.changeText(input, 'Run a 5K in May');
       await waitFor(() => expect(screen.getByLabelText('Use icon 🏃')).toBeTruthy());
-      expect(screen.getByLabelText('Icon 🚀')).toBeTruthy();
+      expect(screen.getByLabelText('Change icon, 🚀')).toBeTruthy();
       await fireEvent(input, 'submitEditing');
 
       await waitFor(() => expect(createdIcon(screen, 'Run a 5K in May')).toBe('🚀'));
       fetch.mockRestore();
     });
+  });
+
+  it('picks any emoji for a new project from the full picker and keeps the draft', async () => {
+    const screen = await renderScreen({}, true);
+    await fireEvent.press(screen.getByLabelText('Add'));
+    const input = screen.getByPlaceholderText('Name an outcome');
+    await fireEvent.changeText(input, 'Graduate');
+    await fireEvent.press(screen.getByLabelText('Change icon, 📁'));
+    await fireEvent.press(screen.getByLabelText('Pick 🎓'));
+
+    expect(screen.getByLabelText('Change icon, 🎓')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Name an outcome').props.value).toBe('Graduate');
+    await fireEvent(screen.getByPlaceholderText('Name an outcome'), 'submitEditing');
+    await waitFor(() =>
+      expect([...screen.data.replica!.projects.collection.values()][0]?.icon).toBe('🎓'),
+    );
   });
 
   it('creates a guest project without requesting account-only icon suggestions', async () => {
