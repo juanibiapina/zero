@@ -20,9 +20,9 @@ Ongoing wake-ups ride a `ScheduleDO` deadline reason `wake`, armed like
 - `wakeSleeper` does **not** re-arm the `wake` deadline. The user's next message
   re-arms it, so a user who lapses again later is woken again.
 
-No LLM work runs on `ScheduleDO`; `wakeSleeper` only queues a pending message,
-and the turn runs on `UserDO`'s own alarm behind whatever the user already
-queued, like a schedule or a mail reply.
+No LLM work runs on `ScheduleDO`; `wakeSleeper` only hands a message to
+AssistantDO (`wake:<lastActiveAt>`), in the chat the user last wrote in, like a
+schedule or a mail reply.
 
 ## Idempotency: the `wokeAt` marker
 

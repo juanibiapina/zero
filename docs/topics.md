@@ -2,16 +2,17 @@
 
 **Zero's long-term memory is a graph of topic documents in the per-user `UserDO`
 SQLite, maintained by two agents: an interface agent answers each turn, and a
-learner consolidates what was learned afterward in `LearningDO`, off the turn
-path.** Between turns the only durable state is that SQLite (topics,
-conversations, messages); there is no container and no per-user filesystem. Two
-invariants hold the design together: one global knowledge version keeps
-concurrent writers correct, and persisting the model's own message log as the
-loop runs lets any interrupted turn resume and answer exactly once.
+learner consolidates what was learned afterward, off the turn path.** Both run in
+the per-user `AssistantDO` on Pi Durable, which keeps every transcript and
+resumes any interrupted run (see [`harness.md`](harness.md)). There is no
+container and no per-user filesystem. One global knowledge version keeps
+concurrent topic writers correct.
 
-This document is the source of truth for the topic model and the agents. The
-model id and LLM transport live in [`design.md`](design.md), prompt caching in
-[`caching.md`](caching.md), and web research in [`research.md`](research.md).
+This document is the source of truth for the topic model and the agents. How
+the agents run (Pi Durable, delivery, execution, recovery) lives in
+[`harness.md`](harness.md), the model id in [`design.md`](design.md), prompt
+caching in [`caching.md`](caching.md), and web research in
+[`research.md`](research.md).
 
 ## Key ideas
 
@@ -21,20 +22,18 @@ Each section below expands one of these:
   agent, joined by `[[Topic Name]]` links, with a pinned `User` topic and
   read-only system topics. See [Topics](#topics).
 - **The interface agent answers each turn; the learner consolidates afterward**,
-  off the turn path in `LearningDO`. See
+  off the turn path, both in `AssistantDO`. See
   [The turn, and what happens after it](#the-turn-and-what-happens-after-it).
-- **The model sees a bounded slice of each conversation** — a summary plus the
-  messages after the compaction boundary. See
+- **The model sees a bounded slice of each conversation** — a compaction summary
+  plus the recent messages, with stale topic reads stubbed. See
   [Conversation context](#conversation-context).
 - **One global knowledge version makes concurrent writes safe.** See
   [Knowledge versions](#knowledge-versions).
-- **The loop persists the model's own log as it runs, so a reset resumes exactly
-  once** — delivery claims, external-call claims, and follow-ups all follow from
-  it. See [The loop writes into the log as it runs](#the-loop-writes-into-the-log-as-it-runs).
-- **Turns execute on the UserDO alarm, which does nothing else.** See
-  [Execution (DO alarm)](#execution-do-alarm).
-- **Agents depend on the `Store` and `AgentModel` ports**, so they unit-test off
-  the platform. See [Storage seam](#storage-seam) and [LLM access](#llm-access).
+- **Pi Durable runs the loop and keeps the transcript, so an interrupted run
+  resumes and answers once.** See [Execution](#execution) and
+  [`harness.md`](harness.md).
+- **The agents reach topics through one port**, local in UserDO and remote from
+  AssistantDO. See [Storage seam](#storage-seam).
 
 ## Topics
 
@@ -143,8 +142,8 @@ with `system: true` set on the returned rows) and rejects every write to a
 system name (`createTopic`/`saveTopic`/`updateTopicBody`/`deleteTopic`/`setPinned`
 throw `topic is read-only`). `getBacklinks` delegates unchanged, so a user topic
 linking `[[Zero]]` still resolves. The `UserDO` wraps its `DbStore` in this
-decorator once at construction, so every consumer (DO RPC methods, the
-orchestrator, all three agents) sees the same overlay. Read-only is thus enforced
+decorator once at construction, so every consumer (its RPC methods, including
+the ones AssistantDO's agents call) sees the same overlay. Read-only is thus enforced
 structurally at the store boundary, so no prompt or soft tool check is
 load-bearing; the `update_topic`/`delete_topic` tools surface the thrown error as
 a tool error. The
@@ -158,26 +157,20 @@ migration and no per-user seeding.
 The interface agent answers the user live during the turn, and the learner
 consolidates durable knowledge afterward, off the turn path.
 
-1. **Interface agent** (`agents/interface.ts`, stateless per turn). Given the new
-   user message plus recent history, it runs a tool loop and sends replies as it
-   works. The history is assembled as a real multi-turn conversation
-   (`buildConversationMessages`), so each stored row
-   becomes a native turn — a user message as text with an absolute
-   `[YYYY-MM-DD HH:MM]` timestamp, a model response with its content blocks
-   verbatim (tool calls included), a tool-result row as the `user` turn the wire
-   format expects. Sending back the same bytes the model produced is what makes
-   the prefix cacheable across turns. Nothing is merged, reordered or dropped:
-   one stored row is one wire message, including a leading assistant turn and
-   consecutive same-role turns, both of which the API accepts.
-   Instructions and pinned topics stay in the system prompt; the current time,
-   timezone and country ride on the latest user message, and everything else is
-   dialogue in the messages array.
+1. **Interface agent** (the `zero-interface` extension in
+   `assistant/harness.ts`, one Pi session per Telegram chat). Given the new
+   user message plus the chat's transcript, it runs a tool loop and sends
+   replies as it works. The transcript is the model's own: a user message as
+   text with an absolute `[YYYY-MM-DD HH:MM]` timestamp, each model response
+   verbatim (tool calls included), each tool result as its own message. Sending
+   back the same bytes the model produced is what makes the prefix cacheable
+   across turns. Instructions and pinned topics are the system prompt; the
+   current time, timezone and country ride on the latest user message.
    There is **no `reply` tool**. The assistant's own text blocks are the
-   messages: the runner delivers each one (persist, then send) as the model
-   produces it, before that step's tools run, so a turn that acknowledges and
-   then answers is just a model that wrote text on two steps. A run that ends
-   without a terminal stop reason, or that never sent anything, gets the
-   no-silence fallback. Tools (`tools/topics.ts`):
+   messages: each one is delivered as soon as its response is committed, before
+   that response's tools run, so a turn that acknowledges and then answers is
+   just a model that wrote text on two steps. A run that fails, or that never
+   sent anything, gets the no-silence fallback. Tools (`tools/topics.ts`):
    - `list_topics`, `get_topic`, `create_topic`, `edit_topic`, `append_topic`,
      `update_topic_metadata`, `list_backlinks` — read/write the knowledge model and its
      `[[Name]]` link graph. Every topic touched is added to an `accessed` set.
@@ -191,11 +184,10 @@ consolidates durable knowledge afterward, off the turn path.
      drops its own outbound link rows; inbound links from other bodies keep
      their `[[Name]]` text and become dangling, re-resolving if a topic of that
      name is recreated. Bodies of other topics are left untouched.
-2. **Learning agent** (`agents/learner.ts`), which does **not** run on the turn
-   path. It is the same `runAgent` machine with the same shared topic tools
-   (`buildTopicTools`), reading the raw message log since the last consolidation
-   across all of the user's conversations, and it runs in LearningDO on its own
-   alarm (see "How a learning job runs"). Durable facts often live in tool
+2. **Learning agent** (the `zero-learner` extension), which does **not** run on
+   the turn path. It has the same shared topic tools (`buildTopicTools`), reads
+   the raw transcript since the last consolidation across all of the user's
+   chats, and runs as its own Pi session (see "How a learning job runs"). Durable facts often live in tool
    results — calendar events, email bodies, search results — so it reads the
    persisted results themselves. For each topic that gained
    durable information it reads the body (`get_topic`), merges new facts under
@@ -247,31 +239,24 @@ a store-level check would pass tests and lose writes in production.
 
 ## Conversation context
 
-For a conversation, the model sees `summary + messages after the compaction
-boundary`. The window follows that boundary and is never a fixed count of recent
-messages. Compaction is
-non-destructive: `conversations.compactedThroughMessageId` moves and
-`conversations.summary` holds the prose covering everything up to it, while every
-raw row stays in storage, because learning reads the raw log. A conversation that
-has never been compacted has neither, which renders as the whole log.
+For a chat, the model sees its Pi transcript from the newest head marker: the
+latest compaction summary or `/new` reset, then everything after it. Pi
+compacts on its own once the context passes Zero's budget (45,000 tokens):
+a summary written with Zero's compaction prompt replaces the older messages, and
+the newest ones stay verbatim. Compaction is non-destructive: every raw entry
+stays in storage, because learning reads it.
 
-Two mechanical filters run at render time, both in `store/messages.ts`:
+The summary must never carry topic knowledge: it is unversioned, so anything
+copied into it could never be detected as stale. The prompt states the rule
+flatly ("never copy a topic body") and asks for topic names as `[[Topic Name]]`
+references, so the assistant rereads them instead.
 
-- **Backstop ceiling** (`CONTEXT_BACKSTOP_MESSAGES`, `CONTEXT_BACKSTOP_CHARS`).
-  Nothing moves the boundary in production yet, so this is what keeps context
-  bounded in the meantime: at most 60 messages, then the oldest are dropped until
-  the rendered characters fit. The newest message is always kept. Both constants
-  go away when size-triggered compaction is switched on.
-- **Staleness stubs.** A persisted topic read carries the knowledge version it
-  was taken at (see below). If that differs from the current version, the
-  `tool_result` content is replaced by
-  `[stale: topic knowledge changed; reread before using or writing]`. It is
-  replaced, never removed: the wire format requires every `tool_use` to keep its
-  matching result. There is no LLM call and no per-topic bookkeeping.
-
-`context_rendered` logs the estimated total tokens, the summary tokens, how many
-messages survived the boundary, and how many results were stubbed. The compaction
-threshold is derived from that line, not guessed.
+**Staleness stubs.** A persisted topic read carries the knowledge version it was
+taken at (see below). If that differs from the current version, the tool
+result's content is replaced by
+`[stale: topic knowledge changed; reread before using or writing]` for that
+request. It is replaced, never removed: every tool call keeps its matching
+result. There is no LLM call and no per-topic bookkeeping.
 
 ## Learning triggers
 
@@ -279,76 +264,25 @@ Learning is asked for by two events, never a poll:
 
 - **Idle.** Every accepted user message pushes that conversation's deadline to
   now + 1h in ScheduleDO. When it comes due with no newer message, the schedule
-  asks LearningDO to consolidate.
-- **Size.** When a turn renders a context at or above
-  `LEARN_SIZE_THRESHOLD_TOKENS` (45,000, provisional — it is the starting point
-  from PLAN.md, to be moved using real `context_rendered.total_tokens`), the turn
-  asks for learning on that conversation immediately, logging
-  `learn_size_requested`. The 45,000 predates adaptive thinking (2026-08-01):
-  stored assistant rows now also carry thinking signatures, which are counted by
-  `contentChars` and inflate the chars/4 estimate by an amount nobody has
-  calibrated, so this threshold fires sooner than it used to. Compare
-  `context_rendered.total_tokens` against the gateway's input tokens before
-  moving it. This is what covers a conversation that never goes
-  idle; without it an always-active user would grow context without bound.
-
-Both requests are best-effort from the turn's point of view: a schedule that
-cannot be reached is logged and ignored, never allowed to fail a message or a
-reply.
+  asks AssistantDO to consolidate.
+- **Size.** When Pi starts compacting a chat, the compaction hook asks for
+  learning at once. This covers a conversation that never goes idle.
 
 ## How a learning job runs
 
 A job is one active run per user with at most one successor queued behind it. A
 request that arrives while a job is running is coalesced into that successor,
-because the active job froze its input range when it started: messages that
-arrive later belong to the next job, never to a prompt that was already built.
+because the active job froze its input when it started: messages that arrive
+later belong to the next job, never to a prompt that was already built.
 
-At the first slice the job asks UserDO for a high-water message id and pages the
-unconsolidated messages up to it. That id is frozen and idempotent by job id, so
-a restart never widens the range. The page is bounded by the rendered size of the
-learner's prompt, not by a message count, because that is the resource the input
-actually consumes; a job that fills the budget stamps only the messages it was
-shown and hands the rest to a successor. Then, per alarm:
-
-- a bounded number of model steps run (`LEARN_STEPS_PER_SLICE`);
-- each response is appended to the learner's durable wire log before its tools
-  run, and the tool results before the next model call;
-- an unfinished slice arms an immediate alarm and returns normally;
-- an unexpected failure is left uncaught, so Cloudflare's at-least-once alarm
-  retry runs.
-
-The bound is not belt-and-braces: a DO alarm invocation is killed at 900s wall
-time with no exception and no log, so a job that cannot make progress in slices
-would simply vanish. A slice that dies mid-flight replays its last response, and
-a topic write that had already been applied conflicts on its expected version
-instead of appending twice — which is why the version contract alone makes
-learning safe to retry, with no operation marker.
-
-When the learner stops cleanly, a `size` job also compacts the named
-conversation, then UserDO stamps the messages the learner read as consolidated
-(idempotent by job id, never past what was read, and it does not touch the
-knowledge version — the topic writes already did). Only then is a queued
+The job renders every chat's entries after that chat's consolidation mark into
+one learner prompt, bounded by its rendered size (40,000 estimated tokens), not
+by a message count. A job that fills the budget asks for a successor. The
+learner runs as a Pi session: Pi checkpoints it and resumes it after a crash,
+and a topic write that had already been applied conflicts on its expected
+version instead of appending twice. When the learner's run ends cleanly, each
+chat's mark moves to the last entry the learner was shown. Only then is a queued
 successor started.
-
-Compaction summarizes the conversation up to a boundary, keeping the newest
-exchanges raw. It reads **forward from the current boundary**, one window at a
-time, and a window that does not reach the tail hands the rest to a successor
-pass. Reading the newest messages instead and then moving the boundary to the end
-of that window would jump the boundary over everything in between, and no summary
-would ever cover those rows.
-
-The boundary may only land **after a terminal assistant response**, so what
-survives it starts on a user message. A cut by row count can fall between an
-assistant tool call and its result, and the rendered context would then open on a
-result whose call is missing, which the API rejects. Rendering applies the same
-rule defensively: a window truncated by the read limit drops its leading orphan
-results.
-
-The summary must never carry topic knowledge: it is unversioned, so anything
-copied into it could never be detected as stale. The prompt states the rule
-flatly ("never copy a topic body") and asks for topic names as `[[Topic Name]]`
-references, so the assistant rereads them instead. The rationale lives here and
-in the comment above `compactionSystemPrompt`, kept out of the prompt itself.
 
 ## Knowledge versions
 
@@ -381,210 +315,32 @@ measurements. The learner prompt also asks it to split a subject into a new link
 topic once a body passes roughly 2,000 characters, so bodies stop growing without
 limit in the first place.
 
-The `TurnOrchestrator` (`agents/orchestrator.ts`) is the runtime-agnostic glue:
-render the conversation, run the interface agent, done. It knows nothing about
-alarms, DOs, or Telegram, and nothing consolidates knowledge after the reply —
-that moved off the turn path entirely (see "Learning triggers"). Until
-2026-07-30 a writer agent ran on every turn, which is what put 20-40s of topic
-consolidation in front of the user's *next* message. Nothing writes to a topic
-mechanically: every body change is a tool call the learner chose to make, so
-material it judges to be about nobody in particular leaves the model untouched.
+Nothing consolidates knowledge after the reply: that happens off the turn path
+(see "Learning triggers"). Until 2026-07-30 a writer agent ran on every turn,
+which put 20-40s of topic consolidation in front of the user's *next* message.
+Nothing writes to a topic mechanically: every body change is a tool call the
+learner chose to make, so material it judges to be about nobody in particular
+leaves the model untouched.
 
-## The loop writes into the log as it runs
+## Execution
 
-The conversation is the model's own message log, and the loop persists it step by
-step as it runs:
+Every message reaches AssistantDO with an operation id, so it is answered once
+however often it is handed over. Pi checkpoints each model request and each tool
+call, and Cloudflare's `PiHarness` keeps the object awake while a run has work:
+after an eviction, a crash or a deploy, the run continues from its last
+checkpoint. Replies are claimed before they are sent, so an interrupted run
+neither repeats a message nor swallows one; mail sends, calendar events and other
+irreversible calls record their outcome, so a rerun never repeats them. The
+details live in [`harness.md`](harness.md).
 
-- each model response is persisted **verbatim** (text, tool calls, whatever block
-  types the model produced) before any of its tools run and before any of its
-  text is sent;
-- that step's ordered tool results are persisted before the next model call.
-
-So a turn that dies anywhere has a log that says exactly where it got to, and the
-retry continues from there instead of replaying it. Two things follow.
-
-**Delivery is claim-then-send.** The response row is already durable, so a
-resumed run needs only at-most-once sending: each text block is
-claimed in `deliveries` (keyed by row id plus block index) before the Telegram
-fetch leaves. A resumed run skips claimed blocks (`delivery_skipped`) and sends
-the blocks a reset left undelivered, so an interrupted turn neither repeats itself
-nor swallows a message. The residual trade-off is unchanged and deliberate: a
-reset between the claim and Telegram loses that one message.
-
-An unclaimed block is therefore **work**, even when the response that holds it is
-terminal. A reset between persisting a response and claiming its first block
-leaves a finished reply nobody read, and if "the tail is a finished response"
-counted as idle, neither the thread scan nor the turn would ever look at it
-again. Such a conversation is picked up and delivered without calling the model:
-the answer already exists, and re-running it would answer the same message twice.
-It logs `turn_delivery_recovered`, because it is the one path that sends a
-message and calls no model, so nothing else would record it. The fallback and
-rate-limit replies take the same claim, so they cannot be sent twice either.
-
-That rule needs a floor. The `deliveries` table shipped empty, so every reply
-written before claims existed has none, and "no claim" would read as "never
-sent": on 2026-07-30 the first alarm after the deploy resent the last reply of
-existing conversations. Migration 0029 stamps each conversation's newest message
-at that moment as a **delivery watermark**, and rows at or below it are treated
-as delivered. Rows above it are governed by claims, which is what keeps a real
-lost reply recoverable.
-
-**Unfinished tool calls are re-run on resume.** A reset between a response and its
-results leaves an assistant tail whose `tool_use` blocks have no `tool_result`,
-which is not a valid request, so the resuming run executes those calls and stores
-their results before calling the model. Re-running is safe by construction for
-the two ordinary classes: read tools are pure, and a topic write replays with the
-knowledge version it was based on, so an already-applied write comes back as a
-conflict rather than a duplicate append.
-
-**Irreversible calls replay their recorded result from a claim.** `gmail_send` and
-`calendar_create_event` are marked `externalWrite`, and the runner takes a durable
-row in `external_calls` keyed by the model's own `tool_use` id **before** the
-request leaves, then records the serialized result when it returns. A replay after
-a reset therefore lands on that row: a completed call hands its recorded result
-straight back without calling Google again, and a call still marked `started`
-comes back as an error result saying the outcome is unknown, must not be retried,
-and the user should check Gmail or Calendar. That is at-most-once by choice —
-neither API offers exactly-once — and it is the same trade made for Telegram
-delivery: a possible "did that send?" instead of a possible duplicate.
-
-A *failure* of such a call is classified by the adapter, never assumed. An exception proves the
-tool returned nothing, never that the provider did nothing: a fetch that dies
-while reading the response looks identical to one that never arrived, and the
-mail may already be sent. Only the adapter can tell, so it raises
-`ExternalCallNotSent` when the request provably had no effect (Google not
-connected, or a rejection status that is not a timeout or a throttle). That case
-completes the claim and the model may try again. Every other failure leaves the
-claim `started`, so this call and any replay of its id report the unknown-outcome
-error instead of inviting a duplicate send.
-
-**Follow-ups are injected where the loop would stop.** A Telegram message that
-arrives mid-run waits in `pending_messages`; when the model asks for no more
-tools, the queue is drained into the same loop as a user message and answered by
-the next response. A follow-up therefore never cuts into a tool sequence, and a
-message sent while Zero is working does not have to wait for a fresh turn.
-`followups_injected` records how many were taken and how long the oldest waited.
-
-Trade-off of persisting as it goes: if an eviction lands between two replies
-within one turn (reply 1 sent, reply 2 not), the retry resumes and only the
-missing part is produced. Nothing about consolidation is lost either way — the
-messages are in the durable log, and learning reads that log later.
-
-A failed `send()` is a related case. It happens inside the runner's delivery
-hook, not inside a tool, so it is not swallowed into a `tool_result` the model
-would retry: it propagates out of the run to the orchestrator boundary below,
-where `turn_failed` is logged and the user gets the fallback. The undelivered
-message was already persisted (persist-before-send), so it stays in history
-alongside the fallback — the same "partial turn" tradeoff, visible instead of
-silent. Every Telegram failure is also logged at the transport
-(`telegram_send_failed`) before it propagates.
-
-The orchestrator is the turn's error boundary. If the agent path throws a genuine
-agent failure, it logs `turn_failed`, sends the user a fallback message, and
-persists that fallback as an assistant message so the thread stops awaiting
-reply, then returns without rethrowing. This trades the DO alarm's blanket
-auto-retry for guaranteed user feedback plus a logged error: a poison turn that
-would loop on retry instead tells the user once and can be resent. The interface
-agent applies the same no-silence rule when the model's tool loop hits the step
-cap without a final answer (`finishReason !== "stop"`): it sends the fallback and
-logs `turn_incomplete`.
-
-One error class is exempt: a **DO isolate reset** (`isDurableObjectReset`, a new
-Worker version deployed mid-turn). It is not an agent failure — the platform's
-at-least-once alarm retry re-runs the turn on a fresh isolate. On a reset the
-orchestrator sends nothing, persists nothing, logs `turn_reset_retrying`, and
-rethrows so the uncaught throw leaves `alarm()` and triggers that retry. The log
-already holds everything the dead run reached, and delivery claims say what got
-out, so the retry resumes and the user's answer arrives exactly once — no
-premature fallback and no repeated message. After this,
-`turn_failed` means only a genuine agent failure.
-
-## Execution (DO alarm)
-
-**Turns run on the UserDO alarm, which drains every conversation that owes work
-and does nothing else.** Anything with its own deadline (schedules, onboarding,
-admin tasks, sleeper wakes) lives in a separate Durable Object and hands work
-back as an ordinary queued message.
-
-The webhook resolves the user, calls `UserDO.enqueueTurn` (dedupe on
-`processed_updates`, queue the user message in `pending_messages`, arm the
-alarm), and returns 200. A queued message is not in the transcript yet: the turn
-takes it, moving every queued message for that conversation to the transcript
-tail in one transaction, in arrival order, so a burst becomes one turn and a
-reset can neither lose a message nor inject it twice.
-
-The alarm handler drains every conversation that still owes work and runs the
-orchestrator for each, **and does nothing else**. An admin task and Google
-onboarding used to share that one alarm slot; on 2026-07-29 they left a queued
-user message waiting a quarter of an hour. Their deadlines live in ScheduleDO
-now, which calls `UserDO.runQueuedAdminTask` / `runQueuedOnboarding` when due.
-A schedule the user set (see `schedules.md`) arrives the same way: ScheduleDO
-calls `UserDO.runDueSchedules`, which queues the schedule's prompt as a pending
-message, so a scheduled task is an ordinary turn and runs behind whatever the
-user has already sent. A wake for a user who went quiet for a week arrives the
-same way: ScheduleDO calls `UserDO.wakeSleeper`, which queues the `WAKE_NOTE`
-into the most recently active topic (see `docs/wake-sleepers.md`). "Owes work" is read from the protocol; the tail's
-role alone never decides it. A conversation has work when messages are queued, when the tail is a user
-message or a tool result awaiting a model response, or when the last assistant
-response stopped for a non-terminal reason (`tool_use`, `pause_turn`, or none
-recorded). An assistant response with a terminal stop reason and an empty queue
-is idle. A concurrent enqueue arms a fresh alarm, so messages that
-arrive mid-run are picked up on the next fire. A self-rescheduling `setTimeout`
-re-sends the Telegram typing action every 4s across the interface phase
-(including any searching the user genuinely waits on) and stops the moment the
-reply (or fallback) is sent (`orchestrator.ts` calls `stopTyping` right after the
-interface phase, which is now the end of the turn). The DO alarm stays dedicated
-to turn scheduling.
-
-**An alarm invocation is killed at a 900-second wall-time ceiling**, reported by
-Cloudflare as `outcome: exceededWallTime`. It is not an exception: no `catch` in
-`runAlarmTurns` or `runTurn` ever sees it, nothing reaches ZeroErrors, and the
-handler's own logs simply stop mid-turn. Because a DO runs one alarm at a time, a
-stalled invocation also blocks the next one, so a message that arrives during it
-waits out the full 900s before its own alarm is delivered. Observed 2026-07-29:
-five consecutive invocations at ~900,000 ms wall against ~50 ms CPU (idle on an
-unsettled promise, not computing), each stranding the user's next message for a
-quarter of an hour.
-
-Phase markers exist to localize such a stall, and are useful mainly by their
-**absence**: `interface_completed` (once the agent loop returns),
-`turn_completed` (orchestrator, once `runTurn` returns — including the handled
-failure path, since it means "did not stall", not "succeeded"), and
-`alarm_finished` (`do/alarm.ts`, with the turn count and duration). The same
-rule covers the other two objects: `schedule_finished` for ScheduleDO, and
-`learn_slice_completed` / `learn_completed` for LearningDO. A `turn_started`
-with no `interface_completed` puts the stall in the agent loop; a
-`turn_completed` with no `alarm_finished` puts it in the drain loop.
-Read them alongside the Workers Logs `invocations` view, which carries the
-authoritative `outcome`, `wallTimeMs` and `cpuTimeMs`.
-
-If draining throws a **catchable** error (LLM gateway error, network abort),
-`do/alarm.ts` self-reschedules the alarm with exponential backoff — but only
-while `findConversationsWithWork()` still returns work. Once every conversation
-has an empty queue and a finished assistant response it stops, which is the
-circuit breaker against a runaway paid alarm loop. It catches and returns rather than rethrowing: rethrowing would break
-the DO output gate and discard the reschedule write, falling back to CF's
-built-in retry (capped at 6). Backoff grows from a storage-backed attempt counter
-(`alarmAttempts`), not `alarmInfo.retryCount`, which resets on the catch-return
-path. This does **not** cover a DO isolate reset ("code was updated"): that tears
-the isolate down before the catch runs, so it relies on CF's built-in
-at-least-once retry plus the next user message re-arming the alarm.
+A message sent while Zero is working is queued and answered by the next run,
+and a burst of them becomes one run.
 
 ## Storage seam
 
-The orchestrator and agents depend only on the `Store` port (`store/types.ts`),
-keeping do-orm out of reach. Two adapters implement it: `DbStore` (do-orm over DO SQLite, production)
-and `MemoryStore` (in-memory, tests). The shared contract test
-(`store/store-contract.test.ts`) keeps the two in sync, which is what makes the
-agent and orchestrator unit tests (MemoryStore + a scripted mock model)
-trustworthy.
-
-## LLM access
-
-Both agents get their model through the `AgentModel` port, whose production
-adapter `agents/model-pi.ts` runs pi-ai's `cloudflare-ai-gateway` provider
-(`cf-aig-authorization` for the gateway, `cf-aig-metadata` for per-user
-attribution). BYOK billing and per-user spend limits live in the gateway, which
-also logs per-request tokens and USD cost per user. The model id, provider and
-reasoning effort are owned by `design.md` (Architecture); prompt caching by
-`caching.md`.
+UserDO's code depends only on the `Store` port (`store/types.ts`), keeping do-orm
+out of reach. Two adapters implement it: `DbStore` (do-orm over DO SQLite,
+production) and `MemoryStore` (in-memory, tests); the shared contract test
+(`store/store-contract.test.ts`) keeps them in sync. The topic tools are written
+against `TopicToolStore`, which a local `Store` satisfies and which AssistantDO
+reaches over RPC through `UserDataPort` (`assistant/user-data.ts`).

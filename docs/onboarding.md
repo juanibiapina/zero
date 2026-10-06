@@ -43,16 +43,17 @@ route.
   so a later dispatch re-runs it. Re-running is idempotent: it re-authors the
   same `User` topic. A caught failure is logged (`onboarding_failed`), marked
   `failed`, and not retried in a loop.
-- **Not on UserDO's alarm.** Onboarding used to run on UserDO's alarm after turn
-  draining, which put it in the same single alarm slot as replies. Its deadline
-  lives in ScheduleDO now, which calls `runQueuedOnboarding` when it comes due,
-  so onboarding can take as long as it likes without a queued message waiting
-  behind it.
+- **Not in front of a reply.** Onboarding used to run on UserDO's alarm after
+  turn draining, which put it in the same single alarm slot as replies. Its
+  deadline lives in ScheduleDO, which calls `runQueuedOnboarding` when it comes
+  due, and the agent runs as its own Pi session in AssistantDO, alongside the
+  user's chats.
 
 ## The agent
 
-`agents/onboarding.ts` is the same `runAgent` machine as the interface and
-learning agents, given the topic tools plus **read-only** Gmail (`gmail_search`,
+The onboarding agent is a Pi Durable session in AssistantDO (the
+`zero-onboarding` extension; UserDO calls `AssistantDO.runJob`), given the topic
+tools plus **read-only** Gmail (`gmail_search`,
 `gmail_thread`) — no `reply`, no delivery (`gmail_send`), no calendar, no
 `research`/`web_search`. It authors the pinned topic directly in one pass, with
 no separate consolidation pass afterward. The prompt

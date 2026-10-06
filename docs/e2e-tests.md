@@ -61,7 +61,7 @@ and spins up several processes); run it on demand.
 
 ## Testing gotcha: LLM error paths
 
-Unit tests inject failures at the `AgentModel` seam (`capturingModel` in `apps/zero-api/src/agents/mock-model.ts`), which is above the HTTP client, so nothing retries and a thrown error surfaces immediately. Classification reads `status`: see the 429 case in `apps/zero-api/src/agents/orchestrator.test.ts`, which throws `Object.assign(new Error("rate limited"), { status: 429 })`.
+Unit tests script failures with pi-ai's `faux` model (`apps/zero-api/src/assistant/test-support.ts`), which sits above the HTTP client and runs with retries off, so a failed response settles the turn immediately. Classification reads the provider error text: see the 429 case in `apps/zero-api/src/assistant/assistant.test.ts`.
 
 Only the e2e suite exercises the real OpenAI client, where a 429 is retried twice (`maxRetries: 2`) with backoff before it surfaces. That is why `packages/agent-e2e/src/rate-limit.test.ts` polls with a longer timeout.
 

@@ -9,9 +9,9 @@ messages the user in the thread the schedule was created in.
 
 A **schedule** is a stored record with a `prompt` and a next due time. The
 prompt is an instruction to Zero's future self, not user-facing copy. When the
-record comes due, its prompt is queued as a pending message with the
-`SCHEDULE_NOTE` prefix (`UserDO/turn-text.ts`) and the ordinary turn path
-answers it.
+record comes due, its prompt is handed to AssistantDO as an ordinary message
+with the `SCHEDULE_NOTE` prefix (`UserDO/turn-text.ts`) and the ordinary turn
+path answers it.
 
 A "reminder" is a schedule whose prompt is *remind the user to call Ana*; a
 "task" is one whose prompt is *send today's calendar and unread mail*. There is
@@ -26,11 +26,12 @@ conversations, and the agent tools that create them run in-process there.
 
 `ScheduleDO` owns *when*. It gains one reason, `reminder`, holding a single
 deadline per user, set to the **earliest** pending `nextDueAt`. Its dispatch
-calls `UserDO.runDueSchedules()`, which enqueues the due prompts and returns.
+calls `UserDO.runDueSchedules()`, which hands the due prompts to AssistantDO and
+returns.
 
 That preserves the invariant ScheduleDO exists for: a Durable Object has exactly
 one alarm, and no LLM work runs on ScheduleDO's. The turn a schedule books runs
-on UserDO's alarm, behind whatever the user has already queued, never in front
+in AssistantDO, queued behind whatever the user has already sent, never in front
 of it.
 
 `scheduleDeadline` replaces by key, so one reminder deadline per user is correct
@@ -85,9 +86,10 @@ parked for a year does not walk 35,000 occurrences.
 
 ## At-least-once
 
-`fireDueSchedules` enqueues the prompt **before** advancing `nextDueAt`, both
-synchronously. If that ever tears, a schedule fires twice rather than never; for
-a reminder the duplicate is the better failure.
+`fireDueSchedules` hands the prompt to AssistantDO **before** advancing
+`nextDueAt`, with the operation id `schedule:<id>:<dueAt>`. If the pass dies in
+between, the next pass submits the same occurrence again and AssistantDO
+answers it once.
 
 ## Limits
 

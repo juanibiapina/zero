@@ -12,9 +12,9 @@ presses the button again. Every step is idempotent.
 
 | Store | What it holds | How it goes |
 |---|---|---|
-| `UserDO` SQLite + KV | topics, conversations, messages, pending queue, file rows, schedules, settings, the Telegram link row, the admin task | `deleteAll()` |
+| `UserDO` SQLite + KV | topics, conversations, legacy messages, file rows, schedules, settings, the Telegram link row, the admin task | `deleteAll()` |
 | `ScheduleDO` | every deadline for the user, and its alarm | `purge()` |
-| `LearningDO` | learning job state, the learner wire log, its alarm | `purge()` |
+| `AssistantDO` | every agent transcript (Pi's tables), delivery claims, learning state, Lifecycle jobs and its alarm | `purge()`, then `drop()` |
 | `TelegramAccountDO` | the Telegram account's claim on this user | `release()` |
 | KV `tg:{id}` | cache of that claim (the only KV key shape the Worker writes) | `delete()` |
 | R2 `zero-attachments` | file bytes under `files/{user}/` and `attachments/{user}/` | per-record deletes plus a prefix sweep |
@@ -33,12 +33,12 @@ the one step that reaches a store the SQLite wipe cannot.
 
 1. **Release the Telegram claim first.** While it stands, an inbound message
    still resolves to this user and writes fresh rows behind the purge.
-2. **Purge `ScheduleDO`, then `LearningDO`.** Both exist to call back into
-   `UserDO` later, so they have to stop before `UserDO` is emptied.
+2. **Purge `ScheduleDO`, then `AssistantDO`.** Both call back into `UserDO`,
+   so they have to stop before `UserDO` is emptied.
 3. **Empty `UserDO`.**
-4. **Purge schedules and learning again.** A learner slice that was already
-   running in step 2 keeps writing topics over RPC for minutes.
-5. **Abort the `UserDO` instance** (`ctx.abort`).
+4. **Purge schedules and the assistant again.** An agent run that was already
+   going in step 2 can keep writing topics over RPC.
+5. **Abort `AssistantDO`, then the `UserDO` instance** (`ctx.abort`).
 
 ## Why the object is left empty
 
@@ -58,10 +58,8 @@ scratch and the user is a brand-new, empty user.
 
 ## Accepted races
 
-- A turn already running on the user's alarm can interleave with the wipe and
-  fail on missing rows. It is reported and self-heals on the next message.
-- A `LearningDO` slice that is mid-flight can re-create a topic seconds after
-  the wipe, which also re-creates the object's schema. The second purge (step 4)
+- An agent run that is mid-flight can re-create a topic seconds after the wipe,
+  which also re-creates UserDO's schema. The second purge (step 4)
   catches what it re-armed; anything later is the user's own data and a second
   press of the button removes it. Closing the window properly needs a deletion
   generation stamped on every write, which is not worth it today.
