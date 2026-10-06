@@ -18,6 +18,11 @@ android {
   testOptions {
     unitTests.includeAndroidResources = true
   }
+  sourceSets {
+    test {
+      resources.srcDirs += ["${projectDir}/../../../../../packages/agent-core/src/medicines/native-contract"]
+    }
+  }
 }
 
 dependencies {

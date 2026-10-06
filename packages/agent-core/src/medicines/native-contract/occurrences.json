@@ -1,0 +1,240 @@
+{
+  "cases": [
+    {
+      "name": "active routine with two daily doses",
+      "zone": "Europe/Berlin",
+      "now": "2026-10-02T04:00:00Z",
+      "on": "2026-10-02",
+      "medicine": {
+        "id": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+        "name": "Evening pill",
+        "instructions": null,
+        "startsOn": "2026-09-01",
+        "endsOn": null,
+        "paused": false,
+        "doses": [
+          {
+            "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+            "remindAt": "07:45",
+            "alarmAt": "08:00"
+          },
+          {
+            "id": "5b2f8c1e-9d34-4a07-b6e5-1c8f3a2d9e40",
+            "remindAt": "19:45",
+            "alarmAt": "20:00"
+          }
+        ],
+        "createdAt": "2026-09-01T08:00:00.000Z"
+      },
+      "doses": [
+        {
+          "id": "[\"0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31\",\"a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85\",\"2026-10-02\"]",
+          "medicineId": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+          "slotId": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+          "on": "2026-10-02",
+          "scheduledAt": "2026-10-02T06:00:00Z"
+        },
+        {
+          "id": "[\"0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31\",\"5b2f8c1e-9d34-4a07-b6e5-1c8f3a2d9e40\",\"2026-10-02\"]",
+          "medicineId": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+          "slotId": "5b2f8c1e-9d34-4a07-b6e5-1c8f3a2d9e40",
+          "on": "2026-10-02",
+          "scheduledAt": "2026-10-02T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "name": "last day of a course",
+      "zone": "Europe/Berlin",
+      "now": "2026-10-02T04:00:00Z",
+      "on": "2026-10-02",
+      "medicine": {
+        "id": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+        "name": "Evening pill",
+        "instructions": null,
+        "startsOn": "2026-09-01",
+        "endsOn": "2026-10-02",
+        "paused": false,
+        "doses": [
+          {
+            "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+            "remindAt": "19:45",
+            "alarmAt": "20:00"
+          }
+        ],
+        "createdAt": "2026-09-01T08:00:00.000Z"
+      },
+      "doses": [
+        {
+          "id": "[\"0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31\",\"a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85\",\"2026-10-02\"]",
+          "medicineId": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+          "slotId": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+          "on": "2026-10-02",
+          "scheduledAt": "2026-10-02T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "name": "course that ended yesterday",
+      "zone": "Europe/Berlin",
+      "now": "2026-10-02T04:00:00Z",
+      "on": "2026-10-02",
+      "medicine": {
+        "id": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+        "name": "Evening pill",
+        "instructions": null,
+        "startsOn": "2026-09-01",
+        "endsOn": "2026-10-01",
+        "paused": false,
+        "doses": [
+          {
+            "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+            "remindAt": "19:45",
+            "alarmAt": "20:00"
+          }
+        ],
+        "createdAt": "2026-09-01T08:00:00.000Z"
+      },
+      "doses": []
+    },
+    {
+      "name": "routine that starts tomorrow",
+      "zone": "Europe/Berlin",
+      "now": "2026-10-02T04:00:00Z",
+      "on": "2026-10-02",
+      "medicine": {
+        "id": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+        "name": "Evening pill",
+        "instructions": null,
+        "startsOn": "2026-10-03",
+        "endsOn": null,
+        "paused": false,
+        "doses": [
+          {
+            "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+            "remindAt": "19:45",
+            "alarmAt": "20:00"
+          }
+        ],
+        "createdAt": "2026-09-01T08:00:00.000Z"
+      },
+      "doses": []
+    },
+    {
+      "name": "paused routine",
+      "zone": "Europe/Berlin",
+      "now": "2026-10-02T04:00:00Z",
+      "on": "2026-10-02",
+      "medicine": {
+        "id": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+        "name": "Evening pill",
+        "instructions": null,
+        "startsOn": "2026-09-01",
+        "endsOn": null,
+        "paused": true,
+        "doses": [
+          {
+            "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+            "remindAt": "19:45",
+            "alarmAt": "20:00"
+          }
+        ],
+        "createdAt": "2026-09-01T08:00:00.000Z"
+      },
+      "doses": []
+    },
+    {
+      "name": "dose time inside the spring-forward gap",
+      "zone": "Europe/Berlin",
+      "now": "2026-03-28T23:30:00Z",
+      "on": "2026-03-29",
+      "medicine": {
+        "id": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+        "name": "Evening pill",
+        "instructions": null,
+        "startsOn": "2026-03-01",
+        "endsOn": null,
+        "paused": false,
+        "doses": [
+          {
+            "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+            "remindAt": "02:00",
+            "alarmAt": "02:30"
+          }
+        ],
+        "createdAt": "2026-03-01T08:00:00.000Z"
+      },
+      "doses": [
+        {
+          "id": "[\"0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31\",\"a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85\",\"2026-03-29\"]",
+          "medicineId": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+          "slotId": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+          "on": "2026-03-29",
+          "scheduledAt": "2026-03-29T01:30:00Z"
+        }
+      ]
+    },
+    {
+      "name": "dose time inside the fall-back overlap",
+      "zone": "Europe/Berlin",
+      "now": "2026-10-24T22:00:00Z",
+      "on": "2026-10-25",
+      "medicine": {
+        "id": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+        "name": "Evening pill",
+        "instructions": null,
+        "startsOn": "2026-09-01",
+        "endsOn": null,
+        "paused": false,
+        "doses": [
+          {
+            "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+            "remindAt": "02:15",
+            "alarmAt": "02:30"
+          }
+        ],
+        "createdAt": "2026-09-01T08:00:00.000Z"
+      },
+      "doses": [
+        {
+          "id": "[\"0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31\",\"a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85\",\"2026-10-25\"]",
+          "medicineId": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+          "slotId": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+          "on": "2026-10-25",
+          "scheduledAt": "2026-10-25T00:30:00Z"
+        }
+      ]
+    },
+    {
+      "name": "routine west of UTC",
+      "zone": "America/Sao_Paulo",
+      "now": "2026-10-02T09:00:00Z",
+      "on": "2026-10-02",
+      "medicine": {
+        "id": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+        "name": "Evening pill",
+        "instructions": null,
+        "startsOn": "2026-09-01",
+        "endsOn": null,
+        "paused": false,
+        "doses": [
+          {
+            "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+            "remindAt": "19:45",
+            "alarmAt": "20:00"
+          }
+        ],
+        "createdAt": "2026-09-01T08:00:00.000Z"
+      },
+      "doses": [
+        {
+          "id": "[\"0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31\",\"a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85\",\"2026-10-02\"]",
+          "medicineId": "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31",
+          "slotId": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
+          "on": "2026-10-02",
+          "scheduledAt": "2026-10-02T23:00:00Z"
+        }
+      ]
+    }
+  ]
+}

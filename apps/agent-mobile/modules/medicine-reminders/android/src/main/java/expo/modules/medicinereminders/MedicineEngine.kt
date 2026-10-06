@@ -19,6 +19,7 @@ internal object MedicineEngine {
   private const val GROUP = "medicines"
   private const val PREFS = "medicine-reminders-v1"
   private val lock = Any()
+  internal var clock: () -> Clock = { Clock.systemDefaultZone() }
   private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
   private fun load(c: Context): JSONObject = JSONObject(prefs(c).getString("state", "{}") ?: "{}")
   private fun save(c: Context, state: JSONObject) { check(prefs(c).edit().putString("state", state.toString()).commit()) { "Reminder storage failed" } }
@@ -130,7 +131,7 @@ internal object MedicineEngine {
       if (receipt.getString("kind") == "taken" && receipt.getString("id") == id) return@synchronized receipt.toString()
     }
     check(!obj(state, "suppressed").optBoolean(id)) { "This dose is already taken" }
-    val receipt = JSONObject(dose.toString()).put("kind", "taken").put("actionId", UUID.randomUUID().toString()).put("takenAt", instant(System.currentTimeMillis()))
+    val receipt = JSONObject(dose.toString()).put("kind", "taken").put("actionId", UUID.randomUUID().toString()).put("takenAt", instant(clock().millis()))
     array(state, "receipts").put(receipt); obj(state, "suppressed").put(id, true); obj(state, "visible").remove(id)
     save(c, state)
     notificationManager(c).cancel(id, 0)
@@ -202,7 +203,7 @@ internal object MedicineEngine {
     if (state.optBoolean("quiesced")) return
     val manager = alarmManager(c)
     if (Build.VERSION.SDK_INT >= 31 && !manager.canScheduleExactAlarms()) { save(c, state); return }
-    val now = System.currentTimeMillis(); val zone = ZoneId.systemDefault(); val today = LocalDate.now(zone)
+    val time = clock(); val now = time.millis(); val zone = time.zone; val today = LocalDate.now(time)
     val scheduled = JSONArray(); state.put("scheduled", scheduled)
     val batches = sortedMapOf<Pair<Long, String>, JSONArray>(compareBy<Pair<Long, String>> { it.first }.thenBy { it.second })
     val delivered = obj(state, "delivered")
@@ -258,7 +259,7 @@ internal object MedicineEngine {
     val doses = batch.optJSONArray("doses") ?: JSONArray()
     for (i in 0 until doses.length()) {
       val dose = doses.getJSONObject(i)
-      if (eligible(state, dose) && currentDose(state, dose) && !obj(state, "suppressed").optBoolean(dose.getString("id")) && dose.getString("on") == LocalDate.now().toString()) show(c, state, dose, true)
+      if (eligible(state, dose) && currentDose(state, dose) && !obj(state, "suppressed").optBoolean(dose.getString("id")) && dose.getString("on") == LocalDate.now(clock()).toString()) show(c, state, dose, true)
     }
     cancelIntents(c, state); schedule(c, state)
   }
@@ -272,7 +273,7 @@ internal object MedicineEngine {
     save(c, state)
     if (alert) notificationManager(c).cancel(id, 0)
     notificationManager(c).notify(id, 0, notification(c, state.getString("workspace"), dose, alert))
-    android.util.Log.i("MedicineReminders", "notification_presented stage=${dose.getString("kind")} scheduled=${dose.getString("stageAt")} delivered=${instant(System.currentTimeMillis())} alert=$alert")
+    android.util.Log.i("MedicineReminders", "notification_presented stage=${dose.getString("kind")} scheduled=${dose.getString("stageAt")} delivered=${instant(clock().millis())} alert=$alert")
   }
   fun notification(c: Context, workspace: String, dose: JSONObject, alert: Boolean): Notification {
     val id = dose.getString("id")

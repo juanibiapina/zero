@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -15,7 +16,9 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlarmManager
-import java.time.LocalDate
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -24,7 +27,7 @@ class MedicineDeliveryTest {
   private val manager: NotificationManager get() = context.getSystemService(NotificationManager::class.java)
   private val alarms: AlarmManager get() = context.getSystemService(AlarmManager::class.java)
   private val workspace = "workspace"
-  private val day get() = LocalDate.now().toString()
+  private val day = "2026-10-02"
   private fun id(medicine: String = "medicine") = JSONArray(listOf(medicine, "evening", day)).toString()
   private fun plans(ids: List<String> = listOf("medicine"), confirmed: List<String> = emptyList(), paused: Boolean = false): String {
     val medicines = JSONArray()
@@ -37,7 +40,13 @@ class MedicineDeliveryTest {
   private fun presentedCount() = (0 until receipts().length()).count { receipts().getJSONObject(it).getString("kind") == "presented" }
 
   @Before
-  fun enableScheduling() { ShadowAlarmManager.setCanScheduleExactAlarms(true) }
+  fun enableScheduling() {
+    ShadowAlarmManager.setCanScheduleExactAlarms(true)
+    MedicineEngine.clock = { Clock.fixed(Instant.parse("${day}T10:00:00Z"), ZoneOffset.UTC) }
+  }
+
+  @After
+  fun restoreClock() { MedicineEngine.clock = { Clock.systemDefaultZone() } }
 
   @Test
   fun bothScheduledStagesAlertOnceWithoutOpeningTheApp() {
