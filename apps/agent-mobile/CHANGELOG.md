@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-06: Change the + on a project's screen to grow into the add drawer like everywhere else, and keep your text in the drawer when an add fails on any screen.
+
 - 2026-10-06: Fix the keyboard staying open after you add a project from Home.
 
 - 2026-10-06: Fix medicine reminders failing to schedule after reinstalling the app, which could also stop the app from opening.

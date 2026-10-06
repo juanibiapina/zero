@@ -45,7 +45,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmojiPickerSheet } from '@/components/emoji-picker-sheet';
 import { Input } from '@/components/ui/input';
-import { useProjectAdd } from '@/components/project-add';
+import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
 import { useTaskDetail } from '@/components/task-detail';
 import { Sheet } from '@/components/ui/sheet';
@@ -227,7 +227,6 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
   const { projects: api, tasks: tasksApi, waits: waitsApi } = replica;
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getToken } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
   const { data: projects } = useLiveQuery((q) =>
@@ -328,27 +327,20 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
     [openTasks, id],
   );
 
-  const add = useProjectAdd({
-    project,
-    projects: list,
-    conditions: conds,
-    openTasks: tasks,
-    tasksApi,
-    projectsApi: api,
-    waitsApi,
-    getToken,
+  // The + drawer, also opened by the section shortcuts and task feedback.
+  const add = useQuickAdd({
+    replica,
+    surface: { kind: 'project', project },
     onError: setError,
   });
 
-  // The task detail editor delegates Waiting feedback to the same Project add
-  // drawer used by the FAB and section actions.
   const detail = useTaskDetail({
     replica,
     projects: list,
     openTasks: tasks,
     conditions: conds,
     currentProjectId: id,
-    onAddWaiting: (destination) => add.openFor(destination, 'waiting'),
+    onAddWaiting: (destination) => add.open('waiting', destination),
     onError: setError,
   });
 
@@ -473,8 +465,8 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
                 project={project}
                 waitsApi={waitsApi}
                 projects={list}
-                onAddWaiting={add.openWaiting}
-                onAddAfter={add.openAfter}
+                onAddWaiting={() => add.open('waiting')}
+                onAddAfter={() => add.open('after')}
                 onError={setError}
               />
 
@@ -482,7 +474,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
                 <ProjectSectionHeader
                   title="Tasks"
                   addLabel="Add task"
-                  onAdd={add.openTask}
+                  onAdd={() => add.open('task')}
                 />
               ) : null}
             </View>
@@ -492,7 +484,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
 
       {detail.sheets}
 
-      {add.bar}
+      {add.element}
     </View>
   );
 }

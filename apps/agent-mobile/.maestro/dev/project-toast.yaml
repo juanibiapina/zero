@@ -13,7 +13,7 @@ appId: dev.juanibiapina.zeroagent
     visible: 'Home'
     timeout: 45000
 # Open the quick-add.
-- tapOn: '^Task$'
+- tapOn: '^Add$'
 # Switch to Project mode and name an outcome.
 - tapOn: 'Add a project'
 - inputText: 'Maestro toast project'

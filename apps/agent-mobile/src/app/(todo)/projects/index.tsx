@@ -1,4 +1,3 @@
-import { useAuth } from '@clerk/expo';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useRouter } from 'expo-router';
@@ -50,7 +49,6 @@ export default function ProjectsScreen() {
 function Projects({ replica }: { replica: TaskdoReplica }) {
   const { projects: api, tasks: tasksApi, waits: waitsApi } = replica;
   const router = useRouter();
-  const { getToken } = useAuth();
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, 'asc'));
   const { data: openTasks } = useLiveQuery((q) =>
@@ -78,9 +76,7 @@ function Projects({ replica }: { replica: TaskdoReplica }) {
   })), [grouped]);
   const onProjectCreated = useCallback((id: string) => router.push(`/projects/${id}`), [router]);
   const add = useQuickAdd({
-    tasksApi, projectsApi: api, projects: list, openTasks: tasks, conditions: conds, modes: ['project', 'task'],
-    scope: { kind: 'global' }, getToken, onError: setWriteError,
-    fabLabel: 'Add', onProjectCreated,
+    replica, surface: { kind: 'projects' }, onError: setWriteError, onProjectCreated,
   });
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', add.handleBack);
@@ -109,7 +105,7 @@ function Projects({ replica }: { replica: TaskdoReplica }) {
           )}
         />
       )}
-      {add.bar}
+      {add.element}
     </>
   );
 }

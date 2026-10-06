@@ -30,7 +30,7 @@ describe('Medicine creation and management', () => {
   it('keeps Medicine out of Home quick-add and creates three doses from its own list without Task rows', async () => {
     const data = createInMemoryTodoData();
     const home = await openScreen(<HomeScreen />, data);
-    await fireEvent.press(home.getByLabelText('Task'));
+    await fireEvent.press(home.getByLabelText('Add'));
     expect(home.queryByLabelText('Add a medicine')).toBeNull();
     await home.unmount();
     const screen = await openScreen(<MedicinesList />, data);

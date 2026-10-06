@@ -28,7 +28,6 @@ import {
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 
 import { useTodoDataContext } from '@/lib/todo-data-context';
-import { useProjectAdd } from '@/components/project-add';
 import { ProjectListRow } from '@/components/project-list-row';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
@@ -254,7 +253,6 @@ function TodoHomeScreen() {
 
 function Home({ replica }: { replica: TaskdoReplica }) {
   const { tasks: api, projects: projectsApi, waits: waitsApi } = replica;
-  const { getToken } = useAuth();
   const { data: tasks, isLoading } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
@@ -284,27 +282,19 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
   const view = listView({ count: list.length, isLoading });
 
-  const projectAdd = useProjectAdd({
-    project: null,
-    projects: projects ?? [],
-    conditions: conditions ?? [],
-    openTasks: tasks ?? [],
-    tasksApi: api,
-    projectsApi,
-    waitsApi,
-    getToken,
+  // The + drawer. Task feedback opens it for that Task's Project on Waiting.
+  const add = useQuickAdd({
+    replica,
+    surface: { kind: 'home' },
     onError: setWriteError,
-    showFab: false,
   });
 
-  // The task detail editor delegates Project-scoped Waiting feedback to the
-  // shared four-mode Project drawer mounted by this screen.
   const detail = useTaskDetail({
     replica,
     projects: projects ?? [],
     openTasks: tasks ?? [],
     conditions: conditions ?? [],
-    onAddWaiting: (project) => projectAdd.openFor(project, 'waiting'),
+    onAddWaiting: (project) => add.open('waiting', project),
     onError: setWriteError,
     waitForPersist: true,
   });
@@ -316,29 +306,9 @@ function Home({ replica }: { replica: TaskdoReplica }) {
     [projects],
   );
 
-  // The quick-add composer (drawer + date/project rows + picker sheets + discard
-  // confirm + writes). Home offers task and project modes and the project row; the
-  // shared hook owns everything else. See quick-add-composer.tsx.
-  const add = useQuickAdd({
-    tasksApi: api,
-    projectsApi,
-    projects: projects ?? [],
-    openTasks: tasks ?? [],
-    conditions: conditions ?? [],
-    modes: ['task', 'project'],
-    scope: { kind: 'global' },
-    getToken,
-    onError: setWriteError,
-    fabLabel: 'Task',
-    waitForPersist: true,
-  });
-
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (detail.handleBack()) {
-        return true;
-      }
-      if (projectAdd.handleBack()) {
         return true;
       }
       if (add.handleBack()) {
@@ -347,7 +317,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
       return false;
     });
     return () => sub.remove();
-  }, [detail, projectAdd, add]);
+  }, [detail, add]);
 
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 
@@ -396,8 +366,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
       )}
 
       {detail.sheets}
-      {projectAdd.bar}
-      {add.bar}
+      {add.element}
     </>
   );
 }

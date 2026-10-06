@@ -98,7 +98,7 @@ describe('HomeScreen', () => {
       'Projects group related tasks around an outcome you want to accomplish.',
     )).toBeTruthy();
     expect(screen.queryByText('Create a project')).toBeNull();
-    expect(screen.getByLabelText('Task')).toBeTruthy();
+    expect(screen.getByLabelText('Add')).toBeTruthy();
     expect(screen.getByText('Home')).toBeTruthy();
     expect(screen.getByLabelText('Account')).toBeTruthy();
   });
@@ -197,7 +197,7 @@ describe('HomeScreen', () => {
 
   it('adds a loose task through the screen API', async () => {
     const screen = await renderScreen();
-    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.press(screen.getByLabelText('Add'));
     const input = screen.getByPlaceholderText('Add a task');
     await fireEvent.changeText(input, 'call the dentist');
     await fireEvent(input, 'submitEditing');
@@ -209,9 +209,37 @@ describe('HomeScreen', () => {
     });
   });
 
+  it('adds Waiting for a completed task\'s project, then offers only Task and Project from Add', async () => {
+    const screen = await renderScreen({
+      projects: [project('p', 'Run a 5K')],
+      tasks: [task('t', 'register for the race', { projectId: 'p', showUpDate: '2026-09-01' })],
+    });
+    await waitFor(() => expect(screen.getByText('register for the race')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Complete "register for the race"'));
+
+    const toast = defaultToastController.getSnapshot()[0];
+    expect(toast?.secondaryAction?.label).toBe('Waiting…');
+    await act(async () => toast?.secondaryAction?.onPress());
+    const input = await waitFor(() => screen.getByLabelText('Waiting on'));
+    expect(screen.getByLabelText('Project Run a 5K')).toBeTruthy();
+    await fireEvent.changeText(input, 'the bib arrives');
+    await fireEvent(input, 'submitEditing');
+
+    await waitFor(() => expect(screen.queryByLabelText('Waiting on')).toBeNull());
+    expect([...screen.data.replica!.waits.collection.values()]).toMatchObject([
+      { projectId: 'p', text: 'the bib arrives' },
+    ]);
+
+    await fireEvent.press(screen.getByLabelText('Add'));
+    expect(screen.getByPlaceholderText('Add a task')).toBeTruthy();
+    expect(screen.getByLabelText('Add a project')).toBeTruthy();
+    expect(screen.queryByLabelText('Add a waiting condition')).toBeNull();
+    expect(screen.queryByLabelText('Add an After project')).toBeNull();
+  });
+
   it('closes an empty quick-add editor when the keyboard starts hiding', async () => {
     const screen = await renderScreen();
-    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.press(screen.getByLabelText('Add'));
     expect(screen.getByPlaceholderText('Add a task')).toBeTruthy();
 
     await act(async () => {
@@ -223,12 +251,12 @@ describe('HomeScreen', () => {
     await waitFor(() =>
       expect(screen.queryByPlaceholderText('Add a task')).toBeNull(),
     );
-    expect(screen.getByLabelText('Task')).toBeTruthy();
+    expect(screen.getByLabelText('Add')).toBeTruthy();
   });
 
   it('asks before discarding a quick-add draft when the keyboard starts hiding', async () => {
     const screen = await renderScreen();
-    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.press(screen.getByLabelText('Add'));
     await fireEvent.changeText(
       screen.getByPlaceholderText('Add a task'),
       'keep this draft',
@@ -246,7 +274,7 @@ describe('HomeScreen', () => {
 
   it('keeps independent Task and Project drafts when switching creation modes', async () => {
     const screen = await renderScreen();
-    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.press(screen.getByLabelText('Add'));
     await fireEvent.changeText(screen.getByPlaceholderText('Add a task'), 'Call tomorrow');
     await fireEvent.press(screen.getByLabelText('Add a project'));
     await fireEvent.changeText(screen.getByPlaceholderText('Name an outcome'), 'Read every day');
@@ -260,7 +288,7 @@ describe('HomeScreen', () => {
 
   it('parses recurring quick-add text into the stored task', async () => {
     const screen = await renderScreen();
-    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.press(screen.getByLabelText('Add'));
     const input = screen.getByPlaceholderText('Add a task');
     await fireEvent.changeText(input, 'stand up every day');
     expect(screen.getByTestId('schedule-highlight', { includeHiddenElements: true }).props.children)
@@ -403,7 +431,7 @@ describe('HomeScreen project suggestions', () => {
       projects: [project('bathroom', 'Bathroom renovation', { icon: '🛁' })],
       tasks: [task('t', 'choose tiles', { projectId: 'bathroom' })],
     });
-    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.press(screen.getByLabelText('Add'));
     const input = screen.getByPlaceholderText('Add a task');
     await fireEvent.changeText(input, 'buy grout');
 
@@ -429,7 +457,7 @@ describe('HomeScreen project suggestions', () => {
       { projects: [project('bathroom', 'Bathroom renovation')] },
       true,
     );
-    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.press(screen.getByLabelText('Add'));
     await fireEvent.changeText(screen.getByPlaceholderText('Add a task'), 'buy grout');
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 600));

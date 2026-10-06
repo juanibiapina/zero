@@ -16,7 +16,7 @@ appId: dev.juanibiapina.zeroagent
 - takeScreenshot: 01-captures
 # Quick-add open with the keyboard up. Screenshot artifact names stay stable so
 # existing before/after comparisons keep their paths.
-- tapOn: '^Task$'
+- tapOn: '^Add$'
 - takeScreenshot: 02-captures-quickadd
 - inputText: 'Screenshot sweep row'
 - takeScreenshot: 03-captures-quickadd-text

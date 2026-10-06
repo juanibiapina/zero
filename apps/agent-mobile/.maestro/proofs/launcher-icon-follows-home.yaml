@@ -16,7 +16,7 @@ appId: dev.juanibiapina.zeroagent
     when:
       true: ${ACTION == 'add'}
     commands:
-      - tapOn: "^Task$"
+      - tapOn: "^Add$"
       - inputText: "E2E icon task ${TASK_NUMBER}"
       - tapOn:
           id: "quick-add-submit"

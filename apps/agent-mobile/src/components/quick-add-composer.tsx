@@ -1,3 +1,6 @@
+import { useAuth } from '@clerk/expo';
+import { isNull } from '@tanstack/db';
+import { useLiveQuery } from '@tanstack/react-db';
 import {
   ADD_MODE_PLACEHOLDER,
   defaultToastController,
@@ -7,11 +10,7 @@ import {
   type AddMode,
   type Project,
   type ProjectSelection,
-  type TodoProjects,
-  type TodoTasks,
-  type Task,
-  type WaitingCondition,
-  type TodoWaits,
+  type TaskdoReplica,
 } from '@zero/agent-core';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -23,70 +22,84 @@ import { AddModeSelector, TaskEditorSheet } from '@/components/task-editor-sheet
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Fab } from '@/components/ui/fab';
 import { Text } from '@/components/ui/text';
-import type { TokenGetter } from '@/lib/api';
 import { useNewProjectIcon } from '@/lib/new-project-icon';
 import { useProjectSuggestion } from '@/lib/project-suggestion';
 import { useLocalDay } from '@/lib/local-day';
 import { showTaskDestination } from '@/lib/task-feedback';
 import { useTodoDataContext } from '@/lib/todo-data-context';
 
-export type QuickAddScope =
-  | { kind: 'global' }
-  | {
-      kind: 'project';
-      project: Project | null;
-      waitsApi: TodoWaits;
-    };
+// The screen that mounts the + drawer. The surface decides whether the + shows
+// and which modes it offers; opening with a Project offers the Project modes.
+export type QuickAddSurface =
+  | { kind: 'home' }
+  | { kind: 'upcoming' }
+  | { kind: 'projects' }
+  | { kind: 'project'; project: Project | null };
+
+export type QuickAddController = {
+  element: ReactNode;
+  open: (mode?: AddMode, project?: Project) => void;
+  handleBack: () => boolean;
+};
+
+type Overlay = 'discard' | 'schedule' | 'project' | 'after' | 'icon';
+
+type Persisting = { isPersisted: { promise: Promise<unknown> } };
+
+const PROJECT_MODES: AddMode[] = ['task', 'waiting', 'after', 'project'];
+
+function modesFor(surface: QuickAddSurface['kind'], destination: Project | null): AddMode[] {
+  if (destination) return PROJECT_MODES;
+  return surface === 'projects' ? ['project', 'task'] : ['task', 'project'];
+}
 
 const NO_PROJECT: ProjectSelection = { projectId: null, source: 'none' };
 
 const fixedProject = (projectId: string | null): ProjectSelection =>
   projectId ? { projectId, source: 'context' } : NO_PROJECT;
 
-export type QuickAddController = {
-  bar: ReactNode;
-  handleBack: () => boolean;
-  active: boolean;
-  open: (options?: { initialMode?: AddMode; projectId?: string }) => void;
-};
-
-// One controller owns the create drawer, per-mode drafts, Task metadata, Project
-// pickers, writes, discard confirmation, and Android Back order. Global callers
-// use Task/Project. useProjectAdd supplies the grouped Project context required
-// by Waiting and After, so those modes cannot be configured from loose optional
-// props.
+// The + button and add drawer for every todo screen: per-mode drafts, Task
+// metadata, pickers, writes, discard confirmation, and Android Back order. A
+// screen mounts one and renders `element` once. `onProjectCreated` replaces the
+// default "Project created" toast, for a screen that navigates instead.
 export function useQuickAdd({
-  tasksApi,
-  projectsApi,
-  projects,
-  openTasks,
-  conditions,
-  modes,
-  scope,
-  getToken,
+  replica,
+  surface,
   onError,
-  fabLabel,
   onProjectCreated,
-  onClosed,
-  showFab = true,
-  waitForPersist = false,
 }: {
-  tasksApi: TodoTasks;
-  projectsApi: TodoProjects;
-  projects: Project[];
-  openTasks: Task[];
-  conditions: WaitingCondition[];
-  modes: AddMode[];
-  scope: QuickAddScope;
-  getToken: TokenGetter;
+  replica: TaskdoReplica;
+  surface: QuickAddSurface;
   onError: (message: string | null) => void;
-  fabLabel: string;
   onProjectCreated?: (id: string) => void;
-  onClosed?: () => void;
-  showFab?: boolean;
-  waitForPersist?: boolean;
 }): QuickAddController {
   const authenticatedFeatures = useTodoDataContext()?.signedIn ?? false;
+  const { getToken } = useAuth();
+  const { data: projectRows } = useLiveQuery(
+    (q) => q.from({ p: replica.projects.collection }).orderBy(({ p }) => p.createdAt, 'asc'),
+    [replica],
+  );
+  const { data: openTaskRows } = useLiveQuery(
+    (q) => q.from({ t: replica.tasks.collection }).where(({ t }) => isNull(t.completedAt)),
+    [replica],
+  );
+  const { data: conditionRows } = useLiveQuery(
+    (q) => q.from({ w: replica.waits.collection }),
+    [replica],
+  );
+  const projects = useMemo(() => projectRows ?? [], [projectRows]);
+  const openTasks = useMemo(() => openTaskRows ?? [], [openTaskRows]);
+  const conditions = useMemo(() => conditionRows ?? [], [conditionRows]);
+
+  const surfaceProject = surface.kind === 'project' ? surface.project : null;
+  const [destination, setDestination] = useState<Project | null>(null);
+  const contextProject = destination
+    ? (projects.find((project) => project.id === destination.id) ?? destination)
+    : surfaceProject;
+  const contextProjectId = contextProject?.id ?? null;
+  const modes = modesFor(surface.kind, contextProject);
+  const showFab = surface.kind !== 'upcoming' && (surface.kind !== 'project' || surfaceProject != null);
+
   const [taskDraft, setTaskDraft] = useState(() => TaskDraft.create());
   const [drafts, setDrafts] = useState<Record<Exclude<AddMode, 'task'>, string>>({
     waiting: '',
@@ -95,16 +108,11 @@ export function useQuickAdd({
   });
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
-  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
-  const [schedulingAdd, setSchedulingAdd] = useState(false);
-  const [pickingProject, setPickingProject] = useState(false);
-  const [pickingAfter, setPickingAfter] = useState(false);
-  const [pickingIcon, setPickingIcon] = useState(false);
+  const [overlay, setOverlay] = useState<Overlay | null>(null);
   const inputRef = useRef<{ focus: () => void }>(null);
   const ignoreNextKeyboardHide = useRef(false);
+  const saving = useRef(false);
 
-  const contextProject = scope.kind === 'project' ? scope.project : null;
-  const contextProjectId = contextProject?.id ?? null;
   const text = mode === 'task' ? taskDraft.text : drafts[mode];
   const hasDraft = [taskDraft.text, ...Object.values(drafts)].some((draft) => draft.trim() !== '');
   const today = useLocalDay();
@@ -117,7 +125,7 @@ export function useQuickAdd({
     title: adding && mode === 'task' ? taskView.title : '',
     projects,
     tasks: openTasks,
-    enabled: authenticatedFeatures && adding && mode === 'task' && scope.kind === 'global',
+    enabled: authenticatedFeatures && adding && mode === 'task' && contextProject == null,
   });
   const addProjectId = projectChoice.selection.projectId;
   const resetProject = projectChoice.reset;
@@ -135,36 +143,55 @@ export function useQuickAdd({
     [mode],
   );
 
+  // Closing keeps the current mode: swapping the focused field while the
+  // keyboard hides would hand focus to another field and keep the keyboard up.
+  // `open` sets the mode every time.
   const closeAdd = useCallback(() => {
     ignoreNextKeyboardHide.current = true;
     Keyboard.dismiss();
     setDrafts({ waiting: '', after: '', project: '' });
     setTaskDraft(TaskDraft.create());
-    setConfirmingDiscard(false);
     setAdding(false);
+    setOverlay(null);
+    setDestination(null);
     resetProject(NO_PROJECT);
     resetProjectIcon();
-    setSchedulingAdd(false);
-    setPickingProject(false);
-    setPickingAfter(false);
-    setPickingIcon(false);
-    onClosed?.();
-  }, [onClosed, resetProject, resetProjectIcon]);
+  }, [resetProject, resetProjectIcon]);
+
+  // Every add waits for the local write, then closes. A rejected write keeps
+  // the drawer and its draft open and reports the error.
+  const persistThen = useCallback(
+    (tx: Persisting, done: () => void) => {
+      saving.current = true;
+      tx.isPersisted.promise.then(
+        () => {
+          saving.current = false;
+          done();
+        },
+        (error) => {
+          saving.current = false;
+          onError(messageOf(error));
+        },
+      );
+    },
+    [onError],
+  );
 
   const open = useCallback(
-    (options?: { initialMode?: AddMode; projectId?: string }) => {
+    (requested?: AddMode, project?: Project) => {
       defaultToastController.dismiss();
       ignoreNextKeyboardHide.current = false;
+      const target = project ?? surfaceProject;
+      const available = modesFor(surface.kind, target);
       const initialMode =
-        options?.initialMode && modes.includes(options.initialMode)
-          ? options.initialMode
-          : (modes[0] ?? 'task');
+        requested && available.includes(requested) ? requested : (available[0] ?? 'task');
+      setDestination(project ?? null);
       setMode(initialMode);
-      resetProject(fixedProject(options?.projectId ?? contextProjectId));
+      resetProject(fixedProject(target?.id ?? null));
       setAdding(true);
-      setPickingAfter(initialMode === 'after');
+      setOverlay(initialMode === 'after' ? 'after' : null);
     },
-    [modes, contextProjectId, resetProject],
+    [surface.kind, surfaceProject, resetProject],
   );
 
   const selectMode = useCallback(
@@ -173,14 +200,15 @@ export function useQuickAdd({
       if (nextMode === 'task' && contextProjectId) {
         resetProject(fixedProject(contextProjectId));
       }
-      if (nextMode === 'after') setPickingAfter(true);
+      if (nextMode === 'after') setOverlay('after');
     },
     [contextProjectId, resetProject],
   );
 
   const onAdd = useCallback(() => {
+    if (saving.current) return;
     if (mode === 'after') {
-      setPickingAfter(true);
+      setOverlay('after');
       return;
     }
 
@@ -192,89 +220,66 @@ export function useQuickAdd({
     onError(null);
 
     if (mode === 'waiting') {
-      if (scope.kind !== 'project' || !contextProject) return;
-      const tx = scope.waitsApi.addWaiting(contextProject.id, trimmed);
-      tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
-      closeAdd();
+      if (!contextProject) return;
+      persistThen(replica.waits.addWaiting(contextProject.id, trimmed), closeAdd);
       return;
     }
 
     if (mode === 'project') {
       const icon = projectIcon.choice.icon;
-      const tx = projectsApi.add(trimmed, icon);
-      tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
+      const tx = replica.projects.add(trimmed, icon);
       const id = String(tx.mutations[0]?.key);
-      if (onProjectCreated) {
+      persistThen(tx, () => {
         closeAdd();
-        onProjectCreated(id);
-        return;
-      }
-      toast('Project created', {
-        description: `${icon} ${trimmed}`,
-        action: {
-          label: 'View',
-          onPress: () =>
-            router.navigate(`/projects/${id}`, { withAnchor: true }),
-        },
+        if (onProjectCreated) {
+          onProjectCreated(id);
+          return;
+        }
+        toast('Project created', {
+          description: `${icon} ${trimmed}`,
+          action: {
+            label: 'View',
+            onPress: () => router.navigate(`/projects/${id}`, { withAnchor: true }),
+          },
+        });
       });
-      closeAdd();
       return;
     }
 
     const prepared = taskView.commit;
     if (prepared.kind !== 'ready') return;
-    const taskText = prepared.text;
     defaultToastController.dismiss();
-    const tx = tasksApi.add(
-      taskText,
-      effectiveDate,
-      addProjectId,
-      effectiveRecurrence,
-    );
-    if (waitForPersist) {
-      void tx.isPersisted.promise.then(() => {
-        if (addProjectId != null && addProjectId !== contextProjectId) {
-          showTaskDestination(
-            { showUpDate: effectiveDate, projectId: addProjectId },
-            projects,
-            'created',
-          );
-        }
-        closeAdd();
-      }, (error) => onError(messageOf(error)));
-      return;
-    }
-    tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
-    if (addProjectId != null && addProjectId !== contextProjectId) {
-      showTaskDestination(
-        { showUpDate: effectiveDate, projectId: addProjectId },
-        projects,
-        'created',
-      );
-    }
-    closeAdd();
+    const tx = replica.tasks.add(prepared.text, effectiveDate, addProjectId, effectiveRecurrence);
+    persistThen(tx, () => {
+      if (addProjectId != null && addProjectId !== contextProjectId) {
+        showTaskDestination(
+          { showUpDate: effectiveDate, projectId: addProjectId },
+          projects,
+          'created',
+        );
+      }
+      closeAdd();
+    });
   }, [
     mode,
     text,
     closeAdd,
     onError,
-    scope,
     contextProject,
-    projectsApi,
+    persistThen,
+    replica,
     projectIcon.choice.icon,
     onProjectCreated,
     taskView,
-    tasksApi,
     effectiveDate,
     addProjectId,
     effectiveRecurrence,
     contextProjectId,
     projects,
-    waitForPersist,
   ]);
 
   const closeIconPicker = useCallback(() => {
-    setPickingIcon(false);
+    setOverlay(null);
     inputRef.current?.focus();
   }, []);
   const pickIcon = useCallback(
@@ -286,64 +291,35 @@ export function useQuickAdd({
   );
 
   const requestClose = useCallback(() => {
-    if (confirmingDiscard) {
-      setConfirmingDiscard(false);
+    if (overlay === 'discard') {
+      setOverlay(null);
     } else if (hasDraft) {
-      setConfirmingDiscard(true);
+      setOverlay('discard');
     } else {
       closeAdd();
     }
-  }, [confirmingDiscard, hasDraft, closeAdd]);
+  }, [overlay, hasDraft, closeAdd]);
 
   const handleKeyboardWillHide = useCallback(() => {
     if (ignoreNextKeyboardHide.current) {
       ignoreNextKeyboardHide.current = false;
       return;
     }
-    if (
-      !adding ||
-      confirmingDiscard ||
-      pickingAfter ||
-      pickingProject ||
-      pickingIcon ||
-      schedulingAdd
-    ) {
-      return;
-    }
+    if (!adding || overlay != null || saving.current) return;
     requestClose();
-  }, [
-    adding,
-    confirmingDiscard,
-    pickingAfter,
-    pickingProject,
-    pickingIcon,
-    schedulingAdd,
-    requestClose,
-  ]);
+  }, [adding, overlay, requestClose]);
 
   const handleBack = useCallback(() => {
-    if (confirmingDiscard) {
-      setConfirmingDiscard(false);
-      return true;
-    }
-    if (pickingAfter) {
-      setPickingAfter(false);
-      return true;
-    }
-    if (pickingProject) {
-      setPickingProject(false);
-      return true;
-    }
-    if (pickingIcon) {
+    if (overlay === 'icon') {
       closeIconPicker();
       return true;
     }
-    if (schedulingAdd) {
-      setSchedulingAdd(false);
+    if (overlay != null) {
+      setOverlay(null);
       return true;
     }
     if (adding && hasDraft) {
-      setConfirmingDiscard(true);
+      setOverlay('discard');
       return true;
     }
     if (adding) {
@@ -351,17 +327,7 @@ export function useQuickAdd({
       return true;
     }
     return false;
-  }, [
-    confirmingDiscard,
-    pickingAfter,
-    pickingProject,
-    pickingIcon,
-    closeIconPicker,
-    schedulingAdd,
-    adding,
-    hasDraft,
-    closeAdd,
-  ]);
+  }, [overlay, closeIconPicker, adding, hasDraft, closeAdd]);
 
   const taskActionsVisible = mode === 'task';
   const selectedProject = projects.find((project) => project.id === addProjectId) ?? null;
@@ -372,9 +338,9 @@ export function useQuickAdd({
         : 'Add waiting condition'
       : mode === 'project'
         ? 'Add project'
-        : fabLabel;
+        : 'Add';
 
-  const bar = (
+  const element = (
     <>
       <TaskEditorSheet
         open={adding}
@@ -390,7 +356,7 @@ export function useQuickAdd({
         inline
         onKeyboardWillHide={handleKeyboardWillHide}
         onOpen={showFab ? () => open() : undefined}
-        collapsedFabLabel={fabLabel}
+        collapsedFabLabel="Add"
         inputRef={inputRef}
         inputAccessibilityLabel={mode === 'waiting' ? 'Waiting on' : undefined}
         leading={
@@ -399,7 +365,7 @@ export function useQuickAdd({
               accessibilityRole="button"
               accessibilityLabel={`Change icon, ${projectIcon.choice.icon}`}
               hitSlop={8}
-              onPress={() => setPickingIcon(true)}
+              onPress={() => setOverlay('icon')}
               className="h-9 w-9 items-center justify-center rounded-md"
             >
               <Text className="text-[22px]">{projectIcon.choice.icon}</Text>
@@ -453,7 +419,7 @@ export function useQuickAdd({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Choose an After project"
-              onPress={() => setPickingAfter(true)}
+              onPress={() => setOverlay('after')}
               className="min-h-16 flex-row items-center gap-3 px-screen-x py-4"
             >
               <Text className="flex-1 text-foreground-secondary">
@@ -479,7 +445,7 @@ export function useQuickAdd({
             ? {
                 label: taskView.label,
                 active: effectiveDate != null,
-                onPress: () => setSchedulingAdd(true),
+                onPress: () => setOverlay('schedule'),
               }
             : undefined
         }
@@ -493,12 +459,12 @@ export function useQuickAdd({
                   selectedProject && projectChoice.selection.source === 'suggested'
                     ? 'Suggested'
                     : undefined,
-                onPress: () => setPickingProject(true),
+                onPress: () => setOverlay('project'),
               }
             : undefined
         }
         overlay={
-          confirmingDiscard ? (
+          overlay === 'discard' ? (
             <ConfirmDialog
               title="Discard changes?"
               message="The changes you've made will not be saved."
@@ -506,7 +472,7 @@ export function useQuickAdd({
               confirmLabel="Discard"
               destructive
               onCancel={() => {
-                setConfirmingDiscard(false);
+                setOverlay(null);
                 inputRef.current?.focus();
               }}
               onConfirm={closeAdd}
@@ -516,7 +482,7 @@ export function useQuickAdd({
       />
 
       <EmojiPickerSheet
-        open={pickingIcon}
+        open={overlay === 'icon'}
         onClose={closeIconPicker}
         onPick={pickIcon}
         header={
@@ -531,74 +497,53 @@ export function useQuickAdd({
       />
 
       <ScheduleSheet
-        open={schedulingAdd}
+        open={overlay === 'schedule'}
         showUpDate={taskView.pickerDate}
         onPick={(date) => {
           setTaskDraft((current) => current.pickCreationDate(date, today));
-          setSchedulingAdd(false);
+          setOverlay(null);
         }}
-        onClose={() => setSchedulingAdd(false)}
+        onClose={() => setOverlay(null)}
       />
 
       <ProjectPickerSheet
         title="Project"
-        open={pickingProject}
+        open={overlay === 'project'}
         projects={projects}
         openTasks={openTasks}
         conditions={conditions}
         selectedProjectId={addProjectId}
         onPick={(id) => {
           projectChoice.pick(id);
-          setPickingProject(false);
+          setOverlay(null);
         }}
-        onClose={() => setPickingProject(false)}
+        onClose={() => setOverlay(null)}
       />
 
       <ProjectPickerSheet
-        open={pickingAfter}
+        open={overlay === 'after'}
         title="After project"
         projects={projects}
         openTasks={openTasks}
         conditions={conditions}
-        afterSourceProjectId={contextProject?.id ?? null}
+        afterSourceProjectId={contextProjectId}
         selectedProjectId={null}
         showNoProject={false}
         emptyCopy="No available projects"
         onPick={(afterProjectId) => {
-          if (
-            afterProjectId &&
-            scope.kind === 'project' &&
-            contextProject
-          ) {
-            const tx = scope.waitsApi.addAfter(
-              contextProject.id,
-              afterProjectId,
-            );
-            tx.isPersisted.promise.catch((error) =>
-              onError(messageOf(error)),
-            );
-            closeAdd();
+          if (afterProjectId && contextProject && !saving.current) {
+            onError(null);
+            persistThen(replica.waits.addAfter(contextProject.id, afterProjectId), closeAdd);
             return;
           }
-          setPickingAfter(false);
+          setOverlay(null);
         }}
-        onClose={() => setPickingAfter(false)}
+        onClose={() => setOverlay(null)}
       />
     </>
   );
 
-  return {
-    bar,
-    open,
-    handleBack,
-    active:
-      adding ||
-      schedulingAdd ||
-      pickingProject ||
-      pickingAfter ||
-      pickingIcon ||
-      confirmingDiscard,
-  };
+  return { element, open, handleBack };
 }
 
 function IconStrip({

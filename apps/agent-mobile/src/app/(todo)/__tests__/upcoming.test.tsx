@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { defaultToastController, type Project, type Task } from '@zero/agent-core';
 
 import {
@@ -64,6 +64,28 @@ describe('UpcomingScreen', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
     defaultToastController.dismiss();
+  });
+
+  it('keeps the Waiting draft open when the add is rejected', async () => {
+    const screen = await renderScreen({
+      projects: [project('p')],
+      tasks: [task('t', 'order the gown', '2099-01-01', 'p')],
+    });
+    await waitFor(() => expect(screen.getByText('order the gown')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Complete "order the gown"'));
+    const toast = defaultToastController.getSnapshot()[0];
+    await act(async () => toast?.secondaryAction?.onPress());
+    const input = await waitFor(() => screen.getByLabelText('Waiting on'));
+    await fireEvent.changeText(input, 'the tailor calls');
+    await act(async () => {
+      await screen.data.replica!.projects.remove('p').isPersisted.promise;
+    });
+
+    await fireEvent(screen.getByLabelText('Waiting on'), 'submitEditing');
+
+    await waitFor(() => expect(screen.getByText('Project was deleted or is not on this device')).toBeTruthy());
+    expect(screen.getByDisplayValue('the tailor calls')).toBeTruthy();
+    expect([...screen.data.replica!.waits.collection.values()]).toEqual([]);
   });
 
   it('says nothing is scheduled when only undated work exists', async () => {

@@ -1,6 +1,5 @@
 import { taskRecurrenceLabel } from '@zero/agent-core';
 import { TaskRecurrence } from '@/components/task-recurrence';
-import { useAuth } from '@clerk/expo';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
@@ -13,7 +12,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, RefreshControl, SectionList, View } from 'react-native';
 
-import { useProjectAdd } from '@/components/project-add';
+import { useQuickAdd } from '@/components/quick-add-composer';
 import { ScreenHeader } from '@/components/screen-header';
 import { useTaskDetail } from '@/components/task-detail';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
@@ -78,7 +77,6 @@ export default function UpcomingScreen() {
 
 function Upcoming({ replica }: { replica: TaskdoReplica }) {
   const { tasks: api, projects: projectsApi, waits: waitsApi } = replica;
-  const { getToken } = useAuth();
   const { data: tasks } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
@@ -99,27 +97,19 @@ function Upcoming({ replica }: { replica: TaskdoReplica }) {
     [tasks, today],
   );
   const [writeError, setWriteError] = useState<string | null>(null);
-  const projectAdd = useProjectAdd({
-    project: null,
-    projects: projects ?? [],
-    conditions: conditions ?? [],
-    openTasks: tasks ?? [],
-    tasksApi: api,
-    projectsApi,
-    waitsApi,
-    getToken,
+  // Upcoming has no +; task feedback opens the drawer for that Task's Project.
+  const add = useQuickAdd({
+    replica,
+    surface: { kind: 'upcoming' },
     onError: setWriteError,
-    showFab: false,
   });
 
-  // The task detail editor delegates Project-scoped Waiting feedback to the
-  // shared four-mode Project drawer mounted by this screen.
   const detail = useTaskDetail({
     replica,
     projects: projects ?? [],
     openTasks: tasks ?? [],
     conditions: conditions ?? [],
-    onAddWaiting: (project) => projectAdd.openFor(project, 'waiting'),
+    onAddWaiting: (project) => add.open('waiting', project),
     onError: setWriteError,
   });
 
@@ -127,10 +117,10 @@ function Upcoming({ replica }: { replica: TaskdoReplica }) {
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (detail.handleBack()) return true;
-      return projectAdd.handleBack();
+      return add.handleBack();
     });
     return () => sub.remove();
-  }, [detail, projectAdd]);
+  }, [detail, add]);
 
   const accent = useColor('--color-accent');
   const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
@@ -184,7 +174,7 @@ function Upcoming({ replica }: { replica: TaskdoReplica }) {
       />
 
       {detail.sheets}
-      {projectAdd.bar}
+      {add.element}
     </>
   );
 }

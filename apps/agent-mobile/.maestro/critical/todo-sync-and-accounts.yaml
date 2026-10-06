@@ -6,7 +6,7 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "E2E sync: Saved on this device"
     timeout: 45000
-- tapOn: "^Task$"
+- tapOn: "^Add$"
 - inputText: "E2E guest task"
 - tapOn:
     id: "quick-add-submit"

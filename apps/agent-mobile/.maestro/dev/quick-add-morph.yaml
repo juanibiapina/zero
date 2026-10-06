@@ -4,7 +4,7 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "Home"
     timeout: 45000
-- tapOn: "Task"
+- tapOn: "^Add$"
 - assertVisible: "New item text"
 - pressKey: back
-- assertVisible: "Task"
+- assertVisible: "^Add$"
