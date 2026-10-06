@@ -148,9 +148,8 @@ export function useQuickAdd({
     setPickingProject(false);
     setPickingAfter(false);
     setPickingIcon(false);
-    setMode(modes[0] ?? 'task');
     onClosed?.();
-  }, [modes, onClosed, resetProject, resetProjectIcon]);
+  }, [onClosed, resetProject, resetProjectIcon]);
 
   const open = useCallback(
     (options?: { initialMode?: AddMode; projectId?: string }) => {

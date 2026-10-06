@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-06: Fix the keyboard staying open after you add a project from Home.
+
 - 2026-10-06: Fix medicine reminders failing to schedule after reinstalling the app, which could also stop the app from opening.
 
 - 2026-10-06: Add suggested icons while you name a new project. The best one is used unless you tap another, a tapped icon stays as you keep typing, and tapping the project's icon opens the full emoji picker.
