@@ -6,8 +6,11 @@ import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.AtomicFile
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileNotFoundException
 import java.time.*
 import java.util.UUID
 
@@ -15,12 +18,18 @@ internal object MedicineEngine {
   const val ALERTS = "medicine-alerts-v2"
   private const val PROOF = "medicine-proof-v2"
   private const val GROUP = "medicines"
-  private const val PREFS = "medicine-reminders-v1"
+  private const val STATE_FILE = "medicine-reminders.json"
+  private const val SILENT_PROOF_FILE = "medicine-proof-silent"
   private val lock = Any()
   internal var clock: () -> Clock = { Clock.systemDefaultZone() }
-  private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-  private fun load(c: Context): JSONObject = JSONObject(prefs(c).getString("state", "{}") ?: "{}")
-  private fun save(c: Context, state: JSONObject) { check(prefs(c).edit().putString("state", state.toString()).commit()) { "Reminder storage failed" } }
+  private fun stateFile(c: Context) = AtomicFile(File(c.noBackupFilesDir, STATE_FILE))
+  private fun silentProofFile(c: Context) = File(c.noBackupFilesDir, SILENT_PROOF_FILE)
+  private fun load(c: Context): JSONObject = try { JSONObject(String(stateFile(c).readFully(), Charsets.UTF_8)) } catch (_: FileNotFoundException) { JSONObject() }
+  private fun save(c: Context, state: JSONObject) {
+    val file = stateFile(c); val out = file.startWrite()
+    try { out.write(state.toString().toByteArray(Charsets.UTF_8)); file.finishWrite(out) }
+    catch (error: Exception) { file.failWrite(out); throw IllegalStateException("Reminder storage failed", error) }
+  }
   private fun array(state: JSONObject, key: String): JSONArray = state.optJSONArray(key) ?: JSONArray().also { state.put(key, it) }
   private fun obj(state: JSONObject, key: String): JSONObject = state.optJSONObject(key) ?: JSONObject().also { state.put(key, it) }
   private fun instant(ms: Long) = Instant.ofEpochMilli(ms).toString()
@@ -31,14 +40,14 @@ internal object MedicineEngine {
 
   fun silenceProof(c: Context) {
     check(c.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) { "Proof requires a debug build" }
-    check(prefs(c).edit().putBoolean("silentProof", true).commit())
+    silentProofFile(c).writeText("")
     channels(c)
     notificationManager(c).createNotificationChannel(NotificationChannel(PROOF, "Medicine test notifications", NotificationManager.IMPORTANCE_HIGH).apply {
       group = GROUP; setSound(null, null); enableVibration(false)
     })
   }
   private fun proofMuted(c: Context, workspace: String): Boolean = c.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 &&
-    workspace == "taskdo-workspace-medicine-proof.sqlite" && prefs(c).getBoolean("silentProof", false)
+    workspace == "taskdo-workspace-medicine-proof.sqlite" && silentProofFile(c).exists()
 
   fun capabilities(c: Context): Map<String, Any> {
     channels(c)
@@ -74,8 +83,8 @@ internal object MedicineEngine {
   }
   fun replace(c: Context, workspace: String, payload: String) = synchronized(lock) {
     channels(c)
-    val state = load(c)
-    check(state.optString("workspace", workspace) == workspace || array(state, "medicines").length() == 0) { "Another workspace owns reminders" }
+    val stored = load(c)
+    val state = if (stored.optString("workspace", workspace) == workspace) stored else release(c, stored)
     cancelIntents(c, state)
     state.put("workspace", workspace); state.put("quiesced", false)
     val plans = JSONObject(payload)
@@ -101,6 +110,11 @@ internal object MedicineEngine {
     save(c, state)
     schedule(c, state)
   }
+  private fun release(c: Context, state: JSONObject): JSONObject {
+    cancelIntents(c, state)
+    for (id in obj(state, "visible").keys()) notificationManager(c).cancel(id, 0)
+    return JSONObject()
+  }
   fun quiesce(c: Context, workspace: String) = synchronized(lock) {
     val state = load(c); if (state.optString("workspace") != workspace) return@synchronized
     state.put("quiesced", true); cancelIntents(c, state)
@@ -111,7 +125,7 @@ internal object MedicineEngine {
     val state = load(c); if (state.optString("workspace") != workspace) return@synchronized
     cancelIntents(c, state)
     for (id in obj(state, "visible").keys()) notificationManager(c).cancel(id, 0)
-    check(prefs(c).edit().remove("state").commit())
+    stateFile(c).delete()
   }
   fun taken(c: Context, workspace: String, occurrence: String): String = synchronized(lock) {
     val state = load(c); val dose = JSONObject(occurrence)

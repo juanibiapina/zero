@@ -69,14 +69,11 @@ proof_open() {
   return 1
 }
 proof_state() {
-  adb shell run-as "$PROOF_PACKAGE" cat shared_prefs/medicine-reminders-v1.xml > "$PROOF_DIR/state.xml"
-  python3 - "$PROOF_DIR/state.xml" > "$PROOF_DIR/state.json" <<'PY'
-import json, sys, xml.etree.ElementTree as ET
-root = ET.parse(sys.argv[1]).getroot()
-value = root.find("string[@name='state']")
-mute = root.find("boolean[@name='silentProof']")
-print(json.dumps({'state': json.loads(value.text) if value is not None else {}, 'muted': mute is not None and mute.attrib['value'] == 'true'}))
-PY
+  adb shell run-as "$PROOF_PACKAGE" cat no_backup/medicine-reminders.json > "$PROOF_DIR/state-file.json" 2>/dev/null || : > "$PROOF_DIR/state-file.json"
+  local muted=false
+  if adb shell run-as "$PROOF_PACKAGE" ls no_backup/medicine-proof-silent >/dev/null 2>&1; then muted=true; fi
+  jq -n --argjson muted "$muted" --rawfile raw "$PROOF_DIR/state-file.json" \
+    '{state: (if ($raw | length) > 0 then ($raw | fromjson) else {} end), muted: $muted}' > "$PROOF_DIR/state.json"
 }
 proof_kill_react() {
   adb shell input keyevent KEYCODE_HOME

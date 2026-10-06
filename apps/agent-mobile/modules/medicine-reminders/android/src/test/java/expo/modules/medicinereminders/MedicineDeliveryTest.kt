@@ -16,6 +16,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlarmManager
+import java.io.File
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -170,5 +171,37 @@ class MedicineDeliveryTest {
     ShadowAlarmManager.setCanScheduleExactAlarms(true)
     MedicineEngine.restore(context)
     assertNotNull(payload("alarm"))
+  }
+
+  @Test
+  fun aNewlyActiveWorkspaceTakesOverRemindersAnotherWorkspaceLeftBehind() {
+    MedicineEngine.replace(context, "previous", plans())
+    MedicineEngine.deliver(context, payload("reminder"))
+    assertNotNull(notification())
+    MedicineEngine.replace(context, workspace, plans(listOf("other")))
+    assertNull(notification())
+    assertNotNull(payload("alarm"))
+    assertEquals(listOf("other"), shadowOf(alarms).scheduledAlarms
+      .map { JSONObject(shadowOf(it.operation).savedIntent.getStringExtra("payload")!!) }
+      .filter { it.has("doses") }
+      .flatMap { batch -> (0 until batch.getJSONArray("doses").length()).map { batch.getJSONArray("doses").getJSONObject(it).getString("medicineId") } }
+      .distinct())
+    assertEquals(0, receipts().length())
+    assertEquals(0, JSONArray(MedicineEngine.receipts(context, "previous")).length())
+  }
+
+  @Test
+  fun aReminderFileRestoredFromAnotherInstallDoesNotBlockReminders() {
+    val restored = JSONObject(plans()).put("workspace", "restored")
+    context.getSharedPreferences("medicine-reminders-v1", Context.MODE_PRIVATE).edit().putString("state", restored.toString()).commit()
+    MedicineEngine.replace(context, workspace, plans(listOf("other")))
+    assertNotNull(payload("alarm"))
+  }
+
+  @Test
+  fun reminderStateStaysOutOfAndroidBackup() {
+    MedicineEngine.replace(context, workspace, plans())
+    assertTrue(File(context.noBackupFilesDir, "medicine-reminders.json").exists())
+    assertTrue(File(context.dataDir, "shared_prefs").listFiles().orEmpty().none { it.name.startsWith("medicine") })
   }
 }

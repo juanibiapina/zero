@@ -30,7 +30,7 @@ Dose deadlines use Android alarm-clock scheduling, which wakes the device throug
 
 For reliable delivery, open App battery usage through reminder settings and choose Unrestricted if available. Manufacturer power controls can impose additional restrictions. The app warns only when Android reports a background restriction, so the absence of a warning does not prove every manufacturer restriction is disabled.
 
-Reboot clears Android's scheduled alarms. Saved definitions restore future delivery when the phone starts, without reopening the app. Package replacement, clock/timezone changes, and restored exact-alarm access also restore scheduling.
+Reboot clears Android's scheduled alarms. Saved definitions restore future delivery when the phone starts, without reopening the app. Package replacement, clock/timezone changes, and restored exact-alarm access also restore scheduling. Android backup does not copy reminder delivery state, so a reinstalled app starts with reminders off and schedules them once turned on.
 
 ## Dates and changes
 
