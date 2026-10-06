@@ -107,6 +107,26 @@ back only where the native component does not fit.
   --output-dir /tmp/x` compiles through Metro + Babel + Uniwind and surfaces
   styling/bundle wiring errors that typecheck alone misses.
 
+## Native modules
+
+The app has two local Expo modules under `modules/`, both Android-only. Each
+`modules/<name>/index.ts` is that module's only TypeScript binding, and one app
+module owns each binding:
+
+| Module | Owner | Job |
+| --- | --- | --- |
+| `medicine-reminders` | `src/lib/medicine-reminders.ts` | Schedules medicine notifications and records Taken with no JavaScript running |
+| `home-app-icon` | `src/components/home-app-icon-sync.tsx` | Switches the launcher icon to match the Home task count |
+
+The medicine proof route, `src/app/e2e-medicine-proof.tsx`, also calls the
+reminder binding, because it tests the native code. Tests replace a binding with
+`jest.mock` of its path. The launcher icon names live in
+`modules/home-app-icon/icons.json`, which both the config plugin and the binding
+read. Edits under `modules/*/android/` or to `modules/home-app-icon/app.plugin.js`
+change the native fingerprint and need a new APK (see
+[Mobile releases](../../docs/mobile-releases.md)); edits to the TypeScript
+bindings ship as an update.
+
 ## Brand assets
 
 Two approved layered square sources own the app's white/graphite identity:

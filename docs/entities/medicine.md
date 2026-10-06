@@ -52,6 +52,8 @@ The local [medicine-reminders module](../../apps/agent-mobile/modules/medicine-r
 ./gradlew :medicine-reminders:testDebugUnitTest --max-workers=1
 ```
 
+These tests and agent-core's Vitest suite read the same contract fixtures in `packages/agent-core/src/medicines/native-contract`, so the Android engine and the shared model must agree on dose identity, dose times, and receipt fields. The `Mobile native tests` workflow runs the Android tests in CI whenever native or medicine code changes.
+
 Course, history, and pause behavior is covered by Jest. The normal suite runs one medicine phone flow: a reminder notification appears in the shade, and Taken from the notification is recorded as a dose:
 
 ```bash
