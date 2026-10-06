@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { createMedicineReminders, type MedicineReminders, type TaskdoReplica } from '@zero/agent-core';
 import { medicineReminderDevice, reminderSettings, type ReminderCapabilities, type ReminderSettings } from '../../modules/medicine-reminders';
-import { useTodoReplica } from './todo-replica-hook';
 
 const controllers = new WeakMap<TaskdoReplica, MedicineReminders>();
 const enabledKey = (workspace: string) => `zero.medicine-reminders.enabled.${workspace}`;
@@ -84,8 +83,7 @@ function reminderIssue(controller: MedicineReminders, settings: ReminderSettings
   return null;
 }
 
-export function useMedicineReminderNotice(): MedicineReminderNotice | null {
-  const replica = useTodoReplica();
+export function useMedicineReminderNotice(replica: TaskdoReplica | null): MedicineReminderNotice | null {
   const controller = replica ? controllers.get(replica) ?? null : null;
   const [capabilities, setCapabilities] = useState<ReminderCapabilities | null>(null);
   const [delivery, setDelivery] = useState(() => ({ controller, state: controller?.getState() }));

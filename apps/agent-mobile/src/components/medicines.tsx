@@ -86,7 +86,7 @@ function MedicineListContent({ snapshot, today }: {
   </View>;
 }
 function ReminderNotice() {
-  const notice = useMedicineReminderNotice();
+  const notice = useMedicineReminderNotice(useTodoReplica());
   if (!notice) return null;
   return <View accessibilityRole="alert" className="flex-row flex-wrap items-center justify-between gap-x-3 border-b border-divider py-2">
     <Text variant="caption" className="min-w-0 flex-1 text-danger">{notice.message}</Text>
