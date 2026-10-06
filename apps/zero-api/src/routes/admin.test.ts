@@ -28,10 +28,12 @@ vi.mock("../admin-ai-usage", async (importOriginal) => {
   };
 });
 
-const { getUserDO } = vi.hoisted(() => ({
+const { getUserDO, getAssistantDO } = vi.hoisted(() => ({
   getUserDO: vi.fn(),
+  getAssistantDO: vi.fn(),
 }));
 vi.mock("../UserDO/stub", () => ({ getUserDO }));
+vi.mock("../AssistantDO/stub", () => ({ getAssistantDO }));
 
 const fakeEnv = (adminUserId: string): Env =>
   ({
@@ -474,5 +476,43 @@ describe("POST /api/admin/wake-sleepers", () => {
     expect(res.status).toBe(202);
     await app.settle();
     expect(wakeSleeper).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("POST /api/admin/assistant-import", () => {
+  const path = "/api/admin/assistant-import";
+
+  it("returns 403 for non-admin users", async () => {
+    const app = buildApp(fakeEnv("admin_1"), "other_user");
+    const res = await app.request(path, { method: "POST" });
+    expect(res.status).toBe(403);
+  });
+
+  it("imports every user's legacy conversations, carrying on past a failure", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(listClerkUsers).mockResolvedValue([
+      { clerkUserId: "user_a", email: null, username: null, createdAt: "2025-01-01T00:00:00Z" },
+      { clerkUserId: "user_b", email: null, username: null, createdAt: "2025-02-01T00:00:00Z" },
+    ]);
+    const importLegacy = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("do down"))
+      .mockResolvedValueOnce(undefined);
+    getAssistantDO.mockReturnValue({ importLegacy });
+    const tasks: Promise<unknown>[] = [];
+    const app = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
+    app.use("/api/*", async (c, next) => {
+      c.set("userId", "admin_1");
+      await next();
+    });
+    app.route("/", createAdminRoutes());
+    const ctx = { waitUntil: (p: Promise<unknown>) => tasks.push(p), passThroughOnException: () => {} };
+
+    const res = await app.request(path, { method: "POST" }, fakeEnv("admin_1"), ctx as unknown as ExecutionContext);
+    expect(res.status).toBe(202);
+    await Promise.all(tasks);
+    expect(getAssistantDO).toHaveBeenCalledWith(expect.anything(), "user_a");
+    expect(getAssistantDO).toHaveBeenCalledWith(expect.anything(), "user_b");
+    expect(importLegacy).toHaveBeenCalledTimes(2);
   });
 });

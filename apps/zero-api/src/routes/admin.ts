@@ -12,6 +12,7 @@ import type { Env } from "../types";
 import { getGithubInstallationStatus } from "../github-token";
 import { listClerkUsers, getClerkUser } from "../admin-users";
 import { getUserDO } from "../UserDO/stub";
+import { getAssistantDO } from "../AssistantDO/stub";
 import { fmtErr, log, logError } from "../log";
 import {
   AiUsageRangeSchema,
@@ -73,6 +74,34 @@ const UserUsageSchema = z.object({
 });
 
 export const MAX_ADMIN_TASK_PROMPT_CHARS = 65_536;
+
+// Run one call per Clerk user with bounded concurrency, logging failures per
+// user and a final count, for the one-time backfills below.
+const forEveryUser = async (
+  env: Env,
+  label: string,
+  run: (clerkUserId: string) => Promise<unknown>,
+): Promise<void> => {
+  const users = await listClerkUsers(env);
+  const CONCURRENCY = 10;
+  let dispatched = 0;
+  for (let i = 0; i < users.length; i += CONCURRENCY) {
+    await Promise.all(
+      users.slice(i, i + CONCURRENCY).map(async (u) => {
+        try {
+          await run(u.clerkUserId);
+          dispatched++;
+        } catch (error) {
+          logError(`${label}_user_failed`, {
+            clerk_user_id: u.clerkUserId,
+            error: fmtErr(error),
+          });
+        }
+      }),
+    );
+  }
+  log(`${label}_finished`, { users: users.length, dispatched });
+};
 
 export const createAdminRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
@@ -373,31 +402,34 @@ export const createAdminRoutes = () => {
     },
   });
 
-  router.openapi(wakeSleepersRoute, async (c) => {
-    const env = c.env;
+  router.openapi(wakeSleepersRoute, (c) => {
     c.executionCtx.waitUntil(
-      (async () => {
-        const users = await listClerkUsers(env);
-        const CONCURRENCY = 10;
-        let woken = 0;
-        for (let i = 0; i < users.length; i += CONCURRENCY) {
-          const batch = users.slice(i, i + CONCURRENCY);
-          await Promise.all(
-            batch.map(async (u) => {
-              try {
-                await getUserDO(env, u.clerkUserId).wakeSleeper();
-                woken++;
-              } catch (error) {
-                logError("wake_backfill_user_failed", {
-                  clerk_user_id: u.clerkUserId,
-                  error: fmtErr(error),
-                });
-              }
-            }),
-          );
-        }
-        log("wake_backfill_finished", { users: users.length, dispatched: woken });
-      })(),
+      forEveryUser(c.env, "wake_backfill", (clerkUserId) =>
+        getUserDO(c.env, clerkUserId).wakeSleeper(),
+      ),
+    );
+    return c.body(null, 202);
+  });
+
+  // POST /api/admin/assistant-import — move every user's legacy conversations
+  // into AssistantDO now, instead of on their next message. Idempotent: an
+  // AssistantDO that already imported skips the import. Must have run for every
+  // user before the legacy tables are dropped (see docs/harness.md).
+  const assistantImportRoute = createRoute({
+    method: "post",
+    path: "/api/admin/assistant-import",
+    tags: ["Admin"],
+    summary: "Import every user's legacy conversations into AssistantDO",
+    responses: {
+      202: { description: "Import started" },
+    },
+  });
+
+  router.openapi(assistantImportRoute, (c) => {
+    c.executionCtx.waitUntil(
+      forEveryUser(c.env, "assistant_import", (clerkUserId) =>
+        getAssistantDO(c.env, clerkUserId).importLegacy(),
+      ),
     );
     return c.body(null, 202);
   });

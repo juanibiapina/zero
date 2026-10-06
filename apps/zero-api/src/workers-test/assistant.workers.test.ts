@@ -92,3 +92,60 @@ describe("AssistantDO on PiHarness", () => {
     expect(await alarm()).toBeNull();
   });
 });
+
+describe("legacy conversations", () => {
+  it("continues a conversation stored by the old turn path", async () => {
+    const name = "user_legacy";
+    const seen: string[] = [];
+    script([
+      (context) => {
+        seen.push(JSON.stringify(context.messages));
+        return fauxAssistantMessage("Answering the waiting message.");
+      },
+      (context) => {
+        seen.push(JSON.stringify(context.messages));
+        return fauxAssistantMessage("Still remember the tea.");
+      },
+    ]);
+    await runInDurableObject(userDO(name), async (instance, state) => {
+      await state.storage.put("clerkUserId", name);
+      const store = (instance as unknown as { store: import("../store/types").Store }).store;
+      const conversationId = store.getOrCreateConversation(3, 0);
+      store.storeMessage(conversationId, "user", "what do I like to drink?");
+      store.storeMessage(
+        conversationId,
+        "assistant",
+        [{ type: "tool_use", id: "call_1", name: "get_topic", input: { name: "User" } }],
+        { stopReason: "tool_use" },
+      );
+      store.storeMessage(
+        conversationId,
+        "user",
+        [{ type: "tool_result", tool_use_id: "call_1", content: '{"version":1,"body":"likes green tea"}' }],
+        { kind: "tool_result" },
+      );
+      store.storeMessage(conversationId, "assistant", "You like green tea.", { stopReason: "end_turn" });
+      store.storeMessage(conversationId, "user", "and for breakfast?");
+    });
+
+    await userDO(name).enqueueTurn({
+      updateId: "900",
+      clerkUserId: name,
+      chatId: 3,
+      topicId: 0,
+      text: "do you remember?",
+    });
+
+    const stub = user(name);
+    let sent: string[] = [];
+    for (let i = 0; i < 100 && sent.length < 2; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      sent = await stub.sentMessages();
+    }
+    expect(sent).toEqual(["3:0:Answering the waiting message.", "3:0:Still remember the tea."]);
+    expect(seen[0]).toContain("You like green tea.");
+    expect(seen[0]).toContain('"toolName":"get_topic"');
+    expect(seen[0]).toContain("and for breakfast?");
+    expect(seen[1]).toContain("do you remember?");
+  });
+});

@@ -90,3 +90,21 @@ describe("guarded write tools", () => {
     expect(calls()).toBe(2);
   });
 });
+
+describe("tool schemas", () => {
+  it("sends plain JSON Schema without zod's own fields", () => {
+    const tools: AgentToolSet = {
+      get_topic: defineTool({
+        description: "get",
+        inputSchema: z.object({ name: z.string() }),
+        execute: async () => null,
+      }),
+    };
+    const [registration] = toDurableTools(tools, async () => tools);
+    expect(JSON.parse(JSON.stringify(registration.parameters))).toEqual({
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    });
+  });
+});

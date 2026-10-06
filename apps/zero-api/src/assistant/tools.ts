@@ -129,6 +129,13 @@ const runGuarded = async (
   return result;
 };
 
+const wireSchema = (schema: AgentTool["inputSchema"]) => {
+  const json: Record<string, unknown> = { ...z.toJSONSchema(schema, { io: "input" }) };
+  delete json["~standard"];
+  delete json.$schema;
+  return json;
+};
+
 export type ToolsetFor = (conversationId: ConversationId) => Promise<AgentToolSet>;
 
 export const toDurableTools = (
@@ -140,9 +147,7 @@ export const toDurableTools = (
     const registration: ToolRegistration = {
       name,
       description: proto.description,
-      parameters: Type.Unsafe(
-        z.toJSONSchema(proto.inputSchema, { io: "input" }),
-      ),
+      parameters: Type.Unsafe(wireSchema(proto.inputSchema)),
       replay: "safe",
       execute: async (args, api) => {
         const tools = await toolsetFor(api.conversationId);

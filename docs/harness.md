@@ -224,8 +224,11 @@ answer, and every message still queued in `pending_messages`, is submitted again
 skipped afterwards. UserDO's own alarm now only triggers the import, so a turn
 that was in flight at the deploy is answered.
 
+`POST /api/admin/assistant-import` runs the import for every Clerk user now
+instead of on their next message (`assistant_import_finished` logs the count).
+
 **Follow-up (Phase 5).** After a week without a `turn_failed` increase, and after
-an admin backfill has imported every user, delete the import, `agentExportLegacy`,
+that backfill has imported every user, delete the import, `agentExportLegacy`,
 the legacy store methods and the `messages`, `pending_messages`, `deliveries`,
 `external_calls` and `learning_jobs` tables. Rolling back to a version from
 before AssistantDO is not supported.
