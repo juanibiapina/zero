@@ -297,10 +297,7 @@ function SuggestedIconRow({
   );
 
   return (
-    <div className="flex min-h-9 items-center gap-1 border-b px-2 py-1.5">
-      <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground">
-        Suggested
-      </span>
+    <div role="group" aria-label="Suggested icons" className="flex min-h-9 items-center gap-1 border-b px-2 py-1.5">
       {loading ? (
         <span className="text-sm text-muted-foreground">
           Loading suggested icons…
