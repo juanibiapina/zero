@@ -1,15 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import { createMedicineReminders, type MedicineReminders, type TaskdoReplica } from '@zero/agent-core';
-import NativeReminders from '../../modules/medicine-reminders';
+import { medicineReminderDevice, reminderSettings } from '../../modules/medicine-reminders';
 
 const controllers = new WeakMap<TaskdoReplica, MedicineReminders>();
 export const getMedicineReminders = (replica: TaskdoReplica | null) => replica ? controllers.get(replica) ?? null : null;
 const enabledKey = (workspace: string) => `zero.medicine-reminders.enabled.${workspace}`;
 
 export async function attachMedicineReminders(replica: TaskdoReplica, workspace: string): Promise<TaskdoReplica> {
-  if (!NativeReminders) return replica;
-  const reminders = createMedicineReminders(replica, NativeReminders, workspace);
+  if (!medicineReminderDevice) return replica;
+  const reminders = createMedicineReminders(replica, medicineReminderDevice, workspace);
   const wasEnabled = await AsyncStorage.getItem(enabledKey(workspace)) === '1';
   // Import before exposing the workspace or allowing a native plan to replace
   // the previous process's pending notification confirmations.
@@ -66,7 +66,7 @@ export async function enableMedicineReminders(replica: TaskdoReplica, workspace:
   await controller.enable();
 }
 export async function clearMedicineReminders(workspace: string) {
-  await NativeReminders?.clear(workspace);
+  await medicineReminderDevice?.clear(workspace);
   await AsyncStorage.removeItem(enabledKey(workspace));
 }
-export { NativeReminders };
+export { reminderSettings };

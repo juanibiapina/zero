@@ -1,35 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { createInMemoryTaskdoReplica } from "../taskdo/in-memory";
-import { createMedicineReminders, type MedicineReminderPort } from "./reminders";
-import { medicineOccurrences, type MedicineReceipt } from "./model";
+import { createInMemoryMedicineReminderDevice } from "./in-memory-device";
+import { createMedicineReminders } from "./reminders";
+import { medicineOccurrences } from "./model";
 
-class Device implements MedicineReminderPort {
-  queue: MedicineReceipt[] = [];
-  confirmed = new Set<string>();
-  quiesced = false;
-  failReplacement = false;
-  private sequence = 0;
-  async receipts() { return JSON.stringify(this.queue); }
-  async replace(_workspace: string, payload: string) {
-    if (this.failReplacement) throw new Error("Native persistence failed");
-    const plans = JSON.parse(payload) as { confirmed: string[]; processedActions?: string[] };
-    this.confirmed = new Set(plans.confirmed);
-    for (const receipt of this.queue) if (receipt.kind === "taken" && !plans.processedActions?.includes(receipt.actionId)) this.confirmed.add(receipt.id);
-    this.quiesced = false;
-  }
-  async acknowledge(_workspace: string, ids: string) { const keys = JSON.parse(ids) as string[]; this.queue = this.queue.filter((receipt) => !keys.includes(receipt.actionId)); }
-  async take(_workspace: string, raw: string) {
-    if (this.quiesced) throw new Error("Closed");
-    const receipt = { ...JSON.parse(raw), kind: "taken", actionId: `receipt-${this.sequence++}`, takenAt: "2026-10-02T20:35:00Z" } as MedicineReceipt;
-    this.queue.push(receipt); this.confirmed.add(receipt.id); return JSON.stringify(receipt);
-  }
-  async quiesce() { this.quiesced = true; }
-}
 async function setup() {
   const replica = createInMemoryTaskdoReplica();
   const medicine = await replica.medicines.add({ name: "Pill", instructions: null, startsOn: "2026-10-02", endsOn: null, paused: false, doses: [{ id: "evening", remindAt: "20:00", alarmAt: "22:00" }] });
   const dose = medicineOccurrences(medicine, "2026-10-02")[0];
-  const device = new Device(); const controller = createMedicineReminders(replica, device, "workspace");
+  const device = createInMemoryMedicineReminderDevice({ takenAt: () => "2026-10-02T20:35:00Z" }); const controller = createMedicineReminders(replica, device, "workspace");
   await controller.enable(); return { replica, device, controller, dose };
 }
 describe("medicine reminder durability", () => {
@@ -42,7 +21,7 @@ describe("medicine reminder durability", () => {
   });
   it("keeps a winning Undo unsuppressed when it arrives before native receipt reconciliation", async () => {
     const { replica, device, controller, dose } = await setup();
-    await device.take("workspace", JSON.stringify(dose));
+    await device.take("workspace", dose);
     const save = replica.saveLocal;
     let undo = true;
     replica.saveLocal = async () => {
@@ -57,7 +36,7 @@ describe("medicine reminder durability", () => {
   });
   it("does not suppress an undone dose when an acknowledged receipt is replayed", async () => {
     const { replica, device, controller, dose } = await setup();
-    const receipt = JSON.parse(await device.take("workspace", JSON.stringify(dose))) as MedicineReceipt;
+    const receipt = await device.take("workspace", dose);
     await controller.refresh();
     await controller.undo(dose.id);
     device.queue.push(receipt); device.confirmed.add(dose.id);
@@ -69,21 +48,21 @@ describe("medicine reminder durability", () => {
   });
   it("keeps notification receipts on close so account locking and explicit discard need no import", async () => {
     const { replica, device, controller, dose } = await setup();
-    await device.take("workspace", JSON.stringify(dose));
+    await device.take("workspace", dose);
     await controller.close();
     expect(device.quiesced).toBe(true);
     expect(device.queue).toHaveLength(1);
     expect(replica.snapshot().doses).toEqual([]);
-    await expect(device.take("workspace", JSON.stringify(dose))).rejects.toThrow("Closed");
+    await expect(device.take("workspace", dose)).rejects.toThrow("Closed");
     await replica.close();
   });
   it("retains a fresh receipt received after capture while a native plan is being replaced", async () => {
     const { replica, device, controller, dose } = await setup();
     const original = device.replace.bind(device);
     let inject = true;
-    device.replace = async (workspace, payload) => {
-      if (inject) { inject = false; await device.take(workspace, JSON.stringify(dose)); }
-      await original(workspace, payload);
+    device.replace = async (workspace, plan) => {
+      if (inject) { inject = false; await device.take(workspace, dose); }
+      await original(workspace, plan);
     };
     await controller.refresh();
     expect(replica.snapshot().doses).toEqual([]);
@@ -101,11 +80,9 @@ describe("medicine reminder durability", () => {
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const original = device.replace.bind(device);
     let delay = true;
-    let installed = "";
-    device.replace = async (workspace, payload) => {
+    device.replace = async (workspace, plan) => {
       if (delay) { delay = false; await gate; }
-      await original(workspace, payload);
-      installed = payload;
+      await original(workspace, plan);
     };
     const refresh = controller.refresh();
     await vi.waitFor(() => expect(delay).toBe(false));
@@ -114,7 +91,7 @@ describe("medicine reminder durability", () => {
     await replica.medicines.edit(medicine.id, { ...medicine, name: "Edited during install" });
     release();
     await refresh;
-    expect((JSON.parse(installed) as { medicines: { name: string }[] }).medicines[0].name).toBe("Edited during install");
+    expect(device.plan?.medicines[0]?.name).toBe("Edited during install");
     expect(controller.getState().pending).toBe(false);
     await controller.close(); await replica.close();
   });
@@ -129,15 +106,15 @@ describe("medicine reminder durability", () => {
     await controller.close(); await replica.close();
   });
   it("imports notification confirmations before checkpoint and keeps receiver acceptance closed", async () => {
-    const { replica, device, controller, dose } = await setup(); await device.take("workspace", JSON.stringify(dose));
+    const { replica, device, controller, dose } = await setup(); await device.take("workspace", dose);
     await controller.checkpoint();
     expect(replica.snapshot().doses[0]?.takenAt).toBe("2026-10-02T20:35:00Z");
     expect(device.quiesced).toBe(true); expect(device.queue).toHaveLength(0);
-    await expect(device.take("workspace", JSON.stringify(dose))).rejects.toThrow("Closed");
+    await expect(device.take("workspace", dose)).rejects.toThrow("Closed");
     await controller.close(); await replica.close();
   });
   it("imports older notification receipts before Undo instead of recreating their confirmation", async () => {
-    const { replica, device, controller, dose } = await setup(); await device.take("workspace", JSON.stringify(dose));
+    const { replica, device, controller, dose } = await setup(); await device.take("workspace", dose);
     await controller.undo(dose.id);
     expect(replica.snapshot().doses[0]?.takenAt).toBeNull();
     expect(device.confirmed.has(dose.id)).toBe(false); expect(device.queue).toHaveLength(0);

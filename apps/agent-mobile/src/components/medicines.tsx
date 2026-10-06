@@ -13,7 +13,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Text } from '@/components/ui/text';
 import { Fab } from '@/components/ui/fab';
 import { useLocalDay } from '@/lib/local-day';
-import { enableMedicineReminders, getMedicineReminders, NativeReminders } from '@/lib/medicine-reminders';
+import { enableMedicineReminders, getMedicineReminders, reminderSettings } from '@/lib/medicine-reminders';
 import { useColor } from '@/lib/theme';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
 import type { ReminderCapabilities } from '../../modules/medicine-reminders';
@@ -87,7 +87,7 @@ function MedicineListContent({ snapshot, today }: {
   </View>;
 }
 type ReminderIssue = { kind?: 'notifications'; message: string; action: string; fix: () => unknown | Promise<unknown> };
-function reminderIssue(controller: NonNullable<ReturnType<typeof getMedicineReminders>>, replica: TaskdoReplica, native: NonNullable<typeof NativeReminders>, enabled: boolean, failed: boolean, askedForNotifications: boolean, capabilities: ReminderCapabilities): ReminderIssue | null {
+function reminderIssue(controller: NonNullable<ReturnType<typeof getMedicineReminders>>, replica: TaskdoReplica, native: NonNullable<typeof reminderSettings>, enabled: boolean, failed: boolean, askedForNotifications: boolean, capabilities: ReminderCapabilities): ReminderIssue | null {
   if (failed) return { message: 'Reminders couldn’t be scheduled.', action: 'Try again', fix: () => controller.refresh() };
   if (!enabled) return { message: 'Reminders are off on this phone.', action: 'Turn on', fix: () => enableMedicineReminders(replica, controller.workspace) };
   if (!capabilities.notifications) return { kind: 'notifications', message: 'Notifications are off, so reminders won’t appear.', action: 'Allow notifications', fix: () => askedForNotifications ? native.openNotificationSettings() : native.requestNotifications() };
@@ -103,19 +103,19 @@ function ReminderNotice() {
   const state = delivery.controller === controller ? delivery.state : controller?.getState();
   const [failed, setFailed] = useState(false);
   const [askedForNotifications, setAskedForNotifications] = useState(false);
-  const refresh = useCallback(() => { void NativeReminders?.capabilities().then(setCapabilities).catch(() => setFailed(true)); }, []);
+  const refresh = useCallback(() => { void reminderSettings?.capabilities().then(setCapabilities).catch(() => setFailed(true)); }, []);
   useEffect(() => {
     refresh();
     const subscription = AppState.addEventListener('change', (value) => { if (value === 'active') refresh(); });
     const unsubscribe = controller?.subscribe(() => setDelivery({ controller, state: controller.getState() }));
     return () => { subscription.remove(); unsubscribe?.(); };
   }, [controller, refresh]);
-  if (!NativeReminders || !controller || !replica || !capabilities) return null;
-  const issue = reminderIssue(controller, replica, NativeReminders, !!state?.enabled, failed || !!state?.error, askedForNotifications, capabilities);
+  if (!reminderSettings || !controller || !replica || !capabilities) return null;
+  const issue = reminderIssue(controller, replica, reminderSettings, !!state?.enabled, failed || !!state?.error, askedForNotifications, capabilities);
   if (!issue) return null;
   const fix = async () => {
     setFailed(false);
-    try { await issue.fix(); if (issue.kind === 'notifications') setAskedForNotifications(true); setCapabilities(await NativeReminders!.capabilities()); }
+    try { await issue.fix(); if (issue.kind === 'notifications') setAskedForNotifications(true); setCapabilities(await reminderSettings!.capabilities()); }
     catch { setFailed(true); }
   };
   return <View accessibilityRole="alert" className="flex-row flex-wrap items-center justify-between gap-x-3 border-b border-divider py-2">

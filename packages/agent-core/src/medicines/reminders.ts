@@ -1,11 +1,17 @@
-import type { Dose, MedicineReceipt } from "./model";
+import type { Dose, Medicine, MedicineReceipt } from "./model";
 import type { TaskdoReplica } from "../taskdo/replica";
 
+export type ReminderPlan = {
+  medicines: Medicine[];
+  confirmed: string[];
+  processedActions?: string[];
+};
+
 export type MedicineReminderPort = {
-  replace(workspace: string, payload: string): Promise<void>;
-  receipts(workspace: string): Promise<string>;
-  acknowledge(workspace: string, ids: string): Promise<void>;
-  take(workspace: string, dose: string): Promise<string>;
+  replace(workspace: string, plan: ReminderPlan): Promise<void>;
+  receipts(workspace: string): Promise<MedicineReceipt[]>;
+  acknowledge(workspace: string, actionIds: string[]): Promise<void>;
+  take(workspace: string, dose: Dose): Promise<MedicineReceipt>;
   quiesce(workspace: string): Promise<void>;
 };
 
@@ -17,12 +23,12 @@ export function createMedicineReminders(replica: TaskdoReplica, native: Medicine
   let reconciling = false;
   let suspended = false;
   let pending = 0;
-  let reconciledPlans: string | null = null;
+  let reconciledPlan: string | null = null;
   const listeners = new Set<() => void>();
   const publish = () => { for (const listener of listeners) listener(); };
-  const plans = () => {
+  const plan = (): ReminderPlan => {
     const snapshot = replica.snapshot();
-    return JSON.stringify({ medicines: snapshot.medicines, confirmed: snapshot.doses.filter((dose) => dose.takenAt).map((dose) => dose.id) });
+    return { medicines: snapshot.medicines, confirmed: snapshot.doses.filter((dose) => dose.takenAt).map((dose) => dose.id) };
   };
   const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
     pending += 1;
@@ -46,23 +52,25 @@ export function createMedicineReminders(replica: TaskdoReplica, native: Medicine
     try {
       let installed: string;
       do {
-        const receipts = JSON.parse(await native.receipts(workspace)) as MedicineReceipt[];
+        const receipts = await native.receipts(workspace);
+        const actionIds = receipts.map((receipt) => receipt.actionId);
         if (receipts.length) await replica.medicines.applyReceipts(receipts, workspace);
         await replica.saveLocal();
-        installed = plans();
+        const next = plan();
+        installed = JSON.stringify(next);
         if (!quiesced && enabled && !suspended) {
-          await native.replace(workspace, JSON.stringify({ ...JSON.parse(installed), processedActions: receipts.map((receipt) => receipt.actionId) }));
+          await native.replace(workspace, { ...next, processedActions: actionIds });
         }
-        if (receipts.length) await native.acknowledge(workspace, JSON.stringify(receipts.map((receipt) => receipt.actionId)));
-        reconciledPlans = installed;
+        if (receipts.length) await native.acknowledge(workspace, actionIds);
+        reconciledPlan = installed;
         // A sync can publish while the native replacement is awaiting its ack.
         // Persist and install that newer state before reporting delivery success.
-      } while (!quiesced && enabled && !suspended && installed !== plans());
+      } while (!quiesced && enabled && !suspended && installed !== JSON.stringify(plan()));
     } finally { reconciling = false; }
   };
   const refresh = () => enqueue(() => flush());
   const unsubscribe = replica.subscribe(() => {
-    if (enabled && !suspended && !reconciling && !closed && plans() !== reconciledPlans) void refresh().catch(() => {});
+    if (enabled && !suspended && !reconciling && !closed && JSON.stringify(plan()) !== reconciledPlan) void refresh().catch(() => {});
   });
   return {
     workspace,
@@ -72,7 +80,7 @@ export function createMedicineReminders(replica: TaskdoReplica, native: Medicine
     refresh,
     async take(dose: Dose) {
       await enqueue(async () => {
-        if (enabled) { await native.take(workspace, JSON.stringify(dose)); await flush(); }
+        if (enabled) { await native.take(workspace, dose); await flush(); }
         else await replica.medicines.take(dose);
       });
     },
