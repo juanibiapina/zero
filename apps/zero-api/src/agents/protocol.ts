@@ -1,13 +1,7 @@
-// The agent protocol: the message, tool, and model shapes every agent speaks.
-// Deliberately Zero-owned and dependency-free — the runner (run.ts) and the
-// tools depend on this module, never on an SDK. @earendil-works/pi-ai is
-// confined to the adapter in model-pi.ts, which translates these shapes to and
-// from the wire.
-//
-// The shapes mirror the Anthropic Messages wire format closely (snake_case block
-// fields), which keeps the durable message format stable and provider-neutral.
-// Prompt caching is the model layer's job (pi-ai keys it on a per-agent
-// sessionId), so these blocks carry no cache-control markers.
+// Zero's tool shape and the content blocks of the legacy UserDO transcript.
+// Tools are defined here with zod; assistant/tools.ts turns them into Pi Durable
+// tool registrations. The block types mirror the Anthropic Messages wire format
+// the legacy `messages` table stored, which assistant/legacy-import.ts reads.
 
 import { z } from "zod";
 
@@ -82,31 +76,6 @@ export type ContentBlock =
   | ThinkingBlock
   | RedactedThinkingBlock;
 
-export interface AgentMessage {
-  role: "user" | "assistant";
-  content: string | ContentBlock[];
-}
-
-// A tool as it goes on the wire. Key order is fixed at construction: the
-// serialized bytes are part of the cached prefix, so an unstable order shows up
-// as a `tools_changed` cache miss.
-export interface AgentToolDefinition {
-  name: string;
-  description: string;
-  input_schema: { type: "object" } & Record<string, unknown>;
-}
-
-// Anthropic's stop reasons, verbatim. `null` is a real wire value.
-export type StopReason =
-  | "end_turn"
-  | "max_tokens"
-  | "stop_sequence"
-  | "tool_use"
-  | "pause_turn"
-  | "compaction"
-  | "refusal"
-  | "model_context_window_exceeded";
-
 // Token counts for one model call. `inputTokens` is the uncached, full-price
 // input; cache read/write are billed separately. See docs/caching.md.
 export interface TokenUsage {
@@ -128,38 +97,6 @@ export interface AgentRunUsage extends TokenUsage {
   // Summed `costUsd` across every call in the run.
   costUsd: number;
   modelCalls: number;
-}
-
-export interface AgentModelRequest {
-  // Top-level system blocks (text only), in order: the static head then the
-  // optional per-user tail.
-  system: TextBlock[];
-  messages: AgentMessage[];
-  tools: AgentToolDefinition[];
-  // Zero-based index of this call within the run's tool loop. Lets the adapter's
-  // cache_stats line carry the step, which is what makes the write-then-read
-  // pattern readable per agent per call.
-  step?: number;
-}
-
-export interface AgentModelResponse {
-  // The provider's response id, persisted with the assistant row so a turn can
-  // be traced back to a provider log line.
-  id: string;
-  content: ContentBlock[];
-  stopReason: StopReason | null;
-  usage: TokenUsage;
-}
-
-// The seam every agent runs against. One method: send a request, get a
-// response. Retries, timeouts, auth, and gateway attribution live behind it.
-export interface AgentModel {
-  // Identifies the model for logs and tests; not used for routing.
-  modelId: string;
-  generate(request: AgentModelRequest): Promise<AgentModelResponse>;
-  // Optional telemetry hook. The runner invokes it once per agent execution,
-  // including a partially successful execution that later throws.
-  reportRunUsage?(usage: AgentRunUsage): void;
 }
 
 // A tool the runner can dispatch. `execute` receives input already validated
@@ -193,16 +130,3 @@ export const defineTool = <Schema extends z.ZodType>(def: {
   toContent?: AgentTool["toContent"];
   externalWrite?: boolean;
 }): AgentTool => def as unknown as AgentTool;
-
-// Convert a tool set into wire definitions, preserving insertion order. Key
-// order inside each definition is fixed here for cache stability.
-export const toToolDefinitions = (
-  tools: AgentToolSet,
-): AgentToolDefinition[] =>
-  Object.entries(tools).map(([name, tool]) => ({
-    name,
-    description: tool.description,
-    input_schema: z.toJSONSchema(
-      tool.inputSchema,
-    ) as AgentToolDefinition["input_schema"],
-  }));

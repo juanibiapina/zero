@@ -13,8 +13,8 @@ thread is bound to the conversation it was watched from, and speaks there.
 poll itself (`checkTrackedMail`). `ScheduleDO` owns *when*: one deadline per
 user, reason `mailwatch`, held an hour out. Nothing new: it is the same
 mechanism as reminders (see `docs/schedules.md`), and no LLM work runs on
-`ScheduleDO`'s alarm. A reply queues an ordinary pending message and the turn
-happens on UserDO's own alarm, behind whatever the user already queued.
+`ScheduleDO`'s alarm. A reply is handed to AssistantDO as an ordinary message
+(`mail:<threadId>:<historyId>`), queued behind whatever the user already sent.
 
 `do/mail-watch.ts` holds the policy, free of the Durable Object, so the whole
 pass is testable without one.

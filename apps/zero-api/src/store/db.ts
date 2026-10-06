@@ -36,6 +36,7 @@ import type {
   ConversationContext,
   ExternalCallClaim,
   LearningMessage,
+  LegacyExport,
   MailThreadRecord,
   MailThreadStatus,
   Message,
@@ -473,6 +474,44 @@ export class DbStore implements Store {
     // reply has nowhere to be announced once the chat is gone.
     this.db.delete(mailThreads, { where: eq("conversationId", conv.id) });
     this.db.delete(conversations, { where: eq("id", conv.id) });
+  }
+
+  getConversationThread(conversationId: string): Thread | null {
+    const conv = this.db.get(conversations, { where: eq("id", conversationId) });
+    return conv ? { id: conv.id, chatId: conv.chatId, topicId: conv.topicId } : null;
+  }
+
+  exportLegacyConversations(): LegacyExport[] {
+    return this.db.all(conversations).map((conv) => {
+      const boundary = conv.compactedThroughMessageId ?? null;
+      const rows = this.db.all(messages, {
+        where: eq("conversationId", conv.id),
+        orderBy: asc("id"),
+      });
+      return {
+        id: conv.id,
+        chatId: conv.chatId,
+        topicId: conv.topicId,
+        summary: conv.summary ?? null,
+        boundary,
+        messages: rows
+          .filter(
+            (m) => boundary === null || m.id > boundary || m.consolidatedAt === null,
+          )
+          .map((m) => ({
+            id: m.id,
+            kind: m.kind as MessageKind,
+            content: decodeContent(m.content),
+            stopReason: m.stopReason ?? null,
+            consolidated: m.consolidatedAt !== null,
+            createdAt: m.createdAt,
+          })),
+        pending: this.pendingRows(conv.id).map((p) => ({
+          id: p.id,
+          content: p.content,
+        })),
+      };
+    });
   }
 
   getMostRecentConversation(): Thread | null {
@@ -1016,6 +1055,13 @@ export class DbStore implements Store {
   }
 
   // --- webhook idempotency ---
+
+  isProcessed(updateId: string): boolean {
+    return (
+      this.db.get(processedUpdates, { where: eq("updateId", updateId) }) !==
+      undefined
+    );
+  }
 
   markProcessed(updateId: string): boolean {
     const existing = this.db.get(processedUpdates, {

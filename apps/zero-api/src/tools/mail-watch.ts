@@ -44,7 +44,7 @@ export const buildMailWatchTools = (deps: MailWatchToolDeps): AgentToolSet => {
       inputSchema: z.object({ threadId: z.string() }),
       execute: async ({ threadId }) => {
         if (!mailWatch) return { error: NO_BOOK };
-        const result = mailWatch.watch(threadId);
+        const result = await mailWatch.watch(threadId);
         if ("error" in result) return { error: result.error };
         onWatchChanged?.();
         return render(result.thread);
@@ -60,7 +60,7 @@ export const buildMailWatchTools = (deps: MailWatchToolDeps): AgentToolSet => {
       inputSchema: z.object({}),
       execute: async () => {
         if (!mailWatch) return { error: NO_BOOK };
-        return { threads: mailWatch.list().map(render) };
+        return { threads: (await mailWatch.list()).map(render) };
       },
     }),
 
@@ -71,7 +71,7 @@ export const buildMailWatchTools = (deps: MailWatchToolDeps): AgentToolSet => {
       inputSchema: z.object({ threadId: z.string() }),
       execute: async ({ threadId }) => {
         if (!mailWatch) return { error: NO_BOOK };
-        if (!mailWatch.stop(threadId)) {
+        if (!(await mailWatch.stop(threadId))) {
           return { error: `That thread isn't being watched: ${threadId}.` };
         }
         onWatchChanged?.();

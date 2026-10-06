@@ -67,7 +67,7 @@ export const buildScheduleTools = (deps: ScheduleToolDeps): AgentToolSet => {
       }),
       execute: async (input) => {
         if (!schedules) return { error: NO_BOOK };
-        const result = schedules.create({
+        const result = await schedules.create({
           prompt: input.prompt,
           pattern: input.pattern,
           timezone: input.timezone ?? timezone,
@@ -91,7 +91,7 @@ export const buildScheduleTools = (deps: ScheduleToolDeps): AgentToolSet => {
       inputSchema: z.object({}),
       execute: async () => {
         if (!schedules) return { error: NO_BOOK };
-        return { schedules: schedules.list().map(render) };
+        return { schedules: (await schedules.list()).map(render) };
       },
     }),
 
@@ -102,7 +102,7 @@ export const buildScheduleTools = (deps: ScheduleToolDeps): AgentToolSet => {
       inputSchema: z.object({ id: z.string() }),
       execute: async ({ id }) => {
         if (!schedules) return { error: NO_BOOK };
-        if (!schedules.cancel(id)) {
+        if (!(await schedules.cancel(id))) {
           return { error: `No active schedule with id ${id}.` };
         }
         onScheduleChanged?.();

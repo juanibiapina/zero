@@ -1,7 +1,7 @@
 // Which object owns each kind of deadline, and how it is reached. Kept out of
 // ScheduleDO so the table can be read, and tested, without a Durable Object.
 
-import { getLearningDO } from "../LearningDO/stub";
+import { getAssistantDO } from "../AssistantDO/stub";
 import { getUserDO } from "../UserDO/stub";
 import type { ScheduleReason } from "../do/schedule";
 import type { Env } from "../types";
@@ -19,9 +19,9 @@ interface DispatchDeps {
 // to be last.
 //
 // Every entry is one RPC, because ScheduleDO holds *when* and never the work.
-// Learning goes to LearningDO, which persists the request and returns. A due
-// schedule only queues its prompt on UserDO and returns, so the turn it books
-// runs on UserDO's own alarm and no LLM work happens on the schedule's.
+// Learning goes to AssistantDO, which starts a learner session and returns. A
+// due schedule goes to UserDO, which hands its prompt to AssistantDO, so no LLM
+// work happens on the schedule's alarm.
 // Onboarding and admin tasks are the exception: those RPCs run their agent
 // inline, which is the point of them living here rather than on the alarm that
 // drains turns.
@@ -30,9 +30,9 @@ const DISPATCH: Record<
   (deps: DispatchDeps) => Promise<void>
 > = {
   idle: ({ env, clerkUserId, conversationId }) =>
-    getLearningDO(env, clerkUserId).request(clerkUserId, "idle", conversationId),
+    getAssistantDO(env, clerkUserId).learn("idle", conversationId),
   size: ({ env, clerkUserId, conversationId }) =>
-    getLearningDO(env, clerkUserId).request(clerkUserId, "size", conversationId),
+    getAssistantDO(env, clerkUserId).learn("size", conversationId),
   reminder: ({ env, clerkUserId }) =>
     getUserDO(env, clerkUserId).runDueSchedules(),
   onboarding: ({ env, clerkUserId }) =>

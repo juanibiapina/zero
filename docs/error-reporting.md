@@ -27,22 +27,21 @@ sent.
 | `site` | Level | Meaning |
 |---|---|---|
 | `http` | error | An HTTP route threw. |
-| `alarm_turn` | error | UserDO's alarm loop threw around turn draining. |
 | `turn` | error | The agent path threw; the user got the fallback message. |
 | `turn_rate_limited` | warning | A 429/529 turn failure; the user got the rate-limit notice. Upstream capacity, not our defect. |
 | `schedule_gave_up` | error | A deadline failed its 6 dispatch attempts. The work is gone. |
 | `onboarding` | error | Google onboarding failed; status is `failed`. |
 | `admin_task` | error | An admin task failed; status is `failed`. |
 | `file_download` | warning | Telegram refused a file the user sent; they got a notice instead of their attachment. |
-| `learning` | error | A LearningDO alarm slice threw. |
+| `learning` | error | A learning run ended without an answer; its messages stay unconsolidated for the next run. |
+| `delivery` | error | Telegram refused a reply after it was claimed; that message is lost. |
 
 An issue's **level is stamped when the issue is created** and never changes. A
 message that first arrives as a `warning` stays a warning even if a later report
 of the same fingerprint says `error`.
 
-A LearningDO failure rethrows after reporting, so Cloudflare's alarm retry still
-runs. Those retries fingerprint to the same issue: one bad job is one issue with
-up to six events, not six issues.
+Pi retries a failed model request before a turn or a learning run gives up, so
+one report stands for a run that already exhausted its retries.
 
 ## Durable Object resets are never reported
 

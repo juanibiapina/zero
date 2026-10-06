@@ -38,7 +38,7 @@ const fakeEnv = () => {
     calls,
     env: {
       USER_DO: namespace("UserDO"),
-      LEARNING_DO: namespace("LearningDO"),
+      ASSISTANT_DO: namespace("AssistantDO"),
     } as unknown as Env,
   };
 };
@@ -56,13 +56,13 @@ describe("dispatchFor", () => {
     expect(dispatchFor("constructor")).toBeNull();
   });
 
-  it("sends learning to LearningDO with its conversation", async () => {
+  it("sends learning to AssistantDO with its conversation", async () => {
     const { calls, env } = fakeEnv();
     await dispatchFor("idle")!({ env, clerkUserId: "user_1", conversationId: "c1" });
     await dispatchFor("size")!({ env, clerkUserId: "user_1", conversationId: "c1" });
     expect(calls).toEqual([
-      "LearningDO.request(user_1,idle,c1)",
-      "LearningDO.request(user_1,size,c1)",
+      "AssistantDO.learn(idle,c1)",
+      "AssistantDO.learn(size,c1)",
     ]);
   });
 

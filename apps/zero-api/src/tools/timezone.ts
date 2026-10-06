@@ -13,7 +13,7 @@ import { isValidTimezone, suggestTimezones } from "../timezone";
 export interface TimezoneToolDeps {
   // Persist the new zone. Omitted in contexts without user settings (tests);
   // the tool then reports it can't change the timezone rather than lying.
-  setTimezone?: (tz: string) => void;
+  setTimezone?: (tz: string) => void | Promise<void>;
 }
 
 export const buildTimezoneTool = (deps: TimezoneToolDeps): AgentToolSet => {
@@ -42,7 +42,7 @@ export const buildTimezoneTool = (deps: TimezoneToolDeps): AgentToolSet => {
         if (!setTimezone) {
           return { error: "Can't change the timezone in this context." };
         }
-        setTimezone(timezone);
+        await setTimezone(timezone);
         log("set_timezone", { timezone });
         return { ok: true, timezone };
       },

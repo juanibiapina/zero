@@ -1,3 +1,5 @@
+import type { Awaitable } from "../awaitable";
+
 // Zero's one file-size cap, shared by every path a file can take: Telegram
 // uploads, Gmail attachments, Drive imports and uploads, and the store itself.
 // Telegram's Bot API refuses to serve any file over 20 MB through getFile,
@@ -34,9 +36,9 @@ export interface UserFileStore {
     mimeType: string;
     bytes: Uint8Array;
   }): Promise<StoredFile>;
-  get(id: string): StoredFile | null;
+  get(id: string): Awaitable<StoredFile | null>;
   read(id: string): Promise<Uint8Array | null>;
-  list(input: FileListInput): FilePage;
+  list(input: FileListInput): Awaitable<FilePage>;
   delete(id: string): Promise<boolean>;
   deleteAll(): Promise<void>;
 }

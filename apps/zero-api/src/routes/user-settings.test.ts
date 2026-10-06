@@ -39,7 +39,7 @@ const fakeKV = (entries: Record<string, string> = {}) => {
 
 type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "getSettings" | "updateSettings" | "setGoogleOnboardingStatus" | "deleteAllData" | "reset">;
 
-// Stand-in for the ScheduleDO / LearningDO namespaces: both are addressed by
+// Stand-in for the ScheduleDO / AssistantDO namespaces: both are addressed by
 // Clerk user id and, for deletion, only `purge()` matters.
 const fakeJobNamespace = () => {
   const calls: string[] = [];
@@ -48,6 +48,9 @@ const fakeJobNamespace = () => {
     get: (name: string) => ({
       purge: async () => {
         calls.push(name);
+      },
+      drop: async () => {
+        throw new Error("aborted");
       },
     }),
   };
@@ -155,9 +158,9 @@ const fakeEnv = (
   userDO?: UserDOStub,
   analytics?: ReturnType<typeof fakeAnalytics>,
   accounts: ReturnType<typeof fakeAccountNamespace> = fakeAccountNamespace(),
-  jobs: { schedules: ReturnType<typeof fakeJobNamespace>; learning: ReturnType<typeof fakeJobNamespace> } = {
+  jobs: { schedules: ReturnType<typeof fakeJobNamespace>; assistant: ReturnType<typeof fakeJobNamespace> } = {
     schedules: fakeJobNamespace(),
-    learning: fakeJobNamespace(),
+    assistant: fakeJobNamespace(),
   },
   tasks: ReturnType<typeof fakeTaskNamespace> = fakeTaskNamespace(),
 ) => {
@@ -171,7 +174,7 @@ const fakeEnv = (
     },
     TELEGRAM_ACCOUNT_DO: accounts.namespace,
     SCHEDULE_DO: jobs.schedules.namespace,
-    LEARNING_DO: jobs.learning.namespace,
+    ASSISTANT_DO: jobs.assistant.namespace,
     TASK_DO: tasks.namespace,
   } as unknown as Env;
 };
@@ -331,7 +334,7 @@ describe("DELETE /api/user-data", () => {
     const kv = fakeKV({ "tg:12345": "user_abc" });
     const userDO = createFakeUserDO("12345");
     const accounts = fakeAccountNamespace({ "12345": "user_abc" });
-    const jobs = { schedules: fakeJobNamespace(), learning: fakeJobNamespace() };
+    const jobs = { schedules: fakeJobNamespace(), assistant: fakeJobNamespace() };
     const tasks = fakeTaskNamespace();
     const app = buildApp(fakeEnv(kv, userDO, undefined, accounts, jobs, tasks), "user_abc");
 
@@ -344,7 +347,7 @@ describe("DELETE /api/user-data", () => {
     expect(kv._store.has("tg:12345")).toBe(false);
     expect(accounts.state.get("12345")).toBeUndefined();
     expect(jobs.schedules.calls).toEqual(["user_abc", "user_abc"]);
-    expect(jobs.learning.calls).toEqual(["user_abc", "user_abc"]);
+    expect(jobs.assistant.calls).toEqual(["user_abc", "user_abc"]);
     expect(tasks.calls).toEqual(["user_abc"]);
   });
 

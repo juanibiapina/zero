@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { MAIL_INACTIVE_MS, runMailWatch } from "./mail-watch";
 import { MemoryStore } from "../store/memory";
-import { messageText } from "../store/messages";
 import { createMemoryGoogle } from "../google/memory";
 import type { MemoryGoogleSeed } from "../google/memory";
 
 const NOW = Date.parse("2026-02-10T12:00:00.000Z");
 
+let submitted: { conversationId: string; text: string; operationId: string }[] = [];
+const sent = (conversationId: string) =>
+  submitted.filter((s) => s.conversationId === conversationId).map((s) => s.text);
+
 const setup = (seed: MemoryGoogleSeed = {}) => {
+  submitted = [];
   const store = new MemoryStore(() => new Date(NOW).toISOString());
   const conversationId = store.getOrCreateConversation(1, 0);
   store.updateSettings({ lastActiveAt: new Date(NOW - 1000).toISOString() });
@@ -24,6 +28,9 @@ const run = (
     mail: google.mail,
     now,
     composeText: (threadId) => `[mail] ${threadId}`,
+    submit: async (conversationId, text, operationId) => {
+      submitted.push({ conversationId, text, operationId });
+    },
   });
 
 describe("runMailWatch", () => {
@@ -54,7 +61,7 @@ describe("runMailWatch", () => {
     store.trackMailThread({ threadId: "T1", conversationId });
     await expect(run(store, google)).resolves.toEqual({ status: "rebaselined" });
     expect(store.getSettings().mailHistoryId).toBe("9000");
-    expect(store.drainPendingMessages(conversationId).map((m) => messageText(m.content))).toEqual([]);
+    expect(sent(conversationId)).toEqual([]);
   });
 
   it("queues one turn per watched thread that got new inbox mail", async () => {
@@ -70,7 +77,7 @@ describe("runMailWatch", () => {
       notified: 1,
     });
     expect(google.historyCalls).toEqual(["9000"]);
-    expect(store.drainPendingMessages(conversationId).map((m) => messageText(m.content))).toEqual(["[mail] T1"]);
+    expect(sent(conversationId)).toEqual(["[mail] T1"]);
     expect(store.listMailThreads()[0]?.lastNotifiedAt).toBe(
       new Date(NOW).toISOString(),
     );
@@ -101,7 +108,7 @@ describe("runMailWatch", () => {
 
     await expect(run(store, google)).resolves.toEqual({ status: "rebaselined" });
     expect(store.getSettings().mailHistoryId).toBe("9999");
-    expect(store.drainPendingMessages(conversationId).map((m) => messageText(m.content))).toEqual([]);
+    expect(sent(conversationId)).toEqual([]);
   });
 
   it("disarms when Google is not connected", async () => {
@@ -130,8 +137,8 @@ describe("runMailWatch", () => {
       status: "checked",
       notified: 2,
     });
-    expect(store.drainPendingMessages(a).map((m) => messageText(m.content))).toEqual(["[mail] T1"]);
-    expect(store.drainPendingMessages(b).map((m) => messageText(m.content))).toEqual(["[mail] T2"]);
+    expect(sent(a)).toEqual(["[mail] T1"]);
+    expect(sent(b)).toEqual(["[mail] T2"]);
   });
 
   it("lets an unexpected Gmail failure through so the deadline retries", async () => {

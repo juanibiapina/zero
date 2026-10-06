@@ -4,7 +4,7 @@ import { isValidCountry } from "../country";
 import { log } from "../log";
 
 export interface CountryToolDeps {
-  setCountry?: (country: string) => void;
+  setCountry?: (country: string) => void | Promise<void>;
 }
 
 export const buildCountryTool = (deps: CountryToolDeps): AgentToolSet => ({
@@ -29,7 +29,7 @@ export const buildCountryTool = (deps: CountryToolDeps): AgentToolSet => ({
       if (!deps.setCountry) {
         return { error: "Can't change the country in this context." };
       }
-      deps.setCountry(normalized);
+      await deps.setCountry(normalized);
       log("set_country", { country: normalized });
       return { ok: true, country: normalized };
     },

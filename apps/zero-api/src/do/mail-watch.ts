@@ -28,9 +28,7 @@ export const MAX_WATCHED_THREADS = 50;
 
 // The store surface a pass needs: the watched rows, the watermark (settings)
 // and the pending queue the notifications go into.
-export interface MailWatchStore extends MailThreadStore, SettingsStore {
-  enqueuePendingMessage(conversationId: string, content: string): void;
-}
+export type MailWatchStore = MailThreadStore & SettingsStore;
 
 // Why a pass did not arm the next one, or what it did instead.
 export type MailWatchOutcome =
@@ -44,6 +42,7 @@ export const runMailWatch = async (input: {
   now: number;
   // Wrap a thread id as the text of a turn (the MAIL_NOTE prefix).
   composeText: (threadId: string) => string;
+  submit: (conversationId: string, text: string, operationId: string) => Promise<void>;
 }): Promise<MailWatchOutcome> => {
   const { store, mail, now } = input;
 
@@ -78,9 +77,10 @@ export const runMailWatch = async (input: {
       if (!hits.has(thread.threadId)) continue;
       // Queue BEFORE the watermark moves, so a reset in between announces a
       // reply twice rather than never.
-      store.enqueuePendingMessage(
+      await input.submit(
         thread.conversationId,
         input.composeText(thread.threadId),
+        `mail:${thread.threadId}:${changed.historyId}`,
       );
       notified.push(thread.threadId);
     }

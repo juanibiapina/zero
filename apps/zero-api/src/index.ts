@@ -12,10 +12,10 @@ export default {
 
 export { UserDO } from "./UserDO/index";
 // One instance of each per user, all three keyed by the Clerk user id. ScheduleDO
-// owns deadlines, LearningDO owns durable learning execution, UserDO owns user
-// data and interactive turns (see docs/topics.md).
+// owns deadlines, AssistantDO runs every agent on Pi Durable, UserDO owns user
+// data (see docs/harness.md).
 export { ScheduleDO } from "./ScheduleDO/index";
-export { LearningDO } from "./LearningDO/index";
+export { AssistantDO } from "./AssistantDO/index";
 // One instance per Telegram account, keyed by the Telegram user id: the
 // authoritative record of which Zero user that account belongs to.
 export { TelegramAccountDO } from "./TelegramAccountDO/index";

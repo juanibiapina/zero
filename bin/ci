@@ -28,6 +28,7 @@ export VITE_TELEGRAM_BOT_USERNAME="ci-bot"
 
 pnpm exec turbo run build --filter='!@zero/web' --filter='!@zeroapps/dashboard-web'
 pnpm run test
+pnpm --filter @zero/api run test:workers
 # The `--` is required. `turbo run deploy --dry-run` is turbo's own dry run and
 # would execute nothing at all.
 pnpm exec turbo run deploy -- --dry-run

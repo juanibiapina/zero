@@ -38,41 +38,28 @@ each in its rendered log. Its prompt already tells it to record what the
 searching meant for the user, never the findings themselves, which are public
 and findable again.
 
-## One runner, three agents
+## The agents
 
-`apps/zero-api/src/agents/run.ts` is the single agent machine:
+Every agent is a Pi Durable session in AssistantDO with its own prompt and tool
+set (see [harness.md](./harness.md)):
 
-```
-runAgent({ model, system, prompt, tools, maxSteps }) →
-  { text, finishReason, steps, messages, usage, stepUsages }
-```
-
-`runAgent` also applies prompt caching: it sends `system` as a text block with a
-cache breakpoint and marks the last tool with another, and advances a sliding
-breakpoint over the growing message tail before every step. It returns token
-counts (`usage`, `stepUsages`). See [caching.md](./caching.md).
-
-The interface agent, the learning agent and onboarding are the same runner with
-different system prompts and toolsets:
-
-- **Interface agent** (`agents/interface.ts`): the topic tools + `web_search` +
-  `read_page` + Google + attachments + schedules. There is no `reply` tool: the
-  model's own text blocks are the messages, delivered as it writes them. It runs
-  inline in the turn's DO alarm under the shared step cap `AGENT_MAX_STEPS =
-  200`, a runaway-loop guard rather than an expected stopping point; a searching
-  turn normally finishes in a handful of steps. Since no agent nests inside
-  another, search and page fetches add to the turn's Cloudflare subrequest count
-  rather than multiplying it.
-- **Learning agent** (`agents/learner.ts`): the topic tools only, run off the
-  turn path in LearningDO. See `docs/topics.md`.
-- **Onboarding agent** (`agents/onboarding.ts`): topic tools + read-only Gmail.
-  See `docs/onboarding.md`.
+- **Interface agent** (`zero-interface`): the topic tools + `web_search` +
+  `read_page` + Google + files + schedules + mail watch. There is no `reply`
+  tool: the model's own text blocks are the messages, delivered as each response
+  is committed. A run that passes 200 tool rounds has its further calls blocked,
+  a runaway-loop guard rather than an expected stopping point; a searching turn
+  normally finishes in a handful of steps.
+- **Learning agent** (`zero-learner`): the topic tools only, run off the turn
+  path. See `docs/topics.md`.
+- **Onboarding agent** (`zero-onboarding`): topic tools + read-only Gmail. See
+  `docs/onboarding.md`.
 
 ## Observability
 
 `interface_completed` carries the turn's search rollup (`searches`,
 `searches_failed`, `searches_empty`, `unique_queries`, `search_ms_total`)
-alongside `steps`, `finish_reason`, `duration_ms` and the token/cache counts.
+alongside `status`, `reason` and `duration_ms`. Token and cache counts are in
+the `AI_USAGE` dataset and the AI Gateway logs.
 The `web_search` tool logs `web_search_completed` and `web_search_failed` per
 call; `read_page` logs `read_page_completed` (`duration_ms`, `content_len`) and
 `read_page_failed` (`duration_ms`, `error`) the same way. The address itself is
@@ -110,7 +97,7 @@ and retry storms on a single query without storing content, the same rule
 
 **Paid-key canary and the `cohort` tag.** The paid Brave key is rolled out per
 user, gated by the `braveKeyPaid` flag on `user_settings` (see
-`docs/plans/brave-paid-canary.md`). `UserDO.runTurn` picks the key with
+`docs/plans/brave-paid-canary.md`). AssistantDO picks the key with
 `selectBraveKey` (`websearch/brave-key.ts`) and passes a `cohort` of `"paid"` or
 `"free"`, which rides on `queryFields` and so tags every Brave log line
 (`brave_request`, `brave_rate_limited`, `brave_request_failed`,

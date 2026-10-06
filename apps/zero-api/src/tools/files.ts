@@ -89,7 +89,7 @@ export const buildFileTools = (deps: FileToolDeps): AgentToolSet => {
       "Only JPEG, PNG, GIF, and WebP images are supported.",
     inputSchema: z.object({ id: z.string() }),
     execute: async ({ id }): Promise<ViewOutput> => {
-      const file = files?.get(id);
+      const file = await files?.get(id);
       if (!file) return { error: `No file found for id ${id}.` };
       if (!IMAGE_MIME_TYPES.has(file.mimeType)) {
         return { error: `File ${id} is not a supported image.` };
@@ -154,7 +154,7 @@ export const buildFileTools = (deps: FileToolDeps): AgentToolSet => {
       description: "Get stored file metadata and its canonical marker by id. Never returns file bytes.",
       inputSchema: z.object({ id: z.string() }),
       execute: async ({ id }) => {
-        const file = files?.get(id);
+        const file = await files?.get(id);
         return file ? { file: metadata(file) } : { error: `No file found for id ${id}.` };
       },
     }),
@@ -169,7 +169,7 @@ export const buildFileTools = (deps: FileToolDeps): AgentToolSet => {
       }),
       execute: async ({ query, mime_type, limit, cursor }) => {
         if (!files) return { error: "File storage is unavailable." };
-        const page = files.list({ query, mimeType: mime_type, limit, cursor });
+        const page = await files.list({ query, mimeType: mime_type, limit, cursor });
         return { files: page.files.map(metadata), nextCursor: page.nextCursor };
       },
     }),
@@ -190,7 +190,7 @@ export const buildFileTools = (deps: FileToolDeps): AgentToolSet => {
           logError("pdf_read_failed", { reason, error: fmtErr(new Error(message)) });
           return { error: message };
         };
-        const file = files?.get(id);
+        const file = await files?.get(id);
         if (!file) return fail(`No file found for id ${id}.`, files ? "not_found" : "store_unwired");
         if (file.mimeType !== "application/pdf") return fail(`File ${id} is not a PDF.`, "wrong_mime");
         const bytes = await files?.read(id);
@@ -223,7 +223,7 @@ export const buildFileTools = (deps: FileToolDeps): AgentToolSet => {
       inputSchema: z.object({ id: z.string() }),
       execute: async ({ id }) => {
         if (!files || !sendFile) throw new ExternalCallNotSent(`No file found for id ${id}.`);
-        const file = files.get(id);
+        const file = await files.get(id);
         if (!file) throw new ExternalCallNotSent(`No file found for id ${id}.`);
         const bytes = await files.read(id);
         if (!bytes) throw new ExternalCallNotSent(`No file found for id ${id}.`);

@@ -18,6 +18,7 @@ import type {
   ConversationStore,
   ExternalCallClaim,
   LearningMessage,
+  LegacyExport,
   MailThreadRecord,
   Message,
   MessageContent,
@@ -434,6 +435,42 @@ export class MemoryStore implements Store {
       (t) => t.conversationId !== conv.id,
     );
     this.convs = this.convs.filter((c) => c.id !== conv.id);
+  }
+
+  getConversationThread(conversationId: string): Thread | null {
+    const conv = this.convs.find((c) => c.id === conversationId);
+    return conv ? { id: conv.id, chatId: conv.chatId, topicId: conv.topicId } : null;
+  }
+
+  exportLegacyConversations(): LegacyExport[] {
+    return this.convs.map((conv) => {
+      const boundary = conv.compactedThroughMessageId;
+      return {
+        id: conv.id,
+        chatId: conv.chatId,
+        topicId: conv.topicId,
+        summary: conv.summary,
+        boundary,
+        messages: this.msgs
+          .filter(
+            (m) =>
+              m.conversationId === conv.id &&
+              (boundary === null || m.id > boundary || m.consolidatedAt === null),
+          )
+          .sort((a, b) => a.id - b.id)
+          .map((m) => ({
+            id: m.id,
+            kind: m.kind,
+            content: decodeContent(m.content),
+            stopReason: m.stopReason,
+            consolidated: m.consolidatedAt !== null,
+            createdAt: m.createdAt,
+          })),
+        pending: this.pending
+          .filter((p) => p.conversationId === conv.id && p.injectedAt === null)
+          .map((p) => ({ id: p.id, content: p.content })),
+      };
+    });
   }
 
   getMostRecentConversation(): Thread | null {
@@ -901,6 +938,10 @@ export class MemoryStore implements Store {
     if (this.processed.has(updateId)) return false;
     this.processed.add(updateId);
     return true;
+  }
+
+  isProcessed(updateId: string): boolean {
+    return this.processed.has(updateId);
   }
 }
 

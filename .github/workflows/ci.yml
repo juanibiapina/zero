@@ -63,6 +63,9 @@ jobs:
       - name: Run tests
         run: pnpm run test
 
+      - name: Run Workers runtime tests
+        run: pnpm --filter @zero/api run test:workers
+
       # The `--` is required: `turbo run deploy --dry-run` is turbo's own dry
       # run and would execute nothing.
       - name: Deploy dry run

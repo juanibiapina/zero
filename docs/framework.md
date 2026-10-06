@@ -28,8 +28,8 @@ points one way. The rest of this doc walks each layer.
                                   ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                Durable Object Layer                           │
-│              (apps/zero-api/src/UserDO/index.ts)                   │
-│   per-user SQLite (topics, conversations) + alarm turn runner │
+│   UserDO: per-user data (topics, settings, files, schedules)  │
+│   AssistantDO: every agent, on Pi Durable (see harness.md)    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -125,61 +125,52 @@ Routers are mounted in `app.ts` via `app.route("/", createTelegramRoutes())`.
 
 `UserDO` extends `DurableObject<Env>`, one instance per Clerk user
 (`env.USER_DO.idFromName(clerkUserId)`, via the typed `getUserDO` stub). It
-owns the per-user SQLite (do-orm): the Telegram link, user settings, and the
-topic model (topics, conversations, messages) — see [`topics.md`](topics.md).
+owns the per-user SQLite (do-orm): the Telegram link, user settings, files,
+schedules, watched mail threads and the topic model — see
+[`topics.md`](topics.md).
 
-The webhook calls `UserDO.enqueueTurn` (dedupe the update, queue the user
-message, arm a DO alarm) and returns 200. The `alarm()` handler is the turn
-runner: it drains every conversation that still owes work and runs the
-meta-agent turn inside the DO, where the topic tools hit local SQLite and
-replies go straight to Telegram via grammY. A self-rescheduling `setTimeout`
-drives the Telegram typing action across the interface phase and stops when the
-reply is sent; the alarm stays dedicated
-to turn scheduling.
+The webhook calls `UserDO.enqueueTurn` (dedupe the update, save its files,
+submit the message to `AssistantDO` with an operation id) and returns 200.
+`AssistantDO` runs the turn on Pi Durable, reaches the topic tools' data over
+RPC, and sends replies to Telegram via grammY; see [`harness.md`](harness.md).
 
 ### Three Durable Objects per user
 
-All three are keyed by the same Clerk user id, and the split exists for one
-reason: **a Durable Object has exactly one alarm**. On 2026-07-29 UserDO's alarm
-was shared between turn draining, an admin task and Google onboarding, and a
-queued user message waited fifteen minutes behind them.
+All three are keyed by the same Clerk user id. **A Durable Object has exactly
+one alarm**, and on 2026-07-29 UserDO's alarm was shared between turn draining,
+an admin task and Google onboarding, so a queued user message waited fifteen
+minutes behind them. The agents also run on a beta runtime that owns its
+object's alarm and handlers, which is the second reason they live apart from
+user data.
 
 | Class | Owns | Alarm does |
 |---|---|---|
-| `UserDO` | user data (SQLite) and interactive turns | drain turns, nothing else |
-| `ScheduleDO` | every deadline for the user (idle learning, size learning, later onboarding and admin tasks) | hand due deadlines to `LearningDO` and end |
-| `LearningDO` | durable learning-job state and execution | advance one bounded slice of a job, re-arm while work remains |
+| `UserDO` | user data (SQLite): topics, settings, files, schedules, mail threads | only hands a leftover legacy turn to AssistantDO |
+| `ScheduleDO` | every deadline for the user (idle learning, reminders, mail polls, wakes, onboarding and admin tasks) | hand due deadlines to their owner and end |
+| `AssistantDO` | every agent, on Pi Durable through `PiHarness` and Lifecycle | Lifecycle's job queue: keep running sessions awake, re-run delivery and settlement |
 
-`ScheduleDO` never awaits learning work, and `LearningDO` never runs a turn, so
-neither can delay a reply. Both keep their decision logic in DO-free modules
-(`do/schedule.ts`, `do/learning-job.ts`) so it is unit-tested without a Durable
-Object, exactly like `do/alarm.ts`. `LearningDO`'s executor is not enabled yet
-(Phase 3): today it records and coalesces requests and logs `learn_skipped`,
-and advances one bounded slice of a job per alarm.
+`ScheduleDO` never awaits agent work, so it cannot delay a reply. Its decision
+logic lives in a DO-free module (`do/schedule.ts`) so it is unit-tested without
+a Durable Object.
 
-LearningDO reaches the user's data through the **learning port**
-(`learning/types.ts`), because one Durable Object cannot read another's SQLite.
-Two adapters implement it — `store-port.ts` over a local `Store` (tests) and
-`remote-port.ts` over a UserDO stub (production) — and a shared test suite runs
-both, so the boundary is invisible to the learner. Topic reads and writes go
-through the same versioned tool module as a turn (`tools/topics.ts` is written
-against `TopicToolStore`, whose methods may be sync or async), so there is no
-unchecked write path for learning. A stale write crosses the RPC boundary as
-data and is rebuilt into a `KnowledgeConflictError` on the far side; thrown, it
-would arrive as a plain error and lose which versions collided.
+AssistantDO reaches the user's data through `UserDataPort`
+(`assistant/user-data.ts`), because one Durable Object cannot read another's
+SQLite. Topic reads and writes go through the same versioned tool module
+everywhere (`tools/topics.ts` is written against `TopicToolStore`, whose methods
+may be sync or async), so there is no unchecked write path. A stale write crosses
+the RPC boundary as data and is rebuilt into a `KnowledgeConflictError` on the
+far side; thrown, it would arrive as a plain error and lose which versions
+collided.
 
-`ctx.waitUntil` is not an option for this work: Cloudflare documents that
-`DurableObjectState.waitUntil` does not extend the object's lifetime, so leaving a
-multi-minute promise behind after an RPC returns can lose the job.
+`ctx.waitUntil` is not an option for agent work: Cloudflare documents that
+`DurableObjectState.waitUntil` does not extend the object's lifetime. Lifecycle's
+heartbeat alarm is what keeps a running agent alive and restarts it after an
+eviction. See [`harness.md`](harness.md).
 
-The agents and the turn orchestrator (`apps/zero-api/src/agents/*`) depend on the
-`Store` port (`apps/zero-api/src/store/types.ts`), not on the DO or do-orm, so they
-are unit-tested with an in-memory store and a scripted mock model. `UserDO`
-supplies the production `DbStore` adapter. LLM access sits behind the
-`AgentModel` port (`agents/protocol.ts`), whose only production adapter is
-`agents/model-pi.ts` (pi-ai's `cloudflare-ai-gateway` provider, per-user +
-per-agent `cf-aig-metadata`). The tool loop itself is Zero's (`agents/run.ts`),
-so no SDK type reaches the agents or tools. The model, provider and effort are
+UserDO's code depends on the `Store` port (`apps/zero-api/src/store/types.ts`),
+not on the DO or do-orm, so it is unit-tested with an in-memory store. The agents'
+harness definition (`assistant/harness.ts`) is unit-tested over Pi's in-memory
+storage with pi-ai's scripted `faux` model. The model, provider and effort are
 owned by `design.md` (Architecture); prompt caching by `caching.md`.
 
 ## State

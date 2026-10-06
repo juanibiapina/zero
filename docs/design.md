@@ -20,20 +20,20 @@ the agents, [`framework.md`](framework.md) the layered worker structure, and
 
 Everything below is detail under these five decisions:
 
-1. **The webhook enqueues each message and answers 200 immediately; a DO alarm
-   produces the reply.** The webhook resolves the user, dedupes, and enqueues; the
-   alarm runs the turn. A slow model call runs on the alarm, so it never holds the
-   webhook open. See [How a message becomes a turn](#how-a-message-becomes-a-turn).
-2. **The turn is one agent loop over ports.** The interface agent, the learner,
-   and onboarding are the same runner with different prompts and toolsets, and
-   they depend only on ports (`Store`, `WebSearch`, `GoogleWorkspace`,
-   `AgentModel`), so they are unit-tested off the platform. See [The turn](#the-turn).
-3. **All durable state is the `UserDO` SQLite; KV is only an identity cache.**
-   Topics, conversations, messages, and file metadata live in the DO; KV holds
-   one reverse-lookup key. See [State model](#state-model).
-4. **Work that needs its own alarm gets its own Durable Object.** A DO has exactly
-   one alarm, so turn draining, scheduling, and learning are split across
-   `UserDO`, `ScheduleDO`, and `LearningDO`. See [Durable Objects](#durable-objects).
+1. **The webhook hands each message to the user's `AssistantDO` and answers 200
+   immediately; Pi Durable produces the reply.** The webhook resolves the user and
+   UserDO dedupes and hands the message over with an operation id; the run happens
+   in AssistantDO, so a slow model call never holds the webhook open. See
+   [How a message becomes a turn](#how-a-message-becomes-a-turn).
+2. **Every agent is a Pi Durable session over Zero's tools and ports.** The
+   interface agent, the learner, onboarding and admin tasks are extensions of one
+   Pi harness with different prompts and toolsets; Pi owns the loop, the
+   transcript and recovery. See [The turn](#the-turn) and [`harness.md`](harness.md).
+3. **User data is the `UserDO` SQLite; transcripts are Pi's, in `AssistantDO`;
+   KV is only an identity cache.** See [State model](#state-model).
+4. **Work that needs its own alarm, or its own runtime, gets its own Durable
+   Object**: user data in `UserDO`, deadlines in `ScheduleDO`, agents in
+   `AssistantDO`. See [Durable Objects](#durable-objects).
 5. **The LLM path is provider-neutral and content-free at the edges.** pi-ai over
    the Cloudflare AI Gateway (BYOK) routes by model id alone, per-user attribution
    rides on gateway metadata, and no log line carries message content. See
@@ -41,58 +41,49 @@ Everything below is detail under these five decisions:
 
 ## How a message becomes a turn
 
-A message is linked, routed, enqueued, and answered on an alarm. The web frontend
-uses Telegram's [Login Widget](https://core.telegram.org/widgets/login) to link a
-Clerk account to a Telegram numeric id (HMAC-verified server-side against the bot
-token). Each later message is resolved to that user (KV cache, authoritative
-`TelegramAccountDO` on a miss), passed to `UserDO.enqueueTurn` (dedupe the
-update, store the user message, arm a DO alarm), and acknowledged with 200. The
-alarm then runs the turn:
+A message is linked, routed, handed over, and answered in AssistantDO. The web
+frontend uses Telegram's [Login Widget](https://core.telegram.org/widgets/login)
+to link a Clerk account to a Telegram numeric id (HMAC-verified server-side
+against the bot token). Each later message is resolved to that user (KV cache,
+authoritative `TelegramAccountDO` on a miss), passed to `UserDO.enqueueTurn`
+(dedupe the update, save its files, compose its text, submit it to
+`AssistantDO` with `tg:<updateId>`), and acknowledged with 200. AssistantDO then
+runs the turn on Pi Durable:
 
-1. **Interface agent** reads recent conversation history and a topic-based
-   knowledge model (DO SQLite) and replies to the user. There is no `reply` tool:
-   the model's own text blocks are the messages, delivered as it writes them, so
-   progress is live. It tracks every topic it reads or writes.
-2. **Learning** consolidates durable knowledge into the accessed topics later,
-   off the turn path, in `LearningDO` (see [`topics.md`](topics.md)).
+1. **Interface agent** reads the chat's transcript and the topic model (over RPC
+   to UserDO) and replies to the user. There is no `reply` tool: the model's own
+   text blocks are the messages, delivered as each response is committed, so
+   progress is live.
+2. **Learning** consolidates durable knowledge into topics later, off the turn
+   path, as its own Pi session (see [`topics.md`](topics.md)).
 
-A self-rescheduling `setTimeout` drives the Telegram typing action across the
-interface phase and stops when the reply is sent, which ends the turn.
+The Telegram typing action repeats every 4 seconds while a chat has an
+unanswered message.
 
 ```
-┌─ Frontend (Vite + React) ────────────────────────────────────────┐
-│   single Telegram-id input form (Clerk-gated)                    │
-└────────────────────┬─────────────────────────────────────────────┘
-                     │ REST  (GET/PUT /api/telegram-id, Clerk JWT)
-┌─ CF Worker (zero-api) ▼ ─────────────────────────────────────────┐
-│                                                                  │
+┌─ CF Worker (zero-api) ───────────────────────────────────────────┐
 │  POST /api/webhooks/telegram  ◀──────────── Telegram update      │
 │    grammY (secret-token) → 200 OK → waitUntil:                   │
 │      1. resolveContext: keep topic messages + DMs (topicId=0)    │
 │      2. tgId → clerkUserId: KV, then TelegramAccountDO on a miss │
-│         (drop unknown)                                           │
-│      3. UserDO.enqueueTurn { updateId, clerkUserId,             │
-│                              chatId, topicId, text }             │
-│         (dedupe on processed_updates, store user message,        │
-│          arm the DO alarm) → return                              │
+│      3. UserDO.enqueueTurn { updateId, clerkUserId, chatId,      │
+│                              topicId, text, files }               │
 │                                                                  │
 │  UserDO (idFromName(clerkUserId), SQLite via do-orm)             │
-│  ├─ alarm(): drain conversations that still owe work;            │
-│  │    on catchable failure self-reschedule w/ backoff while work  │
-│  │    remains, else stop (see do/alarm.ts)                        │
-│  ├─ runTurn(chatId, topicId):                                    │
-│  │    ├─ create model (AI Gateway, cf-aig-metadata)              │
-│  │    ├─ setTimeout typing loop (chatAction every 4s)            │
-│  │    └─ orchestrateTurn(store, model, send, search, google):     │
-│  │         1. interface agent — topic + web_search/read_page +   │
-│  │            set_timezone + Gmail/Calendar tools                 │
-│  │            (each reply persisted before it is sent)            │
-│  │      (consolidation happens later, in LearningDO)             │
-│  └─ send: grammY bot.api.sendMessage(…, { message_thread_id })   │
+│  └─ dedupe, save files, compose text →                           │
+│     AssistantDO.submit(chat, text, operationId: tg:<updateId>)   │
+│     → markProcessed                                              │
+│                                                                  │
+│  AssistantDO (idFromName(clerkUserId), Pi Durable + PiHarness)   │
+│  ├─ Pi session per chat: generation + tool tasks, checkpointed   │
+│  ├─ tools reach UserDO data over RPC (UserDataPort)              │
+│  ├─ outbox: claim each committed text block, then sendMessage    │
+│  └─ Lifecycle alarm keeps it running and restarts it after a     │
+│     crash or deploy                                              │
 │                                                                  │
 │  LLM: pi-ai → {AI Gateway}/openai/responses (BYOK)               │
 │    cf-aig-authorization: Bearer <CLOUDFLARE_API_KEY>             │
-│    cf-aig-metadata: {"user_id": <clerkUserId>}                   │
+│    cf-aig-metadata: {"user_id": <clerkUserId>, "agent": ...}     │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -119,69 +110,40 @@ immediately. The background task:
 3. For any downloadable file under 20 MB, the route resolves Telegram's file,
    downloads the bytes, and hands canonical metadata plus bytes to UserDO.
 4. `UserDO.enqueueTurn` saves through `UserFileStore`, appends the canonical
-   marker, dedupes the update, queues the message, and arms the DO alarm. The
-   alarm runs the turn.
+   marker, composes the text once per update, submits it to AssistantDO, and
+   only then marks the update processed (see [`harness.md`](harness.md)).
 
 The webhook URL and secret are registered with Telegram manually via the Bot
 API's `setWebhook` method — see [`telegram-webhook.md`](telegram-webhook.md).
 
 ## The turn
 
-The three agents are one runner instantiated three ways, each depending on ports
-so it runs off the platform. `agents/run.ts` (`model + system + (prompt | messages) +
-tools → final text`) is the interface agent, the learner, and onboarding, each
-with different system prompts and toolsets. The interface agent's returned text
-is ignored (its output is the `{ replies, accessed }` collected by its tool
-closures); it investigates the web in its own loop with `web_search` and
-`read_page`, no nested agent involved, inline in the turn's DO alarm. See
+Every agent is a session in one Pi Durable harness inside AssistantDO, built by
+`assistant/harness.ts`: the interface agent, the learner, onboarding and admin
+tasks are extensions with their own system prompt and tool set. Pi runs the
+tool loop, keeps the transcript, retries model requests and compacts long
+chats; Zero supplies the prompts, the tools (`tools/*`, adapted by
+`assistant/tools.ts`), hooks for staleness, the current-time line and the step
+cap, and Telegram delivery. The interface agent investigates the web in its own
+loop with `web_search` and `read_page`. See [`harness.md`](harness.md),
 [`topics.md`](topics.md) and [`research.md`](research.md).
 
-The agents and the turn orchestrator (`apps/zero-api/src/agents/*`) depend only on the
-`Store` port (`apps/zero-api/src/store/types.ts`), a model factory
-(`agents/model.ts`), a `WebSearch` port (`apps/zero-api/src/websearch/types.ts`), and a
-`GoogleWorkspace` port (`apps/zero-api/src/google/types.ts`); the DO and do-orm stay out of reach.
-They are unit-tested with an in-memory store, a scripted mock model, and
-in-memory search/Google adapters; `UserDO` supplies the production `DbStore`,
-`createBraveSearch`, and `createGoogleWorkspace` (with a memoized Clerk token
-provider) adapters and the alarm-driven execution.
+The tools depend on ports (`TopicToolStore`, `WebSearch`, `PageFetcher`,
+`GoogleWorkspace`, the schedule and mail-watch books, `UserFileStore`), so the
+harness definition is unit-tested in node over Pi's in-memory storage and
+pi-ai's scripted `faux` model, with in-memory adapters.
 
-### Structured message history (interface agent)
+### Conversation history (interface agent)
 
-The interface agent builds a real multi-turn conversation
-(`buildConversationMessages` in `agents/interface.ts`), so each turn extends the
-cacheable prefix instead of rewriting a single flattened blob. The split is
-deliberate:
-
-- **System prompt** carries everything that is instruction or stable reference,
-  not a turn: agent instructions and the pinned-topics block. The datetime
-  anchor is not there; it is volatile, so it rides on the current user message
-  (see `docs/caching.md`).
-- **`messages`** carries only the Telegram dialogue: each stored user/assistant
-  message as a native turn, ending with the current user message. The tool loop
-  appends the assistant response and one `tool_result` turn per step during the
-  run. The current user message also carries the volatile per-turn context:
-  current time, timezone, and the user's country code with its country name (or
-  "not set"), which sits after the cache anchor by construction.
-
-Each user message is prefixed with an absolute timestamp `[YYYY-MM-DD HH:MM]` in
-the user's timezone (stable turn-to-turn, cache-friendly); assistant messages are
-verbatim. Rendering is **append-only**: one stored row becomes one wire message,
-in id order, never merged, reordered, or dropped. That is what keeps turn N's
-request a byte prefix of turn N+1's, so nothing appended later can change a
-position the cache already covers. (Until 2026-08-01 the renderer coalesced
-consecutive same-role turns and dropped leading assistant turns; both dated from
-the pre-SDK proxy era and neither is required — the API states that consecutive
-same-role turns are combined server-side, and a leading assistant turn is
-accepted.) The one real ordering rule, that `tool_result` blocks must directly
-follow the `tool_use` they answer, holds by row order alone: a message arriving
-mid-run waits in `pendingMessages` and only becomes a row at the loop's idle
-point.
-
-Assistant responses and tool results are persisted **verbatim**, including
-`thinking` blocks and their signatures, so a resumed turn can hand the model back
-its own reasoning. Only `text` blocks are ever delivered to Telegram, and neither
-the learner nor compaction sees anything but text. The learning and onboarding
-agents still use the single-`prompt` path.
+The model sees its own transcript: user messages as text with an absolute
+`[YYYY-MM-DD HH:MM]` timestamp in the user's timezone, assistant responses
+verbatim (thinking and tool calls included), and tool results. Agent
+instructions and pinned topics are the system prompt; the volatile per-turn
+context (current time, timezone, country code and name, or "not set") rides on
+the newest user message only, so history stays a byte prefix of the next
+request (see `docs/caching.md`). Only `text` blocks of a finished response are
+ever delivered to Telegram, and neither the learner nor compaction sees
+anything but text and tool calls.
 
 ### Reasoning effort
 
@@ -189,10 +151,8 @@ Agent calls use `MODEL_ID` at the default `high` reasoning effort (resolved in
 `resolveModelSpec`, see [LLM path](#llm-path)). They persist reasoning signatures without the reasoning prose. The
 background agents also run at `high`: the
 learner and compaction decide what Zero remembers about a user, which is the
-judgement call whose mistakes last longest. Reasoning makes learner slices
-slower, which the slice contract already absorbs (bounded steps per alarm, wire
-log persisted as it goes, a slice lost to wall time retried from where it
-stopped). Zero requests `high` explicitly; the OpenAI default is `medium`.
+judgement call whose mistakes last longest. Zero requests `high` explicitly; the
+OpenAI default is `medium`.
 
 ## LLM path
 
@@ -202,25 +162,25 @@ provider bills us directly; requests are authenticated with `cf-aig-authorizatio
 and tagged per user with `cf-aig-metadata`. The model is `MODEL_ID`
 (`gpt-6-luna`, on the OpenAI Responses API). The model and its reasoning effort
 resolve together in one place (`resolveModelSpec`), on pi-ai's provider-neutral
-effort scale (default `high`). pi-ai's built-in `cloudflare-ai-gateway` provider
-owns the transport and routes by the model's own `api`, so `MODEL_ID` alone
+effort scale (default `high`). `assistant/models.ts` registers one gateway
+provider per agent label on pi-ai's `cloudflare-ai-gateway` transport, which
+routes by the model's own `api`, so `MODEL_ID` alone
 decides where traffic goes and a rollback to a Cloudflare-gateway catalog id such
-as `claude-sonnet-4.6` (dotted, Anthropic Messages wire) needs no code change.
+as `claude-sonnet-4-6` (Anthropic Messages wire) needs no code change.
 
-Usage is accounted per execution, as an estimate. Each completed agent execution
-writes one aggregate call/token/cost point to the `AI_USAGE` Analytics Engine
-dataset, indexed by Clerk user and attributed to its agent and conversation when
-one exists. The estimate can be sampled, retains about three months of history,
+Usage is accounted per model response, as an estimate. Each response writes one
+call/token/cost point to the `AI_USAGE` Analytics Engine dataset, indexed by
+Clerk user and attributed to its agent and conversation when one exists. The estimate can be sampled, retains about three months of history,
 and can miss an execution interrupted by a hard isolate reset; AI Gateway logs
 remain the request-level debugging source.
 
 ## State model
 
 **Per-user data lives in a `UserDO` Durable Object (source of truth, SQLite via
-[do-orm](https://github.com/juanibiapina/do-orm)); Workers KV holds only a cache
-of the Telegram→Clerk reverse lookup used to route incoming messages.** Durable
-state is the DO SQLite (topics, conversations, messages, file metadata); file
-bytes live in the `FILES` R2 binding. There is no container and no per-user
+[do-orm](https://github.com/juanibiapina/do-orm)); agent transcripts live in
+Pi Durable's tables in `AssistantDO`; Workers KV holds only a cache of the
+Telegram→Clerk reverse lookup used to route incoming messages.** File bytes live
+in the `FILES` R2 binding. There is no container and no per-user
 filesystem.
 
 ### KV (bootstrap)
@@ -248,12 +208,9 @@ from a Telegram datacenter rather than the user's device.
 | `user_settings`     | `id`, `onboardingSeen`, `googleOnboardingStatus`, `createdAt`, `timezone`, `country` | Web onboarding + settings                      |
 | `topics`            | `id`, `name`, `description`, `body`, timestamps, `messageCount` | The knowledge model (see [`topics.md`](topics.md)) |
 | `knowledge`         | `id`, `version`, `systemFingerprint`                         | The knowledge version guarding topic writes    |
-| `conversations`     | `id`, `chatId`, `topicId`, `createdAt`, `compactedThroughMessageId`, `summary` | One thread per Telegram (chatId, topicId); the last two are the non-destructive compaction boundary |
-| `messages`          | `id`, `conversationId`, `role`, `kind`, `content`, `stopReason`, `responseId`, `consolidatedAt`, `createdAt` | The conversation's protocol log: `content` is a JSON array of wire-format content blocks; `responseId` is the model's own id, chained into the next turn's cache diagnostics |
-| `pending_messages`  | `id`, `conversationId`, `content`, `createdAt`, `injectedAt` | Telegram messages queued until a turn injects them |
-| `deliveries`        | `messageId`, `blockIndex`, `claimedAt`                       | Assistant text blocks already handed to Telegram |
-| `learning_jobs`     | `jobId`, `highWaterMessageId`, `startedAt`, `completedAt` | One consolidation run's frozen input range; completion is idempotent by job id |
-| `external_calls`    | `toolUseId`, `tool`, `status`, `result`, `startedAt`, `completedAt` | Irreversible outbound calls (send mail, create event), claimed before the request leaves |
+| `conversations`     | `id`, `chatId`, `topicId`, `createdAt`, `compactedThroughMessageId`, `summary` | One thread per Telegram (chatId, topicId); schedules and watched mail threads point at it. The last two columns are legacy |
+| `messages`          | `id`, `conversationId`, `role`, `kind`, `content`, `stopReason`, `responseId`, `consolidatedAt`, `createdAt` | Legacy transcript, frozen since AssistantDO; read only by the import |
+| `pending_messages`, `deliveries`, `learning_jobs`, `external_calls` | — | Legacy turn machinery, read only by the one-time import into AssistantDO and dropped in Phase 5 (see [`harness.md`](harness.md)) |
 | `files`             | `id`, `storageKey`, `filename`, `mimeType`, `byteSize`, `createdAt` | User-owned file metadata (bytes live in R2) |
 | `processed_updates` | `updateId`, `createdAt`                                       | Webhook idempotency                            |
 
@@ -265,14 +222,14 @@ both are synced on write.
 ## Durable Objects
 
 **A Durable Object has exactly one alarm, so work that needs its own alarm gets
-its own object**, all keyed by the same Clerk user id. `UserDO` and
-`TelegramAccountDO` are below; `ScheduleDO` and `LearningDO`, which carry the
-scheduling and learning alarms off the turn path, are detailed in
-[`topics.md`](topics.md) and [`schedules.md`](schedules.md).
+its own object**, all keyed by the same Clerk user id. `UserDO`, `AssistantDO`
+and `TelegramAccountDO` are below; `ScheduleDO`, which carries every deadline, is
+detailed in [`schedules.md`](schedules.md).
 
 | DO | Purpose | Storage |
 |---|---|---|
-| **UserDO** | Per-user data store and turn runner. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link, settings, and the topic model, and runs the agent turn on a DO alarm. | SQLite via do-orm |
+| **UserDO** | Per-user data store. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link, settings, the topic model, files, schedules and watched mail threads, and hands every message to AssistantDO. | SQLite via do-orm |
+| **AssistantDO** | Per-user agent runtime (`idFromName(clerkUserId)`). Runs every agent on Pi Durable through Cloudflare's `PiHarness` and Lifecycle, and delivers replies to Telegram. See [`harness.md`](harness.md). | SQLite: Pi's `pi_*` tables, Lifecycle's jobs, `assistant_*` bookkeeping |
 | **TelegramAccountDO** | One instance per Telegram account (`idFromName(telegramId)`). Owns that account's claim on a Zero user, and answers the webhook's lookup whenever the KV cache misses. | `ctx.storage` (one key) |
 
 ## HTTP surface
@@ -425,7 +382,7 @@ See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
 | Frontend | React 19, Tailwind v4, shadcn/ui primitives |
 | API    | Hono + OpenAPIHono + Zod on Cloudflare Workers |
 | State  | UserDO (Durable Object with SQLite via [do-orm](https://github.com/juanibiapina/do-orm)) + Workers KV for identity lookups |
-| Agents | Zero-owned tool loop (`agents/run.ts`) over [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) behind the `AgentModel` seam (`agents/model-pi.ts`) |
+| Agents | [Pi Durable](https://earendil.com/posts/pi-durable/) in `AssistantDO`, hosted by the Agents SDK's `PiHarness` and Lifecycle, over [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) |
 | LLM    | Cloudflare AI Gateway (BYOK) via pi-ai's built-in `cloudflare-ai-gateway` provider — `gpt-6-luna`; model + effort resolve together in `resolveModelSpec` |
 | Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
 | Secrets | ZeroVault (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |

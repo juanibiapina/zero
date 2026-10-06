@@ -81,6 +81,7 @@ Setting the zone mid-turn does not retroactively change that turn's anchor
 
 ## Wiring
 
-`UserDO.runTurn` reads `getSettings().timezone` and passes it plus a
-`setTimezone` callback into `orchestrateTurn` → `runInterfaceAgent`, threaded
-like `now`/`send`. The tool writes back through `updateSettings`.
+AssistantDO reads the timezone from UserDO (`agentRequestContext`, once per model
+request) for the current-time line, and from `agentSettings` when it builds the
+calendar and schedule tools. `set_timezone` writes back through
+`agentSetTimezone` → `updateSettings`.
