@@ -16,11 +16,11 @@ export async function attachMedicineReminders(replica: TaskdoReplica, workspace:
   // the previous process's pending notification confirmations.
   try {
     await reminders.refresh();
-    if (wasEnabled) await reminders.enable();
   } catch (error) {
     await reminders.close();
     throw error;
   }
+  if (wasEnabled) await reminders.enable().catch(() => {});
   const refresh = () => void reminders.refresh().catch(() => {});
   const foreground = AppState.addEventListener('change', (state) => {
     if (state === 'active') refresh();

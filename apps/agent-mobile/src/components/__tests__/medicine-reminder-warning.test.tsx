@@ -109,6 +109,16 @@ describe('Medicine reminder notice', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
+  it('opens the workspace after a restart when reminders that were on can no longer be scheduled', async () => {
+    const before = await open(<MedicinesList />);
+    await before.unmount();
+    await replica?.close();
+    replica = null;
+    mockDevice.failReplacement = true;
+    const screen = await open(<MedicinesList />, { enabled: false });
+    await waitFor(() => expect(screen.getByText('Reminders couldn’t be scheduled.')).toBeTruthy());
+  });
+
   it('keeps reminder setup off the medicine detail page', async () => {
     const screen = await open(<MedicineDetail />, { enabled: false });
     await returnToApp();
