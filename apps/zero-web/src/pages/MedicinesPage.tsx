@@ -60,7 +60,6 @@ export function MedicinesPage() {
   if (!replica || !snapshot) return <p className="p-6">Opening medicines…</p>;
   return <main className="mx-auto flex max-w-2xl flex-col gap-5 px-4 py-6 sm:px-6">
     <header className="flex items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{medicine?.name ?? "Medicines"}</h1><Button variant="outline" onClick={() => setEditor(medicine ? "edit" : "new")}>{medicine ? "Edit medicine" : "Add medicine"}</Button></header>
-    <p className="text-sm text-muted-foreground">Your Android phone delivers reminders and alarms. Enable them in Medicines on that phone.</p>
     {snapshot.recoveries.filter((entry) => entry.table === "medicines" || entry.table === "doses").map((entry) => <p key={`${entry.table}-${entry.id}`} role="alert" className="text-destructive">{entry.reason} ({entry.id})</p>)}
     {error ? <p role="alert" className="text-destructive">{error}</p> : null}
     {id && !medicine ? <p>This medicine is no longer available. <Link className="underline" to="/medicines">Back to medicines</Link></p> : null}
