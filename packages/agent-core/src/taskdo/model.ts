@@ -234,7 +234,7 @@ export class TodoModel {
     const conditions = this.classifyConditions();
     return {
       tasks,
-      projects: projects.filter((project) => project.state !== "done"),
+      projects,
       conditions: conditions.open,
       issues: [...issues, ...conditions.issues],
     };

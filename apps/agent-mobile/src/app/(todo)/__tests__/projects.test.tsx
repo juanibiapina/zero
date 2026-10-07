@@ -85,6 +85,13 @@ describe('ProjectsScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/projects/p');
   });
 
+  it('shows the empty state when every Project is done', async () => {
+    const screen = await renderScreen({ projects: [project('p', 'Run a 5K', { state: 'done' })] });
+    await waitFor(() =>
+      expect(screen.getByText('No projects yet. Name your first outcome.')).toBeTruthy());
+    expect(screen.queryByText('Run a 5K')).toBeNull();
+  });
+
   it('shows the empty state', async () => {
     const screen = await renderScreen();
     await waitFor(() =>

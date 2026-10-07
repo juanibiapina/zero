@@ -113,6 +113,20 @@ describe("TaskDO replica adapter", () => {
     await replica.close();
   });
 
+  it("keeps a done Project in the Project collection, also after reopening", async () => {
+    const { replica, store } = setup();
+    await replica.projects.add("Finished").isPersisted.promise;
+    const [project] = replica.snapshot().projects;
+    await replica.projects.setState(project.id, "done").isPersisted.promise;
+    expect(replica.projects.collection.get(project.id)?.state).toBe("done");
+    await replica.close();
+
+    const reopened = createTaskdoReplica({ store, queryClient: new QueryClient(), queryKeyScope: ["test"] });
+    await reopened.projects.collection.preload();
+    expect(reopened.projects.collection.get(project.id)?.state).toBe("done");
+    await reopened.close();
+  });
+
   it("maps canonical issues to existing local text and safe repair actions", async () => {
     const { replica, store, saves } = setup();
     store.setRow("projects", "deleted", { title: "Old", icon: "📁", state: "in-play", createdAt: NOW, deletedAt: NOW });

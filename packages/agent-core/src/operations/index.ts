@@ -75,18 +75,11 @@ const read = (value: unknown): OperationOutcome => ({ ok: true, changed: false, 
 const todo = (ctx: OperationContext) => new TodoModel({ store: ctx.store, now: ctx.now });
 const medicines = (ctx: OperationContext) => new MedicineModel(ctx.store, ctx.now);
 
-function allProjects(model: TodoModel): Project[] {
-  return model.store.getRowIds("projects")
-    .flatMap((id) => model.getProject(id) ?? [])
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-}
-
 function withAttention(projects: Project[], model: TodoModel, today: string) {
   const projection = model.project();
-  const all = allProjects(model);
   return projects.map((project) => ({
     ...project,
-    attention: projectDisplayStatus(project, projection.tasks, today, projection.conditions, all),
+    attention: projectDisplayStatus(project, projection.tasks, today, projection.conditions, projection.projects),
   }));
 }
 
@@ -189,7 +182,8 @@ export const todoOperations: readonly TodoOperation[] = [
     input: z.object({ includeDone: z.boolean().optional().describe("Also list done Projects") }),
     run: (ctx, input) => {
       const model = todo(ctx);
-      const projects = input.includeDone ? allProjects(model) : model.project().projects;
+      const all = model.project().projects;
+      const projects = input.includeDone ? all : all.filter((project) => project.state !== "done");
       return read({ today: ctx.today, projects: withAttention(projects, model, ctx.today) });
     },
   }),

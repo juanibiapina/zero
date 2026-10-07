@@ -74,7 +74,7 @@ export class TaskDomain {
   }
 
   listProjects(): Project[] {
-    return this.model.project().projects;
+    return this.model.project().projects.filter((project) => project.state !== "done");
   }
 
   listProjectRecoveries(): ProjectRecovery[] {

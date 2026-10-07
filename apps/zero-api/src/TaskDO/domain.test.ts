@@ -35,6 +35,15 @@ describe("TaskDomain adapter", () => {
     expect(saves()).toBe(5);
   });
 
+  it("lists only Projects that are not done", async () => {
+    const { domain } = setup();
+    await domain.addProject("open", "Open");
+    await domain.addProject("done", "Done");
+    await domain.setProjectState("done", "done");
+
+    expect(domain.listProjects().map((project) => project.id)).toEqual(["open"]);
+  });
+
   it("maps canonical conflicts to the established RPC values", async () => {
     const { domain } = setup();
     expect(await domain.addTask("task", "Task", null, "missing")).toBeNull();

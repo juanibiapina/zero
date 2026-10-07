@@ -64,12 +64,12 @@ function Projects({ replica }: { replica: TaskdoReplica }) {
   const onToggle = useCallback((status: ProjectDisplayStatus, current: boolean) => {
     setCollapseOverride((prev) => ({ ...prev, [status]: !current }));
   }, []);
-  const view = listView({ count: list.length, isLoading });
-  const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
   const today = useLocalDay();
   const grouped = useMemo(() => projectStatusSections({
     projects: list, tasks, conditions: conds, today, collapseOverride,
   }), [list, tasks, conds, today, collapseOverride]);
+  const view = listView({ count: grouped.length, isLoading });
+  const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
   const labelOf = useCallback((p: Project) => projectStatusContext(p, tasks, conds, list, today)?.rowLabel ?? null, [tasks, conds, list, today]);
   const sections = useMemo(() => grouped.map((s) => ({
     status: s.status, count: s.count, data: s.collapsed ? [] : s.projects, collapsed: s.collapsed,

@@ -230,15 +230,16 @@ export function createTaskdoReplica({
     queryKey: keys.tasks,
     queryFn: async () => snapshot.tasks,
     getKey: (task: Task) => task.id,
-    onInsert: async ({ transaction }) => {
+    onInsert: async ({ transaction, collection }) => {
       for (const mutation of transaction.mutations) await write(() => {
         const task = mutation.modified;
         const result = store.hasRow("tasks", task.id) ? model.restoreTask(task) : model.createTask(task);
         if (!result.ok) taskError(result.conflict);
       });
+      await collection.utils.refetch();
       return { refetch: false };
     },
-    onUpdate: async ({ transaction }) => {
+    onUpdate: async ({ transaction, collection }) => {
       for (const mutation of transaction.mutations) await write(() => {
         const fields: Partial<Omit<Task, "id" | "createdAt">> = {};
         for (const key of Object.keys(mutation.changes) as (keyof Task)[]) {
@@ -247,6 +248,7 @@ export function createTaskdoReplica({
         const result = model.updateTask(mutation.modified.id, fields);
         if (!result.ok) taskError(result.conflict);
       });
+      await collection.utils.refetch();
       return { refetch: false };
     },
   }));
@@ -256,7 +258,7 @@ export function createTaskdoReplica({
     queryKey: keys.projects,
     queryFn: async () => snapshot.projects,
     getKey: (project: Project) => project.id,
-    onInsert: async ({ transaction }) => {
+    onInsert: async ({ transaction, collection }) => {
       for (const mutation of transaction.mutations) await write(() => {
         const project = mutation.modified;
         const result = store.hasRow("projects", project.id)
@@ -264,9 +266,10 @@ export function createTaskdoReplica({
           : model.createProject(project);
         if (!result.ok) projectError(result.conflict);
       });
+      await collection.utils.refetch();
       return { refetch: false };
     },
-    onUpdate: async ({ transaction }) => {
+    onUpdate: async ({ transaction, collection }) => {
       for (const mutation of transaction.mutations) await write(() => {
         const { id } = mutation.modified;
         const fields: ProjectEditFields = {};
@@ -282,13 +285,15 @@ export function createTaskdoReplica({
           if (!result.ok) projectError(result.conflict);
         }
       });
+      await collection.utils.refetch();
       return { refetch: false };
     },
-    onDelete: async ({ transaction }) => {
+    onDelete: async ({ transaction, collection }) => {
       for (const mutation of transaction.mutations) await write(() => {
         if (!model.getProject(mutation.original.id)) projectError("missing-project");
         model.deleteProject(mutation.original.id);
       });
+      await collection.utils.refetch();
       return { refetch: false };
     },
   }));
@@ -298,7 +303,7 @@ export function createTaskdoReplica({
     queryKey: keys.conditions,
     queryFn: async () => snapshot.conditions,
     getKey: (condition: ProjectAttention) => condition.id,
-    onInsert: async ({ transaction }) => {
+    onInsert: async ({ transaction, collection }) => {
       for (const mutation of transaction.mutations) await write(() => {
         const condition = mutation.modified;
         const result = condition.kind === "free-text"
@@ -306,17 +311,20 @@ export function createTaskdoReplica({
           : model.createAfter(condition.id, condition.projectId, condition.refId, condition.createdAt);
         if (!result.ok) conditionError(result.conflict);
       });
+      await collection.utils.refetch();
       return { refetch: false };
     },
-    onUpdate: async ({ transaction }) => {
+    onUpdate: async ({ transaction, collection }) => {
       for (const mutation of transaction.mutations) await write(() => {
         const result = model.setConditionResolvedAt(mutation.modified.id, mutation.modified.resolvedAt);
         if (!result.ok) conditionError(result.conflict);
       });
+      await collection.utils.refetch();
       return { refetch: false };
     },
-    onDelete: async ({ transaction }) => {
+    onDelete: async ({ transaction, collection }) => {
       for (const mutation of transaction.mutations) await write(() => { model.deleteCondition(mutation.original.id); });
+      await collection.utils.refetch();
       return { refetch: false };
     },
   }));

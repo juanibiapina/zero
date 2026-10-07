@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-07: Fix Home saying "No projects yet" after you reopen the app when all your projects are done. It now says "No current projects".
+
 - 2026-10-07: Fix the + button sometimes floating in the middle of Home over a gray block when you open the app.
 
 - 2026-10-07: Change the suggested project for a new task to show a spinner while Zero is still choosing, and to go back to No project when you edit the title, so the task is saved with the project you see. Replace the Suggested label with a button that clears the task's project.

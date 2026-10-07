@@ -172,7 +172,7 @@ describe("canonical TinyBase todo model", () => {
     });
   });
 
-  it("projects only open Tasks, Projects, Waiting conditions, and Afters", () => {
+  it("projects open Tasks, Waiting conditions, and Afters, and every Project", () => {
     const { model } = setup();
     addProjects(model, "a", "b");
     model.createTask({ id: "open", text: "Open" });
@@ -187,7 +187,7 @@ describe("canonical TinyBase todo model", () => {
 
     expect(model.project()).toMatchObject({
       tasks: [{ id: "open" }],
-      projects: [],
+      projects: [{ id: "a", state: "done" }, { id: "b", state: "done" }],
       conditions: [{ id: "open-wait" }],
     });
   });
