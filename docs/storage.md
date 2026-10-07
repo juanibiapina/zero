@@ -153,7 +153,7 @@ Android also owns a durable native schedule/receipt store used by alarm receiver
 
 Android stores ended alarm instances by occurrence and scheduled time, scoped to the workspace. Stop and timeout retain the pending-dose reminder and leave confirmation history untouched. These markers survive native plan replacement, expire after their occurrence date, and clear with the workspace. Ringing sessions and their screen observers live only for the current playback lifetime.
 
-Native delivery state and reminder enablement are device-local implementation state; Medicine and Dose remain the two product models. Behavior lives in [`Medicine and Dose`](entities/medicine.md).
+Native delivery state and reminder enablement are device-local implementation state; Medicine and Dose remain the two product models. Product behavior lives in [`Medicine and Dose`](entities/medicine.md), and Android delivery in the [medicine-reminders module](../apps/agent-mobile/modules/medicine-reminders/README.md).
 
 ## Recurring Task transitions
 

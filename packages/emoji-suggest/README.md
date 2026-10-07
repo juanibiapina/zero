@@ -36,8 +36,11 @@ names that match before the first `:`, ignoring words such as man, woman, and
 person. A country found with probability of at least 0.5 adds its flag, first
 when the place is the main subject and sixth otherwise.
 
-A call takes about 0.7 s and up to about 35k input tokens. Measurements are in
-`docs/entities/project.md`.
+A call takes about 0.7 s and up to about 35k input tokens. On 2026-10-06 it
+suggested the hand-picked icon for 15 of 19 real Projects (the previous LLM:
+14), gave all 12 test titles naming a country, city, people, or language that
+country's flag, and answered in 699 ms median and 877 ms p95, against about
+2.3 s before.
 
 ## Catalog
 

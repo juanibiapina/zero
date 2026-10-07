@@ -1,70 +1,47 @@
 # Waiting condition
 
-A Waiting condition is a Project-scoped text condition that requires human
-review and manual resolution. Examples include “Breeder replies” and “Tax office
-sends the assessment.”
+## What it is
 
-This file is the source of truth for manual Waiting behavior. Automatic Project
-sequencing is a separate concept documented in `project-after.md`.
+A Waiting condition is something a Project waits for, written in your own
+words: "Breeder replies", "Tax office sends the assessment".
 
-## Data shape
+## Why it is its own block
 
-Manual Waiting shares the private `waiting_conditions` table with After rows,
-but its domain shape is exact:
+Only a person can tell when it is true. The app does not check it. It keeps
+the Project out of the way and keeps the reason in view until you resolve it.
 
-- `id` — client-minted UUID;
-- `projectId` — owning Project;
-- `kind` — fixed `free-text` storage tag;
-- `text` — required non-empty prose;
-- `refId` — always null;
-- `targetStatus` — always null;
-- `resolvedAt` — null while open, then the first resolution timestamp;
-- `createdAt` — ISO timestamp.
+## Rules
 
-The tagged table is an implementation detail. Callers use `addWaiting(projectId,
-text)` and never construct storage tags.
+- A condition belongs to one Project.
+- A Project can have several. Each resolves on its own.
+- While one is open, a Project in play is Waiting, unless one of its Tasks has
+  an arrived date.
+- Waiting outranks After.
+- The text is free prose. A condition does not point at a Task, a date, or a
+  calendar event.
 
-## Behavior
+## How it looks
 
-- A Project can have several manual conditions.
-- Every condition remains visible and resolves independently.
-- An In-play Project is Waiting while any manual condition remains open unless
-  an arrived dated Task makes it Active.
-- Manual Waiting outranks After.
-- Resolve sets `resolvedAt` and removes the row from the open client collection.
-- Remove hard-deletes one condition without affecting the others.
-- Deleting the owning Project deletes every manual condition it owns.
+Open conditions appear under "Waiting on" in the Project workspace, before
+After and Tasks. The full text wraps. Each row has a Resolve action. With no
+open condition, the section is absent.
 
-Task references, arbitrary Project statuses, Project-level dates, exact times,
-and Calendar events are invalid. Migration 0056 removes historical rows of those
-kinds.
+## Interactions
 
-## Presentation
+- Project: makes it Waiting. Deleting the Project deletes its conditions.
+- Task: completing a Project Task offers "Waiting for…" to add a condition to
+  that Project.
+- After: Waiting ranks above it.
+- Medicine: none.
+- Agents: list, add, resolve, and delete.
 
-The Project workspace places all open manual conditions under **Waiting on**
-before After and Tasks. Text wraps in full. Every row has a full-size Resolve
-action and separately labelled removal management.
+## Left out on purpose
 
-When no manual conditions exist, the heading, rows, add control, input, helper
-copy, and empty state are absent. The first condition comes from the Project Add
-surface. A non-empty section gains a local `+` for another condition.
+- Kinds of condition. Sequencing after another Project is its own block,
+  [After](project-after.md).
+- Conditions on Tasks, dates, or calendar events.
 
-Every mobile entry point opens the shared Project add drawer with **Waiting**
-selected. The drawer keeps Task, Waiting, After, and Project visible, identifies
-the destination under **Project** with its icon and title, and labels the **What
-needs to happen?** field **Waiting on**. Its circular add action submits the
-condition. There is no standalone form or condition-kind selector.
+## Ideas
 
-Completing a Project Task offers **Waiting for…** in transient feedback. It opens
-the same drawer for that Task's Project without delaying or owning the
-completion write.
-
-## Persistence interface
-
-Per-user REST routes remain `/api/waits` for list, add, resolve, and delete. The
-request schema accepts only manual free text or the separate exact After storage
-variant; no generic kind can be created.
-
-Mobile and web expose purpose-specific `addWaiting`, `resolveWaiting`, and
-`remove` operations through the same shared replica. Both read local-first and
-synchronize the mutation through TaskDO.
+- Zero resolves a condition when it sees the answer in email, the calendar, or
+  other content it reads.

@@ -25,9 +25,8 @@ that does not need attention yet.
 
 The app distinguishes manual lifecycle decisions from calculated attention:
 Backlog and Done are explicit Project state, while Active, Next, Waiting, and
-After follow from work and relationships. Every entity is introduced as a
-deliberate “Minecraft block” whose interactions with every existing entity and
-surface are considered rather than inherited from a generic data model.
+After follow from work and relationships. Each entity is a block with
+deliberate interactions; see `docs/entities/README.md`.
 
 ## Operating Context
 
@@ -80,8 +79,7 @@ Waiting and After.
 ## Evidence on Hand
 
 - Product vision and tracking: `docs/todo-app.md`
-- Entity behavior: `docs/entities/task.md`, `docs/entities/project.md`, and
-  `docs/entities/waiting-condition.md`
+- Entity behavior: `docs/entities/` (start at `README.md`)
 - Current Project surface:
   `src/app/(todo)/projects/[id].tsx`
 - Current shared Task editor: `src/components/task-editor-sheet.tsx`

@@ -416,7 +416,7 @@ success, failure, or interruption.
 
 Medicine deadline delivery, Doze, reboot, and race checks run in the separate
 `pnpm --filter @zero/agent-mobile e2e:medicine-native` harness (see
-`docs/entities/medicine.md`).
+[`modules/medicine-reminders/README.md`](modules/medicine-reminders/README.md)).
 
 The manual **Mobile E2E** GitHub workflow runs `.maestro/ci/` on an emulator
 against real Clerk to check guest startup, optional sign-in, and OAuth redirect

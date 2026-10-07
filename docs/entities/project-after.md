@@ -1,80 +1,44 @@
-# Project After
+# After
 
-A Project After relationship says that one Project needs no attention until
-another Project is Done.
+## What it is
 
-```text
-Project A ──after──▶ Project B is Done
-```
+After says that one Project needs no attention until another Project is Done:
+"Buy a dog after Buy a house".
 
-After models desired attention, not the reason for sequencing. “Buy a dog after
-Buy a house” and a genuine prerequisite use the same relationship.
+## Why it is its own block
 
-## Data shape
+The app can resolve it without you. When the other Project is Done, After goes
+away and the Project comes back by itself. It describes when you want to look
+at a Project, not why. A real prerequisite and a simple preference look the
+same.
 
-After shares the private `waiting_conditions` table with manual Waiting rows,
-but its domain shape is exact:
+## Rules
 
-- `id` — client-minted UUID;
-- `projectId` — source Project;
-- `kind` — fixed `project-status` storage tag;
-- `text` — always null;
-- `refId` — referenced Project id;
-- `targetStatus` — fixed `done`;
-- `resolvedAt` — null while open, set when the referenced Project completes;
-- `createdAt` — ISO timestamp.
+- A Project can follow several Projects. It stays After until all of them are
+  Done.
+- It points only at another Project. It never points at itself, at a Done
+  Project, or in a circle.
+- Active and Waiting outrank After. Dating a Task brings the Project forward
+  and leaves After in place.
+- After never moves a Task date and never hides a Task with an arrived date
+  from Home.
 
-Callers use `addAfter(projectId, afterProjectId)` and never construct this tagged
-storage representation.
+## How it looks
 
-## Graph rules
+The Project workspace shows an "After" section after Waiting and before Tasks.
+Each row shows the other Project's icon and title and opens it. The Projects
+list has an After group, collapsed by default.
 
-- A source Project can have several After relationships.
-- Several relationships use AND semantics: After remains while any row is open.
-- Only Projects can be referenced.
-- The source Project, Done Projects, direct duplicates, and candidates that
-  create direct or transitive cycles are invalid.
-- Backlog Projects may retain After rows; Backlog remains dominant.
+## Interactions
 
-The client filters candidates for immediate feedback. The server repeats every
-validation against authoritative state.
+- Project: completing the other Project resolves the After. Undo restores it.
+  Deleting either Project removes the relationship.
+- Waiting: ranks below it.
+- Task: none.
+- Medicine: none.
+- Agents: list, add, and delete.
 
-## Attention behavior
+## Left out on purpose
 
-For an In-play Project, Active and Waiting both outrank After. Scheduling a Task
-therefore brings the Project forward without resolving any relationship. When
-that work completes, After can become dominant again.
-
-After never changes Task dates and never suppresses an arrived Task from Home.
-It is absent from a Projects-list row while Active or Waiting, but every open
-relationship remains visible inside the Project workspace.
-
-## Lifecycle
-
-Completing a referenced Project atomically sets `resolvedAt` on every matching
-incoming row before returning. Completing the final referenced Project lets the
-source recalculate to Active, Waiting, or Next.
-
-Undoing that completion atomically reopens the Project and clears `resolvedAt`
-on the relationships resolved by its completion. The replica publishes the
-atomic Project-and-relationship update after both transitions.
-
-Deleting a referenced Project removes incoming rows and warns which source
-Projects may move to another section. Deleting a source removes its outgoing
-rows. Removing one of several rows leaves the others active.
-
-There is no notification when After resolves.
-
-## Presentation
-
-Projects uses an **After** section after Waiting and before Backlog. It is absent
-when empty and collapsed by default.
-
-The Project workspace shows an **After** region after manual Waiting and before
-Tasks. Each row shows the referenced Project's icon and title, navigates to that
-Project, and has separately labelled removal management. It does not say “Must
-be completed first.”
-
-The first relationship comes from the Project Add surface's **After project**
-action. A non-empty After region gains a local `+` that opens the same searchable
-Project picker.
+- A notification when After resolves.
+- After on Tasks or on dates.

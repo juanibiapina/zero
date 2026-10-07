@@ -1,7 +1,7 @@
 // Picks the Project a Task being typed most likely belongs to, or none. One
 // SystemOne Choice over the candidate Projects plus a `none` option; the answer
 // counts only when its probability reaches SUGGEST_THRESHOLD. The cutoff and
-// wording were measured with Jev on real Projects (see docs/entities/task.md).
+// wording were measured with Jev on real Projects (see packages/typesafe/README.md).
 //
 // It never throws: a decision failure or an unexpected answer is a soft miss,
 // because a missing suggestion leaves quick add exactly as it was.
