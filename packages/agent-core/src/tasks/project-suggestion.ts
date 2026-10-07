@@ -50,11 +50,16 @@ export const projectSuggestionCandidates = (
     }));
 };
 
+export type ProjectSuggestionState = { selection: ProjectSelection; loading: boolean };
+
 // Holds the Project a new Task will be filed under while the user types. It asks
 // for a suggestion after a pause in typing, drops answers for older text, and
-// never overrides a Project the user or the screen chose.
+// never overrides a Project the user or the screen chose. A suggestion made for
+// older text is dropped as soon as the text changes, and `loading` is true
+// whenever a suggestion can still arrive, so the screen shows exactly what an
+// add would save.
 export class ProjectSuggester {
-  private current: ProjectSelection;
+  private state: ProjectSuggestionState;
   private title = "";
   private candidates: ProjectSuggestionCandidate[] = [];
   private candidatesKey = "";
@@ -67,7 +72,7 @@ export class ProjectSuggester {
 
   constructor(options: { request: ProjectSuggestionRequest; initial?: ProjectSelection; delayMs?: number }) {
     this.request = options.request;
-    this.current = options.initial ?? NO_SELECTION;
+    this.state = { selection: options.initial ?? NO_SELECTION, loading: false };
     this.delayMs = options.delayMs ?? 400;
   }
 
@@ -76,38 +81,47 @@ export class ProjectSuggester {
     return () => this.listeners.delete(listener);
   };
 
-  getSelection = (): ProjectSelection => this.current;
+  getState = (): ProjectSuggestionState => this.state;
 
   update(input: { title: string; candidates: ProjectSuggestionCandidate[]; enabled: boolean }): void {
     const title = input.title.trim();
     const candidatesKey = JSON.stringify(input.candidates);
     if (title === this.title && candidatesKey === this.candidatesKey && input.enabled === this.enabled) return;
+    const titleChanged = title !== this.title;
     this.title = title;
     this.candidates = input.candidates;
     this.candidatesKey = candidatesKey;
     this.enabled = input.enabled;
     this.cancel();
-    if (this.current.source === "context" || this.current.source === "manual") return;
-    if (this.current.source === "suggested" && !this.candidates.some((project) => project.id === this.current.projectId)) {
-      this.set(NO_SELECTION);
-    }
-    if (!this.enabled || title.length < MIN_TITLE || this.candidates.length === 0) {
-      this.set(NO_SELECTION);
+    let selection = this.state.selection;
+    if (selection.source === "context" || selection.source === "manual") {
+      this.set(selection, false);
       return;
     }
+    if (!this.enabled || title.length < MIN_TITLE || this.candidates.length === 0) {
+      this.set(NO_SELECTION, false);
+      return;
+    }
+    if (
+      selection.source === "suggested" &&
+      (titleChanged || !this.candidates.some((project) => project.id === selection.projectId))
+    ) {
+      selection = NO_SELECTION;
+    }
     this.timer = setTimeout(() => void this.ask(title), this.delayMs);
+    this.set(selection, true);
   }
 
   pick(projectId: string | null): void {
     this.cancel();
-    this.set({ projectId, source: "manual" });
+    this.set({ projectId, source: "manual" }, false);
   }
 
   reset(initial: ProjectSelection = NO_SELECTION): void {
     this.cancel();
     this.title = "";
     this.candidatesKey = "";
-    this.set(initial);
+    this.set(initial, false);
   }
 
   dispose(): void {
@@ -129,7 +143,7 @@ export class ProjectSuggester {
     if (controller.signal.aborted || title !== this.title) return;
     this.inFlight = null;
     const known = projectId != null && this.candidates.some((project) => project.id === projectId);
-    this.set(known ? { projectId, source: "suggested" } : NO_SELECTION);
+    this.set(known ? { projectId, source: "suggested" } : NO_SELECTION, false);
   }
 
   private cancel(): void {
@@ -139,9 +153,16 @@ export class ProjectSuggester {
     this.inFlight = null;
   }
 
-  private set(next: ProjectSelection): void {
-    if (next.projectId === this.current.projectId && next.source === this.current.source) return;
-    this.current = next;
+  private set(selection: ProjectSelection, loading: boolean): void {
+    const current = this.state;
+    if (
+      selection.projectId === current.selection.projectId &&
+      selection.source === current.selection.source &&
+      loading === current.loading
+    ) {
+      return;
+    }
+    this.state = { selection, loading };
     for (const listener of this.listeners) listener();
   }
 }

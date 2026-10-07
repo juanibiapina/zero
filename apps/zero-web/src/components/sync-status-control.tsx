@@ -1,17 +1,14 @@
 import { useState } from "react";
 import { todoSyncPresentation, type TodoSyncDisplayKind } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { reportTodoError } from "@/lib/todo-feedback";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTodoData } from "@/lib/todo-data";
 
 function StatusGlyph({ kind, className }: { kind: TodoSyncDisplayKind; className?: string }) {
-  if (kind === "busy") return (
-    <svg viewBox="0 0 24 24" fill="none" className={`${className ?? ""} animate-spin`} aria-hidden>
-      <path d="M20 12a8 8 0 1 1-2.34-5.66" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
+  if (kind === "busy") return <Spinner className={className} />;
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       {kind === "synced" ? <><path d="M7 18h10a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.26 8.5 4.5 4.5 0 0 0 7 18Z" /><path d="m9 13 2 2 4-4" /></>

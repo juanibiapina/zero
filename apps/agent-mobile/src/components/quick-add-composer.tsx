@@ -455,11 +455,17 @@ export function useQuickAdd({
                 label: selectedProject ? selectedProject.title : 'No project',
                 icon: selectedProject?.icon ?? null,
                 active: addProjectId != null,
-                note:
-                  selectedProject && projectChoice.selection.source === 'suggested'
-                    ? 'Suggested'
-                    : undefined,
+                loading: projectChoice.loading,
+                loadingLabel: 'Suggesting a project',
                 onPress: () => setOverlay('project'),
+                trailingAction: selectedProject
+                  ? {
+                      icon: <Text className="text-[20px]">×</Text>,
+                      accessibilityLabel: 'Clear project',
+                      onPress: () => projectChoice.pick(null),
+                      testID: 'quick-add-clear-project',
+                    }
+                  : undefined,
               }
             : undefined
         }

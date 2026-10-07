@@ -4,6 +4,7 @@ import type { TextRange } from "@zeroapps/recurrence";
 import { ScheduleHighlightInput } from "@/components/ScheduleHighlightInput";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/spinner";
 import { CalendarGlyph, ScheduleMenu } from "@/components/schedule-menu";
 import { ProjectOptionList } from "@/components/ProjectOptionList";
 import { useLocalDay } from "@/lib/local-day";
@@ -65,12 +66,13 @@ export function TaskDateField({ date, label, onPick, onOpen, onStopRecurrence, o
   );
 }
 
-export function TaskProjectField({ projects, tasks, conditions, projectId, suggested = false, onPick, onOpen, compact = false }: {
+export function TaskProjectField({ projects, tasks, conditions, projectId, loading = false, onClear, onPick, onOpen, compact = false }: {
   projects: Project[];
   tasks: Task[];
   conditions: WaitingCondition[];
   projectId: string | null;
-  suggested?: boolean;
+  loading?: boolean;
+  onClear?: () => void;
   onPick: (projectId: string | null) => void;
   onOpen?: () => void;
   compact?: boolean;
@@ -78,19 +80,23 @@ export function TaskProjectField({ projects, tasks, conditions, projectId, sugge
   const today = useLocalDay();
   const [open, setOpen] = useState(false);
   const current = projects.find((project) => project.id === projectId);
-  const isSuggested = suggested && current != null;
   return (
-    <Popover open={open} onOpenChange={(next) => { if (next) onOpen?.(); setOpen(next); }}>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size={compact ? "sm" : "default"} aria-label={compact ? current ? `Project: ${current.title}${isSuggested ? ", suggested" : ""}` : "Add to a project" : undefined}>
-          {current ? <span aria-hidden>{current.icon}</span> : null}
-          {current?.title ?? (compact ? "No project" : "Project")}
-          {isSuggested ? <span className="text-xs font-normal text-muted-foreground">Suggested</span> : null}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-1">
-        <ProjectOptionList projects={projects} tasks={tasks} conditions={conditions} today={today} selectedProjectId={projectId} showNoProject onPick={(id) => { onPick(id); setOpen(false); }} />
-      </PopoverContent>
-    </Popover>
+    <div className="flex items-center gap-1">
+      <Popover open={open} onOpenChange={(next) => { if (next) onOpen?.(); setOpen(next); }}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" size={compact ? "sm" : "default"} aria-label={compact ? current ? `Project: ${current.title}` : "Add to a project" : undefined}>
+            {current ? <span aria-hidden>{current.icon}</span> : null}
+            {current?.title ?? (compact ? "No project" : "Project")}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-1">
+          <ProjectOptionList projects={projects} tasks={tasks} conditions={conditions} today={today} selectedProjectId={projectId} showNoProject onPick={(id) => { onPick(id); setOpen(false); }} />
+        </PopoverContent>
+      </Popover>
+      {current && onClear ? <Button type="button" variant="ghost" size="icon" aria-label="Clear project" className={compact ? "size-8" : undefined} onClick={onClear}>
+        <span aria-hidden className="text-lg leading-none">×</span>
+      </Button> : null}
+      {loading ? <span role="status" aria-label="Suggesting a project" className="text-muted-foreground"><Spinner className="size-4" /></span> : null}
+    </div>
   );
 }

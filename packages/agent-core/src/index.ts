@@ -23,6 +23,7 @@ export {
   type ProjectSelectionSource,
   type ProjectSuggestionCandidate,
   type ProjectSuggestionRequest,
+  type ProjectSuggestionState,
 } from "./tasks/project-suggestion";
 export { homeTasks } from "./tasks/home";
 export {

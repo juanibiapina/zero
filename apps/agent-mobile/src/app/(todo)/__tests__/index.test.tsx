@@ -434,10 +434,10 @@ describe('HomeScreen project suggestions', () => {
     await fireEvent.press(screen.getByLabelText('Add'));
     const input = screen.getByPlaceholderText('Add a task');
     await fireEvent.changeText(input, 'buy grout');
+    expect(screen.getByLabelText('Suggesting a project')).toBeTruthy();
 
-    await waitFor(() =>
-      expect(screen.getByLabelText('Bathroom renovation, Suggested')).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByLabelText('Clear project')).toBeTruthy());
+    expect(screen.queryByLabelText('Suggesting a project')).toBeNull();
     const [, init] = suggestionCalls().at(-1)!;
     expect(JSON.parse(String(init?.body))).toMatchObject({
       title: 'buy grout',
@@ -449,6 +449,27 @@ describe('HomeScreen project suggestions', () => {
       expect(
         [...screen.data.replica!.tasks.collection.values()].find((row) => row.text === 'buy grout'),
       ).toMatchObject({ projectId: 'bathroom' }),
+    );
+  });
+
+  it('clears a suggested Project and files the Task with no Project', async () => {
+    const screen = await renderScreen({
+      projects: [project('bathroom', 'Bathroom renovation', { icon: '🛁' })],
+    });
+    await fireEvent.press(screen.getByLabelText('Add'));
+    const input = screen.getByPlaceholderText('Add a task');
+    await fireEvent.changeText(input, 'buy grout');
+    await waitFor(() => expect(screen.getByLabelText('Clear project')).toBeTruthy());
+
+    await fireEvent.press(screen.getByLabelText('Clear project'));
+    expect(screen.getByLabelText('No project')).toBeTruthy();
+    expect(screen.queryByLabelText('Clear project')).toBeNull();
+
+    await fireEvent(input, 'submitEditing');
+    await waitFor(() =>
+      expect(
+        [...screen.data.replica!.tasks.collection.values()].find((row) => row.text === 'buy grout'),
+      ).toMatchObject({ projectId: null }),
     );
   });
 

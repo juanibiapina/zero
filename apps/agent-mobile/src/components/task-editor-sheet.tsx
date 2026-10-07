@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
-import { Keyboard, Modal, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   KeyboardEvents,
@@ -49,7 +49,8 @@ type EditorAction = {
   onPress: () => void;
   accessibilityLabel?: string;
   icon?: string | null;
-  note?: string;
+  loading?: boolean;
+  loadingLabel?: string;
   testID?: string;
   trailingAction?: {
     icon: ReactNode;
@@ -65,15 +66,17 @@ function EditorActionRow({
   onPress,
   accessibilityLabel,
   icon,
-  note,
+  loading = false,
+  loadingLabel,
   testID,
   trailingAction,
 }: EditorAction) {
+  const loadingColor = useColor('--color-foreground-secondary');
   return (
     <View className="max-w-full flex-row items-stretch">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel ?? (note ? `${label}, ${note}` : label)}
+        accessibilityLabel={accessibilityLabel ?? label}
         accessibilityValue={accessibilityLabel ? { text: label } : undefined}
         testID={testID}
         onPress={onPress}
@@ -89,10 +92,14 @@ function EditorActionRow({
         >
           {icon != null ? `${icon} ${label}` : label}
         </Text>
-        {note ? (
-          <Text variant="caption" className="pl-3 text-foreground-secondary">
-            {note}
-          </Text>
+        {loading ? (
+          <View className="pl-3">
+            <ActivityIndicator
+              accessibilityLabel={loadingLabel}
+              color={loadingColor}
+              size="small"
+            />
+          </View>
         ) : null}
       </Pressable>
       {trailingAction ? (

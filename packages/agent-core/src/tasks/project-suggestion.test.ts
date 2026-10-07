@@ -47,7 +47,7 @@ describe("ProjectSuggester", () => {
     calls[0]?.resolve("bathroom");
     await flush();
 
-    expect(suggester.getSelection()).toEqual({ projectId: "bathroom", source: "suggested" });
+    expect(suggester.getState().selection).toEqual({ projectId: "bathroom", source: "suggested" });
   });
 
   it("drops an answer for text the user has since changed", async () => {
@@ -60,12 +60,12 @@ describe("ProjectSuggester", () => {
     expect(calls[0]?.signal.aborted).toBe(true);
     calls[0]?.resolve("bathroom");
     await flush();
-    expect(suggester.getSelection().projectId).toBeNull();
+    expect(suggester.getState().selection.projectId).toBeNull();
 
     vi.advanceTimersByTime(400);
     calls[1]?.resolve("trip");
     await flush();
-    expect(suggester.getSelection()).toEqual({ projectId: "trip", source: "suggested" });
+    expect(suggester.getState().selection).toEqual({ projectId: "trip", source: "suggested" });
   });
 
   it("never replaces a Project the user picked, including No project", async () => {
@@ -76,7 +76,7 @@ describe("ProjectSuggester", () => {
     vi.advanceTimersByTime(1000);
 
     expect(request).not.toHaveBeenCalled();
-    expect(suggester.getSelection()).toEqual({ projectId: null, source: "manual" });
+    expect(suggester.getState().selection).toEqual({ projectId: null, source: "manual" });
   });
 
   it("never asks when the screen chose the Project or suggestions are off", () => {
@@ -88,7 +88,7 @@ describe("ProjectSuggester", () => {
     vi.advanceTimersByTime(1000);
 
     expect(request).not.toHaveBeenCalled();
-    expect(inProject.getSelection()).toEqual({ projectId: "trip", source: "context" });
+    expect(inProject.getState().selection).toEqual({ projectId: "trip", source: "context" });
   });
 
   it("clears a suggestion when the request fails or the title gets too short", async () => {
@@ -99,19 +99,19 @@ describe("ProjectSuggester", () => {
     calls[0]?.resolve("bathroom");
     await flush();
 
-    suggester.update({ title: "buy grout now", candidates, enabled: true });
+    suggester.update({ title: "buy grout", candidates: [...candidates, candidate("garden")], enabled: true });
     vi.advanceTimersByTime(400);
-    expect(suggester.getSelection().projectId).toBe("bathroom");
+    expect(suggester.getState().selection.projectId).toBe("bathroom");
     calls[1]?.reject(new Error("offline"));
     await flush();
-    expect(suggester.getSelection()).toEqual({ projectId: null, source: "none" });
+    expect(suggester.getState().selection).toEqual({ projectId: null, source: "none" });
 
     suggester.update({ title: "buy grout", candidates, enabled: true });
     vi.advanceTimersByTime(400);
     calls[2]?.resolve("bathroom");
     await flush();
     suggester.update({ title: "bu", candidates, enabled: true });
-    expect(suggester.getSelection()).toEqual({ projectId: null, source: "none" });
+    expect(suggester.getState().selection).toEqual({ projectId: null, source: "none" });
   });
 
   it("drops a suggested Project that is no longer a candidate", async () => {
@@ -124,20 +124,80 @@ describe("ProjectSuggester", () => {
 
     suggester.update({ title: "buy grout", candidates: [trip], enabled: true });
 
-    expect(suggester.getSelection().projectId).toBeNull();
+    expect(suggester.getState().selection.projectId).toBeNull();
   });
 
-  it("notifies subscribers when the selection changes", async () => {
+  it("drops a suggested Project as soon as the title changes, until the next answer", async () => {
     const { request, calls } = deferred();
     const suggester = new ProjectSuggester({ request });
-    const listener = vi.fn();
-    suggester.subscribe(listener);
     suggester.update({ title: "buy grout", candidates, enabled: true });
     vi.advanceTimersByTime(400);
     calls[0]?.resolve("bathroom");
     await flush();
 
+    suggester.update({ title: "buy grout and flights", candidates, enabled: true });
+    expect(suggester.getState()).toEqual({ selection: { projectId: null, source: "none" }, loading: true });
+
+    vi.advanceTimersByTime(400);
+    calls[1]?.resolve("trip");
+    await flush();
+    expect(suggester.getState()).toEqual({ selection: { projectId: "trip", source: "suggested" }, loading: false });
+  });
+
+  it("keeps a Project the user picked when the title changes", () => {
+    const { request } = deferred();
+    const suggester = new ProjectSuggester({ request });
+    suggester.update({ title: "buy grout", candidates, enabled: true });
+    suggester.pick("trip");
+    suggester.update({ title: "buy grout now", candidates, enabled: true });
+
+    expect(suggester.getState()).toEqual({ selection: { projectId: "trip", source: "manual" }, loading: false });
+  });
+
+  it("is loading from the first keystroke until the answer arrives", async () => {
+    const { request, calls } = deferred();
+    const suggester = new ProjectSuggester({ request });
+    const listener = vi.fn();
+    suggester.subscribe(listener);
+
+    suggester.update({ title: "buy", candidates, enabled: true });
+    expect(suggester.getState().loading).toBe(true);
+    suggester.update({ title: "buy grout", candidates, enabled: true });
+    vi.advanceTimersByTime(400);
+    expect(suggester.getState().loading).toBe(true);
     expect(listener).toHaveBeenCalledOnce();
+
+    calls[0]?.resolve("bathroom");
+    await flush();
+    expect(suggester.getState()).toEqual({ selection: { projectId: "bathroom", source: "suggested" }, loading: false });
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops loading when the request fails or nothing is left to ask", async () => {
+    const { request, calls } = deferred();
+    const suggester = new ProjectSuggester({ request });
+    suggester.update({ title: "buy grout", candidates, enabled: true });
+    vi.advanceTimersByTime(400);
+    calls[0]?.reject(new Error("offline"));
+    await flush();
+    expect(suggester.getState().loading).toBe(false);
+
+    suggester.update({ title: "buy grout now", candidates, enabled: true });
+    suggester.update({ title: "bu", candidates, enabled: true });
+    expect(suggester.getState().loading).toBe(false);
+
+    suggester.update({ title: "buy grout", candidates, enabled: true });
+    suggester.update({ title: "buy grout", candidates, enabled: false });
+    expect(suggester.getState().loading).toBe(false);
+
+    suggester.update({ title: "buy grout", candidates, enabled: true });
+    suggester.pick(null);
+    expect(suggester.getState().loading).toBe(false);
+
+    suggester.reset();
+    suggester.update({ title: "buy grout", candidates, enabled: true });
+    suggester.reset({ projectId: "trip", source: "context" });
+    expect(suggester.getState()).toEqual({ selection: { projectId: "trip", source: "context" }, loading: false });
   });
 });
 

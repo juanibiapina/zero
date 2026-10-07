@@ -35,7 +35,7 @@ export function useProjectSuggestion({
     () => projectSuggestionCandidates(projects, tasks),
     [projects, tasks],
   );
-  const selection = useSyncExternalStore(suggester.subscribe, suggester.getSelection);
+  const { selection, loading } = useSyncExternalStore(suggester.subscribe, suggester.getState);
   useEffect(
     () => suggester.update({ title, candidates, enabled }),
     [suggester, title, candidates, enabled],
@@ -43,5 +43,5 @@ export function useProjectSuggestion({
   useEffect(() => () => suggester.dispose(), [suggester]);
   const pick = useCallback((projectId: string | null) => suggester.pick(projectId), [suggester]);
   const reset = useCallback((next: ProjectSelection) => suggester.reset(next), [suggester]);
-  return { selection, pick, reset };
+  return { selection, loading, pick, reset };
 }

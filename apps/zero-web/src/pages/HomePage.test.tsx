@@ -535,8 +535,10 @@ describe("HomePage project suggestions", () => {
     render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.change(await screen.findByRole("textbox", { name: "Add a task" }), { target: { value: "buy grout tomorrow" } });
+    expect(screen.getByRole("status", { name: "Suggesting a project" })).toBeInTheDocument();
 
-    expect(await screen.findByRole("button", { name: "Project: Bathroom renovation, suggested" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Project: Bathroom renovation" })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Suggesting a project" })).toBeNull();
     const [, init] = suggestionCalls().at(-1) as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({
       title: "buy grout",
@@ -547,6 +549,24 @@ describe("HomePage project suggestions", () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
     });
     await waitFor(() => expect(defaultToastController.getSnapshot()[0]?.message).toBe("Filed to project"));
+  });
+
+  it("clears a suggested Project and files the Task with no Project", async () => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ projectId: "p" }) });
+    setApi([], [projectRow("p", { title: "Bathroom renovation" })]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    fireEvent.change(await screen.findByRole("textbox", { name: "Add a task" }), { target: { value: "buy grout" } });
+    await screen.findByRole("button", { name: "Project: Bathroom renovation" });
+    fireEvent.click(screen.getByRole("button", { name: "Clear project" }));
+
+    expect(screen.getByRole("button", { name: "Add to a project" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear project" })).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    });
+    await waitFor(() => expect([...h.replica!.tasks.collection.values()].find((row) => row.text === "buy grout")).toMatchObject({ projectId: null }));
   });
 
   it("keeps a Project chosen by hand and stops asking", async () => {

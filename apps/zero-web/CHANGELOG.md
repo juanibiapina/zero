@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-07: Change the suggested project for a new task to show a spinner while Zero is still choosing, and to go back to No project when you edit the title, so the task is saved with the project you see. Replace the Suggested label with a button that clears the task's project.
+
 - 2026-10-06: Add suggested icons while you name a new project. The best one is used unless you tap another, a tapped icon stays as you keep typing, and tapping the project's icon opens the full emoji picker.
 
 - 2026-10-06: Change suggested project icons to appear almost at once, drawn from every emoji, including your destination's flag for trips.

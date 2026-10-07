@@ -134,7 +134,7 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
           onDismissRange={(range) => setDraft((current) => current.dismiss(range))}
           trailing={<Button type="submit" disabled={pending || (kind === "task" ? draftView.commit.kind !== "ready" : !effectiveText.trim())}>{pending ? "Saving…" : "Add"}</Button>}
           dateField={kind === "task" ? { onPick: (next) => setDraft((current) => current.pickCreationDate(next, today)) } : undefined}
-          projectField={kind === "task" ? { projects, tasks, conditions, projectId, suggested: projectChoice.selection.source === "suggested", onPick: projectChoice.pick } : undefined}
+          projectField={kind === "task" ? { projects, tasks, conditions, projectId, loading: projectChoice.loading, onClear: () => projectChoice.pick(null), onPick: projectChoice.pick } : undefined}
           leading={kind === "project" ? <Popover open={pickingIcon} onOpenChange={setPickingIcon}>
             <PopoverTrigger asChild>
               <button type="button" aria-label={`Change icon, ${projectIcon.choice.icon}`}
