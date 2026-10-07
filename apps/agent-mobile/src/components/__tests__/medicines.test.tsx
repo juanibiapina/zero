@@ -126,15 +126,44 @@ describe('Medicine creation and management', () => {
     await fireEvent.press(screen.getByText('Resume reminders'));
     await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(false));
   });
-  it('shows a pending dose without a manual Taken button', async () => {
+  it('records a pending dose as Taken from its row as a fallback', async () => {
     const data = createInMemoryTodoData();
     const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
     mockParams = { id: medicine.id };
     const screen = await openScreen(<MedicineDetail />, data);
     expect(screen.getByText('Today')).toBeTruthy();
-    expect(screen.getByText('20:00')).toBeTruthy();
-    expect(screen.queryByLabelText('Taken 20:00 dose')).toBeNull();
     expect(data.replica!.snapshot().doses).toHaveLength(0);
+    await fireEvent.press(screen.getByLabelText('Taken 20:00 dose'));
+    await waitFor(() => expect(data.replica!.snapshot().doses.filter((dose) => dose.takenAt)).toHaveLength(1));
+    expect(screen.getByText(/Taken at /)).toBeTruthy();
+    expect(screen.queryByLabelText('Taken 20:00 dose')).toBeNull();
+  });
+  it('offers no Taken while a medicine is paused', async () => {
+    const data = createInMemoryTodoData();
+    const medicine = await data.replica!.medicines.add({ ...MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit(), paused: true });
+    mockParams = { id: medicine.id };
+    const screen = await openScreen(<MedicineDetail />, data);
+    expect(screen.getByText('Paused')).toBeTruthy();
+    expect(screen.queryByText('Taken')).toBeNull();
+  });
+  it('undoes a taken dose only through a long press and a confirmation', async () => {
+    const data = createInMemoryTodoData();
+    const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
+    await data.replica!.medicines.take(medicineOccurrences(medicine, medicineToday())[0]);
+    mockParams = { id: medicine.id };
+    const screen = await openScreen(<MedicineDetail />, data);
+    const taken = screen.getByLabelText(/^20:00 dose, taken at /);
+    await fireEvent.press(taken);
+    expect(screen.queryByText('Mark 20:00 dose as not taken?')).toBeNull();
+    await fireEvent(taken, 'longPress');
+    await fireEvent.press(screen.getByLabelText('Cancel'));
+    expect(screen.queryByText('Mark 20:00 dose as not taken?')).toBeNull();
+    expect(data.replica!.snapshot().doses[0].takenAt).not.toBeNull();
+    await fireEvent(screen.getByLabelText(/^20:00 dose, taken at /), 'longPress');
+    expect(screen.getByText('Mark 20:00 dose as not taken?')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Undo'));
+    await waitFor(() => expect(data.replica!.snapshot().doses[0].takenAt).toBeNull());
+    expect(screen.getByLabelText('Taken 20:00 dose')).toBeTruthy();
   });
   it('keeps creation open through native time selection and closes customization before discard on Back', async () => {
     const screen = await openScreen(<MedicinesList />);

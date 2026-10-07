@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-07: Add Taken to today's pending doses on a medicine's screen, for when a reminder was missed or its Taken did not work. Long-press a taken dose to undo it.
+
 - 2026-10-07: Add Postpone 1 hour to medicine reminders. The reminder comes back an hour later with sound, and a dose time within that hour waits for it.
 
 - 2026-10-06: Change the + on a project's screen to grow into the add drawer like everywhere else, and keep your text in the drawer when an add fails on any screen.

@@ -1,6 +1,6 @@
 import { Host, Icon } from '@expo/ui';
 import { safeRandomUUID } from '@tanstack/db';
-import { MedicineDraft, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Medicine } from '@zero/agent-core';
+import { MedicineDraft, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Dose, type Medicine } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, View } from 'react-native';
@@ -30,8 +30,8 @@ function MedicineGlyph({ name }: { name: keyof typeof MEDICINE_ICONS }) {
 const time = (instant: string) => new Date(instant).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 const day = (date: string) => new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(parseLocalDay(date));
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
-function Action({ label, onPress, disabled = false, danger = false }: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} className="min-h-12 justify-center py-2"><Text className={danger ? 'font-medium text-danger' : 'font-medium text-accent'}>{label}</Text></Pressable>;
+function Action({ label, accessibilityLabel = label, onPress, disabled = false, danger = false }: { label: string; accessibilityLabel?: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} disabled={disabled} onPress={onPress} className="min-h-12 justify-center py-2"><Text className={danger ? 'font-medium text-danger' : 'font-medium text-accent'}>{label}</Text></Pressable>;
 }
 function useMedicines() {
   const replica = useTodoReplica();
@@ -103,6 +103,7 @@ export function MedicineDetail() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [undoing, setUndoing] = useState<Dose | null>(null);
   const actionPending = useRef(false);
   const run = async (operation: () => Promise<void>) => {
     if (actionPending.current) return;
@@ -128,14 +129,23 @@ export function MedicineDetail() {
       {visibleDoses.map((planned) => {
         const dose = doses.find((item) => item.id === planned.id) ?? planned;
         const slot = medicine.doses.find((candidate) => candidate.id === dose.slotId);
-        return <View key={dose.id} className="min-h-16 flex-row flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-divider py-3">
-          <View className="gap-0.5"><Text className="font-semibold" style={{ fontVariant: ['tabular-nums'] }}>{time(dose.scheduledAt)}</Text><Text variant="caption">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : slot ? `Early reminder ${slot.remindAt}` : 'Unrecorded'}</Text></View>
+        const actionable = dose.on === today && state === 'active' && !!slot;
+        const content = <View className="gap-0.5"><Text className="font-semibold" style={{ fontVariant: ['tabular-nums'] }}>{time(dose.scheduledAt)}</Text><Text variant="caption">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : slot ? `Early reminder ${slot.remindAt}` : 'Unrecorded'}</Text></View>;
+        const rowClass = 'min-h-16 flex-row flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-divider py-3';
+        if (dose.takenAt && dose.on === today) {
+          const undo = () => { if (!busy) setUndoing(dose); };
+          return <Pressable key={dose.id} accessibilityLabel={`${time(dose.scheduledAt)} dose, taken at ${time(dose.takenAt)}`} accessibilityActions={[{ name: 'undo', label: `Undo ${time(dose.scheduledAt)} dose` }]} onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'undo') undo(); }} onLongPress={undo} className={rowClass}>{content}</Pressable>;
+        }
+        return <View key={dose.id} className={rowClass}>
+          {content}
+          {!dose.takenAt && actionable ? <Action label="Taken" accessibilityLabel={`Taken ${time(dose.scheduledAt)} dose`} disabled={busy} onPress={() => void run(() => replica.medicines.take(dose))} /> : null}
         </View>;
       })}
       {state !== 'active' && !params.dose ? <Text variant="subtitle" className="py-4">{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text> : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Dose history" accessibilityState={{ expanded: historyOpen }} onPress={() => setHistoryOpen((current) => !current)} className="min-h-14 flex-row items-center justify-between gap-3 pt-4"><Text variant="section">History</Text><MedicineGlyph name={historyOpen ? 'collapse' : 'expand'} /></Pressable>
       {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{day(dose.on)} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : 'Not recorded'}</Text></View>)}</View> : null}
     </Page>
+    {undoing ? <ConfirmDialog title={`Mark ${time(undoing.scheduledAt)} dose as not taken?`} message="It will show as pending again." cancelLabel="Cancel" confirmLabel="Undo" onCancel={() => setUndoing(null)} onConfirm={() => { const dose = undoing; setUndoing(null); void run(() => replica.medicines.undo(dose.id)); }} /> : null}
     {editing || copying ? <MedicineDrawer key={copying ? 'copy' : medicine.id} source={medicine} copy={copying} onClose={() => { setEditing(false); setCopying(false); }} onSaved={(id) => { setEditing(false); setCopying(false); if (copying) router.replace(`/browse/medicines/${id}`); }} /> : null}
   </View>;
 }
