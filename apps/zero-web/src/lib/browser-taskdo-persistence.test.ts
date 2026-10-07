@@ -184,7 +184,7 @@ describe("browser TaskDO persistence", () => {
   test("polls only while visible and refreshes immediately when visibility resumes", async () => {
     Object.defineProperty(globalThis, "BroadcastChannel", { configurable: true, value: undefined });
     visibility = "hidden";
-    const setIntervalSpy = vi.spyOn(globalThis, "setInterval").mockReturnValue(123 as never);
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval").mockReturnValue(123);
     const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval").mockImplementation(() => {});
     const reader = await open("account-visibility");
     const writer = await open("account-visibility");

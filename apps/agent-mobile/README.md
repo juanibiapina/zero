@@ -103,6 +103,13 @@ back only where the native component does not fit.
   only native dialog (RN `Alert`) dismisses the keyboard, which would regress the
   quick-add discard flow. The `Fab` is a floating circular button, not a
   native `Button` shape.
+- **`react-native-keyboard-controller` runs ahead of the SDK pin.** SDK 57
+  bundles 1.21.9, which on Android can keep reporting an open keyboard after a
+  system window or backgrounding closed it, so the quick-add + floats one
+  keyboard height above the corner over a gray block (upstream #1006, #1525;
+  fixed in 1.21.12 and 1.21.14). `expo.install.exclude` in `package.json` keeps
+  `expo install --fix` from downgrading it. Drop the exclude once the SDK
+  bundles 1.21.14 or later.
 - **Verify a bundle without a device**: `pnpm exec expo export --platform android
   --output-dir /tmp/x` compiles through Metro + Babel + Uniwind and surfaces
   styling/bundle wiring errors that typecheck alone misses.

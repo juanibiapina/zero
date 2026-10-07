@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-07: Fix the + button sometimes floating in the middle of Home over a gray block when you open the app.
+
 - 2026-10-07: Change the suggested project for a new task to show a spinner while Zero is still choosing, and to go back to No project when you edit the title, so the task is saved with the project you see. Replace the Suggested label with a button that clears the task's project.
 
 - 2026-10-07: Add Taken to today's pending doses on a medicine's screen, for when a reminder was missed or its Taken did not work. Long-press a taken dose to undo it.

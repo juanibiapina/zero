@@ -108,5 +108,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <ClerkProvider publishableKey={PUBLISHABLE_KEY!}><BrowserRouter><AppRoutes /></BrowserRouter></ClerkProvider>;
+  return <ClerkProvider publishableKey={PUBLISHABLE_KEY}><BrowserRouter><AppRoutes /></BrowserRouter></ClerkProvider>;
 }
