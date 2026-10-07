@@ -46,6 +46,38 @@ the dose time, with Taken and Postpone 1 hour. A paired watch can show the same
 notification. When reminders cannot reach you, the top of the list shows one
 notice with one button to fix it.
 
+## Reminders on Android
+
+- Each Dose has one notification. The dose-time alarm replaces the early
+  reminder and alerts again. Doses never replace each other, so the morning and
+  evening doses keep separate notifications, and an untaken dose's notification
+  stays after midnight until you take it or swipe it away.
+- Both stages use the Medicine reminders category with high importance, the
+  system notification sound and vibration. Android may show a banner. Sound
+  follows the phone's volume, Do Not Disturb and your category settings.
+- Taken records that Dose, closes its notification, and cancels its dose-time
+  alarm, without opening the app. Tapping the notification opens that Dose.
+- Postpone 1 hour closes the notification and brings it back an hour later with
+  sound, saying the dose is due if its time has passed. A dose time inside that
+  hour waits for it. A Postpone can cross midnight and can be repeated. Taken,
+  pausing, deleting, or changing that dose time cancels it. Postpone stays on
+  one phone.
+- A swiped notification leaves the Dose pending; the dose-time alarm still
+  comes.
+- Reminders arrive only for times still ahead when the phone learned of them.
+  Turning reminders on, or adding a dose, after its early reminder skips that
+  reminder; the dose-time alarm still comes.
+- If the phone was off through a reminder, the latest one for each dose time
+  appears quietly when the phone starts, and open notifications come back
+  quietly.
+- Medicine details are private on the lock screen.
+- Reminders are turned on separately on each phone. A Taken pressed with no
+  network reaches the shared history the next time the app opens.
+
+For reliable delivery, choose Unrestricted battery use for Zero Agent when
+Android offers it. The list warns only when Android reports a background
+restriction.
+
 ## Interactions
 
 - Task, Project, Waiting, After: none, on purpose. Medicine never appears on
@@ -64,5 +96,5 @@ notice with one button to fix it.
 
 None recorded yet.
 
-How Android delivers reminders, and how to test it, is in the
-[medicine-reminders module](../../apps/agent-mobile/modules/medicine-reminders/README.md).
+How Android delivers notifications, and how to test it, is in the
+[notification module](../../apps/agent-mobile/modules/zero-notifications/README.md).

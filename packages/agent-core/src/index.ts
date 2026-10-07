@@ -1,10 +1,30 @@
 // @zero/agent-core — shared, platform-agnostic app code.
 
-export { MedicineModel, medicineToday, medicineEndDate, medicineOccurrences, medicineState, medicineDueOn, medicineNextDay, medicineCadence, doseId, validateMedicine, type Weekday, type Medicine, type MedicineInput, type MedicineSlot, type Dose, type MedicineReceipt, type MedicineSnapshot } from "./medicines/model";
+export { MedicineModel, medicineToday, medicineEndDate, medicineOccurrences, medicineState, medicineDueOn, medicineNextDay, medicineCadence, medicineRecurrence, doseId, validateMedicine, type Weekday, type Medicine, type MedicineInput, type MedicineSlot, type Dose, type MedicineReceipt, type MedicineSnapshot } from "./medicines/model";
 export { MedicineDraft, type MedicineCourse } from "./medicines/draft";
 export type { TodoMedicines } from "./taskdo/replica";
-export { createMedicineReminders, type MedicineReminderPort, type MedicineReminders, type ReminderPlan } from "./medicines/reminders";
-export { createInMemoryMedicineReminderDevice, type InMemoryMedicineReminderDevice } from "./medicines/in-memory-device";
+export { createMedicineReminders, type MedicineReminders } from "./medicines/reminders";
+export { MEDICINE_CHANNEL, MEDICINE_SOURCE, medicineOccurrence, medicineReceipt, medicineReminderKey, medicineSchedule } from "./medicines/notifications";
+
+// Scheduled device notifications: the schedule format shared with the native module.
+export {
+  parseSchedule,
+  type Action as NotificationAction,
+  type Channel as NotificationChannel,
+  type LocalDate,
+  type LocalTime,
+  type NotificationCapabilities,
+  type NotificationDevice,
+  type Receipt as NotificationReceipt,
+  type Recurrence,
+  type Reminder as NotificationReminder,
+  type Schedule as NotificationSchedule,
+  type ScheduleError,
+  type ScheduleResult,
+  type Stage as NotificationStage,
+} from "./notifications/schedule";
+export { nextOccurrence, occursOn } from "./notifications/recurrence";
+export { createInMemoryNotificationDevice, type InMemoryNotificationDevice } from "./notifications/in-memory-device";
 
 // Shared list-region behavior.
 export { listView, LOADING_TEXT_DELAY_MS, type ListView } from "./collection/view";

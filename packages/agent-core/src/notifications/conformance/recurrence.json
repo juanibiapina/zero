@@ -1,0 +1,298 @@
+{
+  "cases": [
+    {
+      "name": "every day",
+      "recurrence": {
+        "from": "2026-09-01",
+        "until": null,
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "occursOn": [
+        {
+          "date": "2026-08-31",
+          "expected": false
+        },
+        {
+          "date": "2026-09-01",
+          "expected": true
+        },
+        {
+          "date": "2026-10-02",
+          "expected": true
+        }
+      ],
+      "nextOccurrence": [
+        {
+          "from": "2026-08-01",
+          "expected": "2026-09-01"
+        },
+        {
+          "from": "2026-10-02",
+          "expected": "2026-10-02"
+        }
+      ]
+    },
+    {
+      "name": "Monday, Wednesday and Friday",
+      "recurrence": {
+        "from": "2026-09-01",
+        "until": null,
+        "weekdays": [
+          1,
+          3,
+          5
+        ]
+      },
+      "occursOn": [
+        {
+          "date": "2026-10-02",
+          "expected": true
+        },
+        {
+          "date": "2026-10-03",
+          "expected": false
+        },
+        {
+          "date": "2026-10-04",
+          "expected": false
+        },
+        {
+          "date": "2026-10-05",
+          "expected": true
+        }
+      ],
+      "nextOccurrence": [
+        {
+          "from": "2026-10-02",
+          "expected": "2026-10-02"
+        },
+        {
+          "from": "2026-10-03",
+          "expected": "2026-10-05"
+        },
+        {
+          "from": "2026-10-06",
+          "expected": "2026-10-07"
+        }
+      ]
+    },
+    {
+      "name": "Friday only",
+      "recurrence": {
+        "from": "2026-09-01",
+        "until": null,
+        "weekdays": [
+          5
+        ]
+      },
+      "occursOn": [
+        {
+          "date": "2026-10-02",
+          "expected": true
+        },
+        {
+          "date": "2026-10-08",
+          "expected": false
+        }
+      ],
+      "nextOccurrence": [
+        {
+          "from": "2026-10-03",
+          "expected": "2026-10-09"
+        },
+        {
+          "from": "2026-10-09",
+          "expected": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "name": "a start in the future",
+      "recurrence": {
+        "from": "2026-11-10",
+        "until": null,
+        "weekdays": [
+          2
+        ]
+      },
+      "occursOn": [
+        {
+          "date": "2026-11-03",
+          "expected": false
+        },
+        {
+          "date": "2026-11-10",
+          "expected": true
+        }
+      ],
+      "nextOccurrence": [
+        {
+          "from": "2026-10-01",
+          "expected": "2026-11-10"
+        }
+      ]
+    },
+    {
+      "name": "a course that ends",
+      "recurrence": {
+        "from": "2026-10-01",
+        "until": "2026-10-03",
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "occursOn": [
+        {
+          "date": "2026-10-03",
+          "expected": true
+        },
+        {
+          "date": "2026-10-04",
+          "expected": false
+        }
+      ],
+      "nextOccurrence": [
+        {
+          "from": "2026-10-02",
+          "expected": "2026-10-02"
+        },
+        {
+          "from": "2026-10-04",
+          "expected": null
+        }
+      ]
+    },
+    {
+      "name": "an end before the next chosen day",
+      "recurrence": {
+        "from": "2026-10-01",
+        "until": "2026-10-04",
+        "weekdays": [
+          1
+        ]
+      },
+      "occursOn": [
+        {
+          "date": "2026-10-05",
+          "expected": false
+        }
+      ],
+      "nextOccurrence": [
+        {
+          "from": "2026-10-01",
+          "expected": null
+        }
+      ]
+    },
+    {
+      "name": "a single day",
+      "recurrence": {
+        "from": "2026-10-07",
+        "until": "2026-10-07",
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "occursOn": [
+        {
+          "date": "2026-10-06",
+          "expected": false
+        },
+        {
+          "date": "2026-10-07",
+          "expected": true
+        },
+        {
+          "date": "2026-10-08",
+          "expected": false
+        }
+      ],
+      "nextOccurrence": [
+        {
+          "from": "2026-10-01",
+          "expected": "2026-10-07"
+        },
+        {
+          "from": "2026-10-07",
+          "expected": "2026-10-07"
+        },
+        {
+          "from": "2026-10-08",
+          "expected": null
+        }
+      ]
+    },
+    {
+      "name": "across a year boundary",
+      "recurrence": {
+        "from": "2026-12-01",
+        "until": null,
+        "weekdays": [
+          7
+        ]
+      },
+      "occursOn": [
+        {
+          "date": "2027-01-03",
+          "expected": true
+        },
+        {
+          "date": "2027-01-02",
+          "expected": false
+        }
+      ],
+      "nextOccurrence": [
+        {
+          "from": "2026-12-28",
+          "expected": "2027-01-03"
+        }
+      ]
+    },
+    {
+      "name": "across a leap day",
+      "recurrence": {
+        "from": "2028-02-01",
+        "until": null,
+        "weekdays": [
+          2
+        ]
+      },
+      "occursOn": [
+        {
+          "date": "2028-02-29",
+          "expected": true
+        },
+        {
+          "date": "2028-03-01",
+          "expected": false
+        }
+      ],
+      "nextOccurrence": [
+        {
+          "from": "2028-02-24",
+          "expected": "2028-02-29"
+        }
+      ]
+    }
+  ]
+}

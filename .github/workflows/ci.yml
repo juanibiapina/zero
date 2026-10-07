@@ -71,6 +71,86 @@ jobs:
       - name: Deploy dry run
         run: pnpm exec turbo run deploy -- --dry-run
 
+  mobile-native-changes:
+    name: Detect native notification changes
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check the changed paths
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$BASE" "$HEAD_SHA" -- \
+            apps/agent-mobile/modules apps/agent-mobile/plugins apps/agent-mobile/package.json \
+            packages/agent-core/src/notifications packages/agent-core/src/medicines \
+            pnpm-lock.yaml .github/workflows/ci.yml; then
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  mobile-native:
+    name: Mobile native Kotlin tests
+    runs-on: ubuntu-latest
+    needs: mobile-native-changes
+    if: needs.mobile-native-changes.outputs.relevant == 'true'
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Restore Gradle cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('pnpm-lock.yaml', 'apps/agent-mobile/modules/*/android/build.gradle') }}
+          restore-keys: gradle-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prebuild Android project
+        working-directory: apps/agent-mobile
+        run: npx expo prebuild -p android --no-install
+
+      - name: Run Kotlin tests
+        working-directory: apps/agent-mobile/android
+        run: ./gradlew :zero-notifications:testDebugUnitTest --no-daemon
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zero-notifications-test-reports
+          path: apps/agent-mobile/modules/zero-notifications/android/build/reports/tests
+          if-no-files-found: ignore
+
   mobile-update-changes:
     name: Detect mobile update changes
     runs-on: ubuntu-latest
@@ -99,8 +179,13 @@ jobs:
   mobile-update:
     name: Publish Android preview update
     runs-on: ubuntu-latest
-    needs: [mobile-update-changes, lint-and-typecheck, build]
-    if: needs.mobile-update-changes.outputs.relevant == 'true'
+    needs: [mobile-update-changes, lint-and-typecheck, build, mobile-native]
+    if: >-
+      !cancelled()
+      && needs.mobile-update-changes.outputs.relevant == 'true'
+      && needs.lint-and-typecheck.result == 'success'
+      && needs.build.result == 'success'
+      && (needs.mobile-native.result == 'success' || needs.mobile-native.result == 'skipped')
     concurrency:
       group: mobile-update-preview
       cancel-in-progress: true

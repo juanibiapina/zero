@@ -1,15 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import { createMedicineReminders, type MedicineReminders, type TaskdoReplica } from '@zero/agent-core';
-import { medicineReminderDevice, reminderSettings, type ReminderCapabilities, type ReminderSettings } from '../../modules/medicine-reminders';
+import { createMedicineReminders, MEDICINE_CHANNEL, type MedicineReminders, type NotificationCapabilities, type TaskdoReplica } from '@zero/agent-core';
+import { notificationDevice, notificationSettings, type NotificationSettings } from '../../modules/zero-notifications';
 
 const controllers = new WeakMap<TaskdoReplica, MedicineReminders>();
 const enabledKey = (workspace: string) => `zero.medicine-reminders.enabled.${workspace}`;
 
 export async function attachMedicineReminders(replica: TaskdoReplica, workspace: string): Promise<TaskdoReplica> {
-  if (!medicineReminderDevice) return replica;
-  const reminders = createMedicineReminders(replica, medicineReminderDevice, workspace);
+  if (!notificationDevice) return replica;
+  const reminders = createMedicineReminders(replica, notificationDevice, workspace);
   const wasEnabled = await AsyncStorage.getItem(enabledKey(workspace)) === '1';
   // Import before exposing the workspace or allowing a native plan to replace
   // the previous process's pending notification confirmations.
@@ -60,7 +60,7 @@ export async function attachMedicineReminders(replica: TaskdoReplica, workspace:
 }
 
 export async function clearMedicineReminders(workspace: string) {
-  await medicineReminderDevice?.clear(workspace);
+  await notificationDevice?.clear(workspace);
   await AsyncStorage.removeItem(enabledKey(workspace));
 }
 
@@ -73,11 +73,11 @@ async function enable(controller: MedicineReminders) {
   await controller.enable();
 }
 
-function reminderIssue(controller: MedicineReminders, settings: ReminderSettings, enabled: boolean, failed: boolean, askedForNotifications: boolean, capabilities: ReminderCapabilities): ReminderIssue | null {
+function reminderIssue(controller: MedicineReminders, settings: NotificationSettings, enabled: boolean, failed: boolean, askedForNotifications: boolean, capabilities: NotificationCapabilities): ReminderIssue | null {
   if (failed) return { message: 'Reminders couldn’t be scheduled.', action: 'Try again', fix: () => controller.refresh() };
   if (!enabled) return { message: 'Reminders are off on this phone.', action: 'Turn on', fix: () => enable(controller) };
   if (!capabilities.notifications) return { kind: 'notifications', message: 'Notifications are off, so reminders won’t appear.', action: 'Allow notifications', fix: () => askedForNotifications ? settings.openNotificationSettings() : settings.requestNotifications() };
-  if (!capabilities.alertChannel) return { message: 'Medicine notifications are turned off.', action: 'Open settings', fix: () => settings.openReminderSettings() };
+  if (capabilities.channels[MEDICINE_CHANNEL] === false) return { message: 'Medicine notifications are turned off.', action: 'Open settings', fix: () => settings.openChannelSettings(MEDICINE_CHANNEL) };
   if (!capabilities.exactAlarms) return { message: 'Reminders can’t arrive on time.', action: 'Allow', fix: () => settings.openExactAlarmSettings() };
   if (capabilities.backgroundRestricted) return { message: 'Battery restrictions may delay reminders.', action: 'Battery settings', fix: () => settings.openBatterySettings() };
   return null;
@@ -85,20 +85,20 @@ function reminderIssue(controller: MedicineReminders, settings: ReminderSettings
 
 export function useMedicineReminderNotice(replica: TaskdoReplica | null): MedicineReminderNotice | null {
   const controller = replica ? controllers.get(replica) ?? null : null;
-  const [capabilities, setCapabilities] = useState<ReminderCapabilities | null>(null);
+  const [capabilities, setCapabilities] = useState<NotificationCapabilities | null>(null);
   const [delivery, setDelivery] = useState(() => ({ controller, state: controller?.getState() }));
   const state = delivery.controller === controller ? delivery.state : controller?.getState();
   const [failed, setFailed] = useState(false);
   const [askedForNotifications, setAskedForNotifications] = useState(false);
-  const refresh = useCallback(() => { void reminderSettings?.capabilities().then(setCapabilities).catch(() => setFailed(true)); }, []);
+  const refresh = useCallback(() => { void notificationSettings?.capabilities().then(setCapabilities).catch(() => setFailed(true)); }, []);
   useEffect(() => {
     refresh();
     const subscription = AppState.addEventListener('change', (value) => { if (value === 'active') refresh(); });
     const unsubscribe = controller?.subscribe(() => setDelivery({ controller, state: controller.getState() }));
     return () => { subscription.remove(); unsubscribe?.(); };
   }, [controller, refresh]);
-  if (!reminderSettings || !controller || !capabilities) return null;
-  const settings = reminderSettings;
+  if (!notificationSettings || !controller || !capabilities) return null;
+  const settings = notificationSettings;
   const issue = reminderIssue(controller, settings, !!state?.enabled, failed || !!state?.error, askedForNotifications, capabilities);
   if (!issue) return null;
   return {

@@ -1,21 +1,9 @@
-import type { Dose, Medicine, MedicineReceipt } from "./model";
+import type { Dose, MedicineReceipt } from "./model";
 import type { TaskdoReplica } from "../taskdo/replica";
+import type { NotificationDevice, Schedule } from "../notifications/schedule";
+import { MEDICINE_SOURCE, medicineOccurrence, medicineReceipt, medicineSchedule } from "./notifications";
 
-export type ReminderPlan = {
-  medicines: Medicine[];
-  confirmed: string[];
-  processedActions?: string[];
-};
-
-export type MedicineReminderPort = {
-  replace(workspace: string, plan: ReminderPlan): Promise<void>;
-  receipts(workspace: string): Promise<MedicineReceipt[]>;
-  acknowledge(workspace: string, actionIds: string[]): Promise<void>;
-  take(workspace: string, dose: Dose): Promise<MedicineReceipt>;
-  quiesce(workspace: string): Promise<void>;
-};
-
-export function createMedicineReminders(replica: TaskdoReplica, native: MedicineReminderPort, workspace: string) {
+export function createMedicineReminders(replica: TaskdoReplica, device: NotificationDevice, workspace: string) {
   let tail = Promise.resolve();
   let closed = false;
   let enabled = false;
@@ -26,10 +14,7 @@ export function createMedicineReminders(replica: TaskdoReplica, native: Medicine
   let reconciledPlan: string | null = null;
   const listeners = new Set<() => void>();
   const publish = () => { for (const listener of listeners) listener(); };
-  const plan = (): ReminderPlan => {
-    const snapshot = replica.snapshot();
-    return { medicines: snapshot.medicines, confirmed: snapshot.doses.filter((dose) => dose.takenAt).map((dose) => dose.id) };
-  };
+  const plan = (): Schedule => medicineSchedule(replica.snapshot());
   const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
     pending += 1;
     publish();
@@ -52,19 +37,17 @@ export function createMedicineReminders(replica: TaskdoReplica, native: Medicine
     try {
       let installed: string;
       do {
-        const receipts = await native.receipts(workspace);
-        const actionIds = receipts.map((receipt) => receipt.actionId);
-        if (receipts.length) await replica.medicines.applyReceipts(receipts, workspace);
+        const receipts = await device.receipts(workspace, MEDICINE_SOURCE);
+        const doses = receipts.map(medicineReceipt).filter((receipt): receipt is MedicineReceipt => receipt !== null);
+        if (doses.length) await replica.medicines.applyReceipts(doses, workspace);
         await replica.saveLocal();
+        if (receipts.length) await device.acknowledge(workspace, MEDICINE_SOURCE, receipts.map((receipt) => receipt.id));
         const next = plan();
         installed = JSON.stringify(next);
-        if (!quiesced && enabled && !suspended) {
-          await native.replace(workspace, { ...next, processedActions: actionIds });
-        }
-        if (receipts.length) await native.acknowledge(workspace, actionIds);
+        if (!quiesced && enabled && !suspended) await device.install(workspace, MEDICINE_SOURCE, next);
         reconciledPlan = installed;
-        // A sync can publish while the native replacement is awaiting its ack.
-        // Persist and install that newer state before reporting delivery success.
+        // A sync can publish while the install is in flight.
+        // Install that newer state before reporting delivery success.
       } while (!quiesced && enabled && !suspended && installed !== JSON.stringify(plan()));
     } finally { reconciling = false; }
   };
@@ -80,16 +63,18 @@ export function createMedicineReminders(replica: TaskdoReplica, native: Medicine
     refresh,
     async take(dose: Dose) {
       await enqueue(async () => {
-        if (enabled) { await native.take(workspace, dose); await flush(); }
-        else await replica.medicines.take(dose);
+        if (!enabled) { await replica.medicines.take(dose); return; }
+        const { key, date } = medicineOccurrence(dose);
+        await device.settle(workspace, MEDICINE_SOURCE, key, date, "taken");
+        await flush();
       });
     },
     undo: (id: string) => enqueue(async () => { await flush(); await replica.medicines.undo(id); await flush(); }),
-    checkpoint: () => enqueue(async () => { suspended = true; await native.quiesce(workspace); await flush(true); }),
+    checkpoint: () => enqueue(async () => { suspended = true; await device.quiesce(workspace); await flush(true); }),
     resume: () => enqueue(async () => { suspended = false; if (enabled) await flush(); }),
     async close() {
       unsubscribe();
-      await enqueue(async () => { suspended = true; await native.quiesce(workspace); });
+      await enqueue(async () => { suspended = true; await device.quiesce(workspace); });
       closed = true;
       listeners.clear();
     },

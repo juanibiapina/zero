@@ -1,0 +1,91 @@
+{
+  "zone": "Europe/Berlin",
+  "source": "medicines",
+  "schedule": {
+    "channels": [
+      {
+        "id": "medicine-alerts-v2",
+        "name": "Medicine reminders",
+        "group": {
+          "id": "medicines",
+          "name": "Medicines"
+        }
+      }
+    ],
+    "reminders": [
+      {
+        "key": "[\"0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31\",\"a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85\"]",
+        "channel": "medicine-alerts-v2",
+        "icon": "pill",
+        "title": "Evening pill",
+        "lockScreen": {
+          "title": "Medicine reminder",
+          "text": "Open Zero Agent for details"
+        },
+        "url": "zeroagent:///browse/medicines/0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31?slot=a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85&date={date}",
+        "recurrence": {
+          "from": "2026-09-01",
+          "until": null,
+          "weekdays": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        },
+        "stages": [
+          {
+            "at": "19:45",
+            "wake": "exact",
+            "text": "Dose at 20:00"
+          },
+          {
+            "at": "20:00",
+            "wake": "alarmClock",
+            "text": "20:00 dose due"
+          }
+        ],
+        "actions": [
+          {
+            "id": "taken",
+            "label": "Taken",
+            "kind": "settle"
+          },
+          {
+            "id": "postpone",
+            "label": "Postpone 1 hour",
+            "kind": "snooze",
+            "minutes": 60
+          }
+        ],
+        "settled": [],
+        "data": "{\"alarmAt\":\"20:00\"}"
+      }
+    ]
+  },
+  "installedAt": "2026-10-02T17:00:00Z",
+  "presentedAt": "2026-10-02T17:45:00Z",
+  "settledAt": "2026-10-02T17:50:00Z",
+  "receipts": [
+    {
+      "source": "medicines",
+      "key": "[\"0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31\",\"a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85\"]",
+      "date": "2026-10-02",
+      "at": "2026-10-02T17:45:00Z",
+      "data": "{\"alarmAt\":\"20:00\"}",
+      "type": "presented"
+    },
+    {
+      "source": "medicines",
+      "key": "[\"0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31\",\"a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85\"]",
+      "date": "2026-10-02",
+      "at": "2026-10-02T17:50:00Z",
+      "data": "{\"alarmAt\":\"20:00\"}",
+      "type": "settled",
+      "action": "taken"
+    }
+  ]
+}

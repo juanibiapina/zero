@@ -15,7 +15,7 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual<typeof impo
 
 afterEach(() => { jest.useRealTimers(); });
 
-async function openRoutes(initialUrl: (id: string) => string = () => '/browse') {
+async function openRoutes(initialUrl: (id: string, slot: string) => string = () => '/browse') {
   const data = createInMemoryTodoData();
   const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -25,7 +25,7 @@ async function openRoutes(initialUrl: (id: string) => string = () => '/browse') 
     'browse/index': BrowseScreen,
     'browse/medicines/index': MedicinesList,
     'browse/medicines/[id]': MedicineDetail,
-  }, { initialUrl: initialUrl(medicine.id) });
+  }, { initialUrl: initialUrl(medicine.id, medicine.doses[0].id) });
   return { screen: await result, result, medicine };
 }
 
@@ -49,6 +49,12 @@ describe('Medicine return navigation', () => {
     await fireEvent.press(screen.getByLabelText('Back to medicines'));
     await act(async () => { router.back(); });
     expect(result.getPathname()).toBe('/browse');
+  });
+
+  it('opens the dose a reminder links to', async () => {
+    const { screen } = await openRoutes((id, slot) => `/browse/medicines/${id}?slot=${slot}&date=${medicineToday()}`);
+    expect(screen.getByText(/^Dose · /)).toBeTruthy();
+    expect(screen.queryByText('This dose is no longer available.')).toBeNull();
   });
 
   it('returns a directly opened medicine to Medicines and then Browse', async () => {

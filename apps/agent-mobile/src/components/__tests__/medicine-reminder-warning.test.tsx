@@ -2,37 +2,37 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { createInMemoryMedicineReminderDevice, MedicineDraft, medicineToday, type InMemoryMedicineReminderDevice, type TaskdoReplica } from '@zero/agent-core';
+import { createInMemoryNotificationDevice, MEDICINE_CHANNEL, MedicineDraft, medicineToday, type InMemoryNotificationDevice, type NotificationCapabilities, type TaskdoReplica } from '@zero/agent-core';
 import type { ReactElement } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
-import { reminderSettings, type ReminderCapabilities } from '../../../modules/medicine-reminders';
+import { notificationSettings } from '../../../modules/zero-notifications';
 import { MedicineDetail, MedicinesList } from '../medicines';
 import { attachMedicineReminders } from '@/lib/medicine-reminders';
 import { createInMemoryTodoData, InMemoryTodoDataProvider } from '@/testing/in-memory-todo-data';
 
 let mockParams: { id?: string } = {};
-let mockCapabilities: ReminderCapabilities;
-let mockDevice: InMemoryMedicineReminderDevice;
+let mockCapabilities: NotificationCapabilities;
+let mockDevice: InMemoryNotificationDevice;
 jest.mock('expo-router', () => ({ router: { replace: jest.fn(), back: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => mockParams }));
 jest.mock('@clerk/expo', () => ({ useAuth: () => ({ getToken: async () => 'token' }), useUser: () => ({ user: null }) }));
-jest.mock('../../../modules/medicine-reminders', () => ({
+jest.mock('../../../modules/zero-notifications', () => ({
   __esModule: true,
-  get medicineReminderDevice() { return mockDevice; },
-  reminderSettings: {
+  get notificationDevice() { return mockDevice; },
+  notificationSettings: {
     capabilities: async () => mockCapabilities,
     requestNotifications: jest.fn(), openNotificationSettings: jest.fn(),
-    openExactAlarmSettings: jest.fn(), openReminderSettings: jest.fn(), openBatterySettings: jest.fn(),
+    openExactAlarmSettings: jest.fn(), openChannelSettings: jest.fn(), openBatterySettings: jest.fn(),
   },
-  medicineReminderProof: null,
+  notificationProof: null,
 }));
-const settings = () => reminderSettings as unknown as Record<string, jest.Mock>;
+const settings = () => notificationSettings as unknown as Record<string, jest.Mock>;
 let replica: TaskdoReplica | null = null;
 const foreground = new Set<(state: AppStateStatus) => void>();
 const returnToApp = () => act(async () => { for (const listener of foreground) listener('active'); });
 beforeEach(async () => {
   await AsyncStorage.clear();
-  mockDevice = createInMemoryMedicineReminderDevice();
-  mockCapabilities = { notifications: true, exactAlarms: true, alertChannel: true, backgroundRestricted: false };
+  mockDevice = createInMemoryNotificationDevice();
+  mockCapabilities = { notifications: true, exactAlarms: true, backgroundRestricted: false, channels: { [MEDICINE_CHANNEL]: true } };
   foreground.clear();
   jest.spyOn(AppState, 'addEventListener').mockImplementation((event, listener) => {
     if (event === 'change') foreground.add(listener);
@@ -66,11 +66,11 @@ describe('Medicine reminder notice', () => {
   });
 
   it.each([
-    { capability: 'alertChannel', value: false, message: 'Medicine notifications are turned off.', action: 'Open settings', opens: 'openReminderSettings' },
-    { capability: 'exactAlarms', value: false, message: 'Reminders can’t arrive on time.', action: 'Allow', opens: 'openExactAlarmSettings' },
-    { capability: 'backgroundRestricted', value: true, message: 'Battery restrictions may delay reminders.', action: 'Battery settings', opens: 'openBatterySettings' },
-  ])('offers one fix when $capability blocks reminders', async ({ capability, value, message, action, opens }) => {
-    mockCapabilities = { ...mockCapabilities, [capability]: value };
+    { capability: 'channel', change: { channels: { [MEDICINE_CHANNEL]: false } }, message: 'Medicine notifications are turned off.', action: 'Open settings', opens: 'openChannelSettings' },
+    { capability: 'exactAlarms', change: { exactAlarms: false }, message: 'Reminders can’t arrive on time.', action: 'Allow', opens: 'openExactAlarmSettings' },
+    { capability: 'backgroundRestricted', change: { backgroundRestricted: true }, message: 'Battery restrictions may delay reminders.', action: 'Battery settings', opens: 'openBatterySettings' },
+  ])('offers one fix when $capability blocks reminders', async ({ change, message, action, opens }) => {
+    mockCapabilities = { ...mockCapabilities, ...change };
     const screen = await open(<MedicinesList />);
     await waitFor(() => expect(screen.getByText(message)).toBeTruthy());
     await fireEvent.press(screen.getByLabelText(action));
@@ -101,10 +101,10 @@ describe('Medicine reminder notice', () => {
 
   it('retries scheduling after a failure', async () => {
     const screen = await open(<MedicinesList />);
-    mockDevice.failReplacement = true;
+    mockDevice.failInstall = true;
     await returnToApp();
     await waitFor(() => expect(screen.getByText('Reminders couldn’t be scheduled.')).toBeTruthy());
-    mockDevice.failReplacement = false;
+    mockDevice.failInstall = false;
     await fireEvent.press(screen.getByLabelText('Try again'));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
@@ -114,7 +114,7 @@ describe('Medicine reminder notice', () => {
     await before.unmount();
     await replica?.close();
     replica = null;
-    mockDevice.failReplacement = true;
+    mockDevice.failInstall = true;
     const screen = await open(<MedicinesList />, { enabled: false });
     await waitFor(() => expect(screen.getByText('Reminders couldn’t be scheduled.')).toBeTruthy());
   });

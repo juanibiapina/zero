@@ -122,11 +122,11 @@ module owns each binding:
 
 | Module | Owner | Job |
 | --- | --- | --- |
-| `medicine-reminders` | `src/lib/medicine-reminders.ts` | Schedules medicine notifications and records Taken with no JavaScript running |
+| `zero-notifications` | `src/lib/medicine-reminders.ts` | Shows scheduled notifications from a schedule and records their buttons with no JavaScript running |
 | `home-app-icon` | `src/components/home-app-icon-sync.tsx` | Switches the launcher icon to match the Home task count |
 
 The medicine proof route, `src/app/e2e-medicine-proof.tsx`, also calls the
-reminder binding, because it tests the native code. Tests replace a binding with
+notification binding, because it tests the native code. Tests replace a binding with
 `jest.mock` of its path. The launcher icon names live in
 `modules/home-app-icon/icons.json`, which both the config plugin and the binding
 read. Edits under `modules/*/android/` or to `modules/home-app-icon/app.plugin.js`
@@ -423,7 +423,7 @@ success, failure, or interruption.
 
 Medicine deadline delivery, Doze, reboot, and race checks run in the separate
 `pnpm --filter @zero/agent-mobile e2e:medicine-native` harness (see
-[`modules/medicine-reminders/README.md`](modules/medicine-reminders/README.md)).
+[`modules/zero-notifications/README.md`](modules/zero-notifications/README.md)).
 
 The manual **Mobile E2E** GitHub workflow runs `.maestro/ci/` on an emulator
 against real Clerk to check guest startup, optional sign-in, and OAuth redirect

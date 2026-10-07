@@ -1,7 +1,9 @@
 import type { MergeableStore } from "tinybase";
+import { nextOccurrence, occursOn } from "../notifications/recurrence";
+import type { Recurrence, Weekday } from "../notifications/schedule";
 
+export type { Weekday };
 export type MedicineSlot = { id: string; remindAt: string; alarmAt: string };
-export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export const EVERY_DAY: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
 export type Medicine = {
   id: string; name: string; instructions: string | null;
@@ -28,26 +30,14 @@ export function medicineEndDate(start: string, days: number): string {
   return medicineToday(date);
 }
 const WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-function dayParts(day: string): number {
-  const [year, month, date] = day.split("-").map(Number);
-  return Date.UTC(year, month - 1, date);
-}
-function weekdayOf(day: string): Weekday {
-  return (((new Date(dayParts(day)).getUTCDay() + 6) % 7) + 1) as Weekday;
-}
-function addDays(day: string, days: number): string {
-  return new Date(dayParts(day) + days * 86_400_000).toISOString().slice(0, 10);
+export function medicineRecurrence(medicine: Pick<Medicine, "startsOn" | "endsOn" | "weekdays">): Recurrence {
+  return { from: medicine.startsOn, until: medicine.endsOn, weekdays: medicine.weekdays };
 }
 export function medicineDueOn(medicine: Medicine, on: string): boolean {
-  return medicineState(medicine, on) === "active" && medicine.weekdays.includes(weekdayOf(on));
+  return !medicine.paused && occursOn(medicineRecurrence(medicine), on);
 }
 export function medicineNextDay(medicine: Medicine, from: string): string | null {
-  let on = from < medicine.startsOn ? medicine.startsOn : from;
-  for (let step = 0; step < 7; step += 1, on = addDays(on, 1)) {
-    if (medicine.endsOn && on > medicine.endsOn) return null;
-    if (medicine.weekdays.includes(weekdayOf(on))) return on;
-  }
-  return null;
+  return nextOccurrence(medicineRecurrence(medicine), from);
 }
 export function medicineCadence(medicine: Pick<MedicineInput, "weekdays" | "doses">): string {
   const count = medicine.doses.length;

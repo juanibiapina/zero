@@ -69,9 +69,9 @@ proof_open() {
   return 1
 }
 proof_state() {
-  adb shell run-as "$PROOF_PACKAGE" cat no_backup/medicine-reminders.json > "$PROOF_DIR/state-file.json" 2>/dev/null || : > "$PROOF_DIR/state-file.json"
+  adb shell run-as "$PROOF_PACKAGE" cat no_backup/zero-notifications.json > "$PROOF_DIR/state-file.json" 2>/dev/null || : > "$PROOF_DIR/state-file.json"
   local muted=false
-  if adb shell run-as "$PROOF_PACKAGE" ls no_backup/medicine-proof-silent >/dev/null 2>&1; then muted=true; fi
+  if adb shell run-as "$PROOF_PACKAGE" ls no_backup/zero-notifications-silent >/dev/null 2>&1; then muted=true; fi
   jq -n --argjson muted "$muted" --rawfile raw "$PROOF_DIR/state-file.json" \
     '{state: (if ($raw | length) > 0 then ($raw | fromjson) else {} end), muted: $muted}' > "$PROOF_DIR/state.json"
 }
@@ -91,9 +91,9 @@ proof_schedule() {
   proof_open
   proof_flow "$1" 'Notifications scheduled .*'
   proof_state
-  jq -e '.muted and .state.workspace == "taskdo-workspace-medicine-proof.sqlite" and (.state.scheduled | any(.kind == "alarm"))' "$PROOF_DIR/state.json" >/dev/null
-  PROOF_DEADLINE="$(jq -r '.state.scheduled[] | select(.kind == "alarm") | .time / 1000' "$PROOF_DIR/state.json" | head -1)"
-  PROOF_EARLY="$(jq -r '.state.scheduled[] | select(.kind == "reminder") | .time / 1000' "$PROOF_DIR/state.json" | head -1)"
+  jq -e '.muted and .state.workspace == "taskdo-workspace-medicine-proof.sqlite" and (.state.alarms | any(.wake == "alarmClock"))' "$PROOF_DIR/state.json" >/dev/null
+  PROOF_DEADLINE="$(jq -r '.state.alarms[] | select(.wake == "alarmClock") | .time / 1000' "$PROOF_DIR/state.json" | head -1)"
+  PROOF_EARLY="$(jq -r '.state.alarms[] | select(.wake == "exact") | .time / 1000' "$PROOF_DIR/state.json" | head -1)"
   cp "$PROOF_DIR/state.json" "$PROOF_DIR/$PROOF_STAGE-scheduled.json"
   proof_kill_react
 }
@@ -102,21 +102,22 @@ proof_no_playback() {
   ! rg -q 'MedicineAlarmService' "$PROOF_DIR/services.txt"
 }
 proof_await_stage() {
-  local kind="$1" deadline="$2"
+  local kind="$1" deadline="$2" stage
+  if [[ "$kind" == reminder ]]; then stage=0; else stage=1; fi
   while [[ "$(date +%s)" -le "$((deadline + 30))" ]]; do
     proof_state
-    if jq -e --arg kind "$kind" '.state.delivered | keys | any(fromjson | .[1] == $kind)' "$PROOF_DIR/state.json" >/dev/null; then
-      adb logcat -d -s MedicineReminders:I > "$PROOF_DIR/$PROOF_STAGE-$kind-logcat.txt"
-      python3 - "$PROOF_DIR/$PROOF_STAGE-$kind-logcat.txt" "$kind" "$deadline" <<'PY'
+    if jq -e --argjson stage "$stage" '.state.cards | to_entries | any(.value.stage == $stage)' "$PROOF_DIR/state.json" >/dev/null; then
+      adb logcat -d -s ZeroNotifications:I > "$PROOF_DIR/$PROOF_STAGE-$kind-logcat.txt"
+      python3 - "$PROOF_DIR/$PROOF_STAGE-$kind-logcat.txt" "$stage" "$deadline" <<'PY'
 import datetime, re, sys
-kind, deadline = sys.argv[2], int(sys.argv[3])
+stage, deadline = sys.argv[2], int(sys.argv[3])
 for line in open(sys.argv[1]):
-    match = re.search(r'notification_presented stage=(\w+) scheduled=(\S+) delivered=(\S+) alert=true', line)
-    if not match or match[1] != kind:
+    match = re.search(r'notification_presented stage=(\w+) wake=\w+ scheduled=(\S+) delivered=(\S+) alert=true', line)
+    if not match or match[1] != stage:
         continue
     scheduled, delivered = [datetime.datetime.fromisoformat(v.replace('Z', '+00:00')).timestamp() for v in match.group(2, 3)]
     if int(scheduled) == deadline and 0 <= delivered - scheduled <= 30:
-        print(f'PASS {kind} delivered in {delivered - scheduled:.3f}s')
+        print(f'PASS stage {stage} delivered in {delivered - scheduled:.3f}s')
         sys.exit(0)
 raise SystemExit('No on-time scheduled notification in native logs')
 PY
@@ -192,7 +193,7 @@ proof_taken() {
   adb shell input tap "$proof_x" "$proof_y"
   for attempt in $(seq 1 20); do
     proof_state
-    if jq -e '.muted and (.state.receipts | any(.kind == "taken"))' "$PROOF_DIR/state.json" >/dev/null; then
+    if jq -e '.muted and (.state.receipts | any(.type == "settled"))' "$PROOF_DIR/state.json" >/dev/null; then
       adb shell cmd statusbar collapse
       return
     fi
@@ -243,8 +244,9 @@ PROOF_CASE="${E2E_NATIVE_PROOF_CASE:-all}"
 if [[ "$PROOF_CASE" == all ]]; then
   PROOF_STAGE=early-taken-cancellation
   proof_schedule 'Schedule native proof'
+  proof_await_stage reminder "$PROOF_EARLY"
   proof_taken
-  jq -e '(.state.scheduled | all(.kind != "alarm"))' "$PROOF_DIR/state.json" >/dev/null
+  jq -e '(.state.alarms | all(.wake != "alarmClock"))' "$PROOF_DIR/state.json" >/dev/null
   proof_no_playback
   proof_import
   printf 'PASS early Taken cancels the deadline with JavaScript absent\n'
@@ -277,7 +279,7 @@ if [[ "$PROOF_CASE" == all || "$PROOF_CASE" == remaining || "$PROOF_CASE" == boo
     sleep 2
   done
   proof_state
-  jq -e '.muted and (.state.scheduled | any(.kind == "alarm"))' "$PROOF_DIR/state.json" >/dev/null
+  jq -e '.muted and (.state.alarms | any(.wake == "alarmClock"))' "$PROOF_DIR/state.json" >/dev/null
   cp "$PROOF_DIR/state.json" "$PROOF_DIR/reboot-restored.json"
   proof_await_stage alarm "$PROOF_DEADLINE"
   proof_taken
@@ -287,8 +289,9 @@ fi
 if [[ "$PROOF_CASE" == all || "$PROOF_CASE" == remaining || "$PROOF_CASE" == finish ]]; then
   PROOF_STAGE=independent-simultaneous-doses
   proof_schedule 'Schedule multiple doses proof'
+  proof_await_stage reminder "$PROOF_EARLY"
   proof_taken
-  jq -e '(.state.scheduled[] | select(.kind == "alarm") | .doses | length == 1)' "$PROOF_DIR/state.json" >/dev/null
+  jq -e '(.state.alarms | any(.wake == "alarmClock")) and (.state.settledHere | length == 1)' "$PROOF_DIR/state.json" >/dev/null
   proof_await_stage alarm "$PROOF_DEADLINE"
   adb shell cmd statusbar expand-notifications
   maestro --no-ansi hierarchy --compact > "$PROOF_DIR/multiple-shade.csv"
@@ -302,7 +305,7 @@ if [[ "$PROOF_CASE" == all || "$PROOF_CASE" == remaining || "$PROOF_CASE" == fin
   proof_open
   proof_flow 'Check undone receipt replay' 'Undone receipt remains pending'
   proof_state
-  jq -e '(.state.suppressed | length == 0) and (.state.scheduled | any(.kind == "alarm")) and (.state.receipts | all(.kind != "taken"))' "$PROOF_DIR/state.json" >/dev/null
+  jq -e '(.state.settledHere | length == 0) and (.state.alarms | any(.wake == "alarmClock")) and (.state.receipts | all(.type != "settled"))' "$PROOF_DIR/state.json" >/dev/null
   proof_flow 'Clear native proof' 'Medicine proof cleared'
   printf 'PASS replay after Undo rearms the pending native dose\n'
   PROOF_STAGE=quiescence-race
@@ -310,7 +313,7 @@ if [[ "$PROOF_CASE" == all || "$PROOF_CASE" == remaining || "$PROOF_CASE" == fin
   proof_open
   proof_flow 'Check quiescence race' 'Quiescence race safe'
   proof_state
-  jq -e '.state.quiesced and (.state.receipts | length == 0) and (.state.scheduled | length == 0)' "$PROOF_DIR/state.json" >/dev/null
+  jq -e '.state.quiesced and (.state.receipts | length == 0) and (.state.alarms | length == 0)' "$PROOF_DIR/state.json" >/dev/null
   proof_flow 'Clear native proof' 'Medicine proof cleared'
   printf 'PASS checkpoint retains concurrent receipts and refuses late Taken\n'
 fi

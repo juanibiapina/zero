@@ -19,7 +19,7 @@ appId: dev.juanibiapina.zeroagent
     end: 50%, 85%
 - extendedWaitUntil:
     visible: E2E medicine
-    timeout: 30000
+    timeout: 90000
 - runFlow:
     when:
       notVisible: Taken

@@ -1,0 +1,4015 @@
+{
+  "cases": [
+    {
+      "name": "an empty schedule",
+      "input": {
+        "channels": [],
+        "reminders": []
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "a reminder with two stages, settle and snooze",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "a single-day reminder without actions",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-10-07",
+              "until": "2026-10-07",
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "14:00",
+                "wake": "exact",
+                "text": "Due"
+              }
+            ],
+            "actions": [],
+            "settled": [],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "two reminders sharing a channel",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          },
+          {
+            "key": "other",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "an empty data string",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": ""
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "a document that is not an object",
+      "input": [],
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "an unknown top-level field",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ],
+        "extra": true
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a missing reminder field",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "an unknown reminder field",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}",
+            "extra": 1
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "an unknown icon",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "bell",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "an unknown wake",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "late",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a fractional weekday",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1.5
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a string weekday",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                "1"
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "an unknown action kind",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "open"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a settle action with minutes",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle",
+                "minutes": 5
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a snooze action without minutes",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze"
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a numeric until",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": 20261001,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a null title",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": null,
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "an unknown channel field",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            },
+            "importance": "high"
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a duplicate channel id",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          },
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-channel"
+      }
+    },
+    {
+      "name": "an empty channel id",
+      "input": {
+        "channels": [
+          {
+            "id": "",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": []
+      },
+      "expected": {
+        "error": "invalid-channel"
+      }
+    },
+    {
+      "name": "an empty channel name",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-channel"
+      }
+    },
+    {
+      "name": "an empty group name",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": ""
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-channel"
+      }
+    },
+    {
+      "name": "a reminder naming an undeclared channel",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "missing",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-channel"
+      }
+    },
+    {
+      "name": "an empty key",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-key"
+      }
+    },
+    {
+      "name": "a duplicate key",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          },
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-key"
+      }
+    },
+    {
+      "name": "an impossible from date",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-02-30",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-date"
+      }
+    },
+    {
+      "name": "an impossible until month",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": "2026-13-01",
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-date"
+      }
+    },
+    {
+      "name": "a settled date without separators",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "20260902"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-date"
+      }
+    },
+    {
+      "name": "a non-leap February 29",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2027-02-29",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-date"
+      }
+    },
+    {
+      "name": "a leap-year February 29",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2028-02-29",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "no weekdays",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": []
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-recurrence"
+      }
+    },
+    {
+      "name": "unsorted weekdays",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                3,
+                1
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-recurrence"
+      }
+    },
+    {
+      "name": "a repeated weekday",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                1
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-recurrence"
+      }
+    },
+    {
+      "name": "weekday zero",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                0
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-recurrence"
+      }
+    },
+    {
+      "name": "weekday eight",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                8
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-recurrence"
+      }
+    },
+    {
+      "name": "until before from",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": "2026-08-31",
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-recurrence"
+      }
+    },
+    {
+      "name": "hour 24",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "24:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-time"
+      }
+    },
+    {
+      "name": "a one-digit hour",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "7:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-time"
+      }
+    },
+    {
+      "name": "minute 60",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:60",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-time"
+      }
+    },
+    {
+      "name": "no stages",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-stages"
+      }
+    },
+    {
+      "name": "stages out of order",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "08:30",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-stages"
+      }
+    },
+    {
+      "name": "two stages at the same time",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "08:00",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-stages"
+      }
+    },
+    {
+      "name": "four actions",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "a0",
+                "label": "A0",
+                "kind": "settle"
+              },
+              {
+                "id": "a1",
+                "label": "A1",
+                "kind": "settle"
+              },
+              {
+                "id": "a2",
+                "label": "A2",
+                "kind": "settle"
+              },
+              {
+                "id": "a3",
+                "label": "A3",
+                "kind": "settle"
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-actions"
+      }
+    },
+    {
+      "name": "a duplicate action id",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "taken",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-actions"
+      }
+    },
+    {
+      "name": "an empty action id",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-actions"
+      }
+    },
+    {
+      "name": "an empty action label",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-actions"
+      }
+    },
+    {
+      "name": "a zero-minute snooze",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 0
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-actions"
+      }
+    },
+    {
+      "name": "a snooze longer than a day",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 1441
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-actions"
+      }
+    },
+    {
+      "name": "a snooze of a full day",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 1440
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "unsorted settled dates",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-05",
+              "2026-09-02"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-settled"
+      }
+    },
+    {
+      "name": "a repeated settled date",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-02"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-settled"
+      }
+    },
+    {
+      "name": "an empty title",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-content"
+      }
+    },
+    {
+      "name": "an empty url",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-content"
+      }
+    },
+    {
+      "name": "an empty lock screen text",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": ""
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-content"
+      }
+    },
+    {
+      "name": "an empty stage text",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": ""
+              },
+              {
+                "at": "08:00",
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-content"
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { Host, Icon } from '@expo/ui';
 import { safeRandomUUID } from '@tanstack/db';
-import { MedicineDraft, medicineCadence, medicineNextDay, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Dose, type Medicine } from '@zero/agent-core';
+import { doseId, MedicineDraft, medicineCadence, medicineNextDay, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Dose, type Medicine } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, View } from 'react-native';
@@ -95,7 +95,7 @@ function ReminderNotice() {
   </View>;
 }
 export function MedicineDetail() {
-  const params = useLocalSearchParams<{ id: string; dose?: string }>();
+  const params = useLocalSearchParams<{ id: string; dose?: string; slot?: string; date?: string }>();
   const { replica, snapshot, medicines, doses, today } = useMedicines();
   const medicine = medicines.find((item) => item.id === params.id);
   const [error, setError] = useState<string | null>(null);
@@ -117,8 +117,9 @@ export function MedicineDetail() {
   const state = medicineState(medicine, today);
   const plannedToday = medicineOccurrences(medicine, today);
   const nextDose = state === 'active' && !plannedToday.length ? medicineNextDay(medicine, today) : null;
-  const focusedDose = params.dose ? doses.find((dose) => dose.id === params.dose && dose.medicineId === medicine.id) ?? plannedToday.find((dose) => dose.id === params.dose) : undefined;
-  const visibleDoses = params.dose ? focusedDose ? [focusedDose] : [] : plannedToday;
+  const focus = params.slot && params.date ? doseId(medicine.id, params.slot, params.date) : params.dose;
+  const focusedDose = focus ? doses.find((dose) => dose.id === focus && dose.medicineId === medicine.id) ?? plannedToday.find((dose) => dose.id === focus) : undefined;
+  const visibleDoses = focus ? focusedDose ? [focusedDose] : [] : plannedToday;
   const history = doses.filter((dose) => dose.medicineId === medicine.id).sort((a, b) => b.on.localeCompare(a.on) || a.scheduledAt.localeCompare(b.scheduledAt));
   const remove = () => Alert.alert('Delete medicine?', 'Its dose history will also be removed.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void run(async () => { await replica.medicines.remove(medicine.id); router.dismissTo('/browse/medicines'); }) }]);
   return <View className="flex-1 bg-background">
@@ -127,7 +128,7 @@ export function MedicineDetail() {
       <View className="flex-row items-center justify-between gap-3 pb-5"><Text variant="subtitle" className="flex-1">{medicineCadence(medicine)}{medicine.endsOn ? ` · Through ${day(medicine.endsOn)}` : ''}</Text><Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable></View>
       {options ? <View className="border-y border-divider py-2"><Action label="Edit medicine" disabled={busy} onPress={() => setEditing(true)} />{state === 'ended' ? <Action label="Add again" disabled={busy} onPress={() => setCopying(true)} /> : <Action label={medicine.paused ? 'Resume reminders' : 'Pause reminders'} disabled={busy} onPress={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))} />}<Action label="Delete medicine" danger disabled={busy} onPress={remove} /></View> : null}
       {error ? <Text variant="error" selectable>{error}</Text> : null}
-      <Text accessibilityRole="header" variant="section" className="pb-2">{params.dose ? focusedDose ? `Dose · ${day(focusedDose.on)}` : 'This dose is no longer available.' : nextDose ? `Next dose ${day(nextDose)}` : state === 'active' && !plannedToday.length ? 'No more doses' : state === 'active' ? 'Today' : state === 'ended' ? `Ended ${day(medicine.endsOn!)}` : state === 'paused' ? 'Paused' : `Starts ${day(medicine.startsOn)}`}</Text>
+      <Text accessibilityRole="header" variant="section" className="pb-2">{focus ? focusedDose ? `Dose · ${day(focusedDose.on)}` : 'This dose is no longer available.' : nextDose ? `Next dose ${day(nextDose)}` : state === 'active' && !plannedToday.length ? 'No more doses' : state === 'active' ? 'Today' : state === 'ended' ? `Ended ${day(medicine.endsOn!)}` : state === 'paused' ? 'Paused' : `Starts ${day(medicine.startsOn)}`}</Text>
       {visibleDoses.map((planned) => {
         const dose = doses.find((item) => item.id === planned.id) ?? planned;
         const slot = medicine.doses.find((candidate) => candidate.id === dose.slotId);
@@ -143,7 +144,7 @@ export function MedicineDetail() {
           {!dose.takenAt && actionable ? <Action label="Taken" accessibilityLabel={`Taken ${time(dose.scheduledAt)} dose`} disabled={busy} onPress={() => void run(() => replica.medicines.take(dose))} /> : null}
         </View>;
       })}
-      {(state !== 'active' || nextDose) && !params.dose ? <Text variant="subtitle" className="py-4">{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text> : null}
+      {(state !== 'active' || nextDose) && !focus ? <Text variant="subtitle" className="py-4">{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text> : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Dose history" accessibilityState={{ expanded: historyOpen }} onPress={() => setHistoryOpen((current) => !current)} className="min-h-14 flex-row items-center justify-between gap-3 pt-4"><Text variant="section">History</Text><MedicineGlyph name={historyOpen ? 'collapse' : 'expand'} /></Pressable>
       {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{day(dose.on)} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : 'Not recorded'}</Text></View>)}</View> : null}
     </Page>
