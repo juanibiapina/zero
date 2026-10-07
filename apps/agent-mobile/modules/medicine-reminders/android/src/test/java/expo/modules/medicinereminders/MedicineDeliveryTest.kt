@@ -30,13 +30,18 @@ class MedicineDeliveryTest {
   private val workspace = "workspace"
   private val day = "2026-10-02"
   private fun id(medicine: String = "medicine") = JSONArray(listOf(medicine, "evening", day)).toString()
-  private fun plans(ids: List<String> = listOf("medicine"), confirmed: List<String> = emptyList(), paused: Boolean = false): String {
+  private fun plans(ids: List<String> = listOf("medicine"), confirmed: List<String> = emptyList(), paused: Boolean = false, remindAt: String = "23:57", alarmAt: String = "23:59"): String {
     val medicines = JSONArray()
-    for (id in ids) medicines.put(JSONObject("""{"id":"$id","name":"Pill $id","instructions":"After food","startsOn":"$day","endsOn":null,"paused":$paused,"doses":[{"id":"evening","remindAt":"23:57","alarmAt":"23:59"}]}"""))
+    for (id in ids) medicines.put(JSONObject("""{"id":"$id","name":"Pill $id","instructions":"After food","startsOn":"$day","endsOn":null,"paused":$paused,"doses":[{"id":"evening","remindAt":"$remindAt","alarmAt":"$alarmAt"}]}"""))
     return JSONObject().put("medicines", medicines).put("confirmed", JSONArray(confirmed)).toString()
   }
   private fun payload(kind: String): String = shadowOf(alarms).scheduledAlarms.map { shadowOf(it.operation).savedIntent.getStringExtra("payload")!! }.first { JSONObject(it).getString("kind") == kind }
   private fun notification(medicine: String = "medicine") = shadowOf(manager).getNotification(id(medicine), 0)
+  private fun tap(title: String, medicine: String = "medicine") = shadowOf(notification(medicine).actions.first { it.title == title }.actionIntent).savedIntent
+  private fun text() = notification().extras.getString(Notification.EXTRA_TEXT)
+  private fun kinds() = shadowOf(alarms).scheduledAlarms.map { JSONObject(shadowOf(it.operation).savedIntent.getStringExtra("payload")!!).getString("kind") }
+  private fun ms(time: String) = Instant.parse("${day}T${time}:00Z").toEpochMilli()
+  private fun at(time: String) { MedicineEngine.clock = { Clock.fixed(Instant.parse("${day}T${time}:00Z"), ZoneOffset.UTC) } }
   private fun receipts() = JSONArray(MedicineEngine.receipts(context, workspace))
   private fun presentedCount() = (0 until receipts().length()).count { receipts().getJSONObject(it).getString("kind") == "presented" }
 
@@ -58,6 +63,7 @@ class MedicineDeliveryTest {
     val deadline = payload("alarm")
     MedicineEngine.deliver(context, deadline)
     assertEquals("23:59 dose due · After food", notification().extras.getString(Notification.EXTRA_TEXT))
+    assertEquals(1, shadowOf(manager).allNotifications.size)
     assertEquals(2, presentedCount())
     MedicineEngine.deliver(context, deadline)
     MedicineEngine.replace(context, workspace, plans())
@@ -94,7 +100,7 @@ class MedicineDeliveryTest {
     val alarm = shadowOf(alarms).scheduledAlarms.first { JSONObject(shadowOf(it.operation).savedIntent.getStringExtra("payload")!!).getString("kind") == "alarm" }
     assertNotNull(alarm.alarmClockInfo)
     MedicineEngine.deliver(context, payload("reminder"))
-    val take = shadowOf(notification().actions.single().actionIntent).savedIntent
+    val take = tap("Taken")
     MedicineReceiver().onReceive(context, take)
     MedicineReceiver().onReceive(context, take)
     assertNull(notification())
@@ -127,7 +133,7 @@ class MedicineDeliveryTest {
   fun pauseAndWorkspaceClosureCancelDeliveryAndRejectTaken() {
     MedicineEngine.replace(context, workspace, plans())
     MedicineEngine.deliver(context, payload("reminder"))
-    val take = shadowOf(notification().actions.single().actionIntent).savedIntent
+    val take = tap("Taken")
     MedicineEngine.replace(context, workspace, plans(paused = true))
     assertNull(notification())
     assertTrue(shadowOf(alarms).scheduledAlarms.isEmpty())
@@ -194,7 +200,7 @@ class MedicineDeliveryTest {
   fun anotherWorkspacesUnimportedConfirmationIsNotDropped() {
     MedicineEngine.replace(context, "previous", plans())
     MedicineEngine.deliver(context, payload("reminder"))
-    MedicineReceiver().onReceive(context, shadowOf(notification().actions.single().actionIntent).savedIntent)
+    MedicineReceiver().onReceive(context, tap("Taken"))
     assertThrows(IllegalStateException::class.java) { MedicineEngine.replace(context, workspace, plans(listOf("other"))) }
     assertEquals(1, (0 until JSONArray(MedicineEngine.receipts(context, "previous")).length()).count { JSONArray(MedicineEngine.receipts(context, "previous")).getJSONObject(it).getString("kind") == "taken" })
   }
@@ -212,5 +218,119 @@ class MedicineDeliveryTest {
     MedicineEngine.replace(context, workspace, plans())
     assertTrue(File(context.noBackupFilesDir, "medicine-reminders.json").exists())
     assertTrue(File(context.dataDir, "shared_prefs").listFiles().orEmpty().none { it.name.startsWith("medicine") })
+  }
+
+  @Test
+  fun postponingTheEarlyCardBringsItBackInAnHourAndSkipsADoseTimeInsideThatHour() {
+    at("09:00")
+    MedicineEngine.replace(context, workspace, plans(remindAt = "09:50", alarmAt = "10:30"))
+    at("09:50")
+    MedicineEngine.deliver(context, payload("reminder"))
+    at("09:55")
+    MedicineReceiver().onReceive(context, tap("Postpone 1 hour"))
+    assertNull(notification())
+    assertFalse(kinds().contains("alarm"))
+    val back = shadowOf(alarms).scheduledAlarms.first { JSONObject(shadowOf(it.operation).savedIntent.getStringExtra("payload")!!).getString("kind") == "postponed" }
+    assertEquals(ms("10:55"), JSONObject(payload("postponed")).getLong("time"))
+    assertNotNull(back.alarmClockInfo)
+    at("10:55")
+    MedicineEngine.deliver(context, payload("postponed"))
+    assertEquals("10:30 dose due · After food", text())
+    assertEquals(0, notification().flags and Notification.FLAG_ONLY_ALERT_ONCE)
+    assertEquals(listOf("Taken", "Postpone 1 hour"), notification().actions.map { it.title.toString() })
+  }
+
+  @Test
+  fun postponingTheEarlyCardBeforeTheDoseHourKeepsTheDoseTimeAlarm() {
+    at("07:00")
+    MedicineEngine.replace(context, workspace, plans(remindAt = "08:00", alarmAt = "10:30"))
+    at("08:00")
+    MedicineEngine.deliver(context, payload("reminder"))
+    MedicineReceiver().onReceive(context, tap("Postpone 1 hour"))
+    assertEquals(ms("09:00"), JSONObject(payload("postponed")).getLong("time"))
+    assertEquals(ms("10:30"), JSONObject(payload("alarm")).getLong("time"))
+    at("09:00")
+    MedicineEngine.deliver(context, payload("postponed"))
+    assertEquals("Dose at 10:30 · After food", text())
+    at("10:30")
+    MedicineEngine.deliver(context, payload("alarm"))
+    assertEquals("10:30 dose due · After food", text())
+    assertEquals(1, shadowOf(manager).allNotifications.size)
+  }
+
+  @Test
+  fun theDoseTimeCardCanBePostponedAgainAndOneTapPostponesOnce() {
+    at("09:00")
+    MedicineEngine.replace(context, workspace, plans(remindAt = "09:00", alarmAt = "09:30"))
+    at("09:30")
+    MedicineEngine.deliver(context, payload("alarm"))
+    val first = tap("Postpone 1 hour")
+    MedicineReceiver().onReceive(context, first)
+    at("09:40")
+    MedicineReceiver().onReceive(context, first)
+    assertEquals(ms("10:30"), JSONObject(payload("postponed")).getLong("time"))
+    at("10:30")
+    MedicineEngine.deliver(context, payload("postponed"))
+    assertEquals("09:30 dose due · After food", text())
+    MedicineReceiver().onReceive(context, tap("Postpone 1 hour"))
+    assertNull(notification())
+    MedicineReceiver().onReceive(context, first)
+    assertEquals(ms("11:30"), JSONObject(payload("postponed")).getLong("time"))
+  }
+
+  @Test
+  fun takenOrADoseTimeEditCancelsAPostpone() {
+    val ids = listOf("medicine", "other")
+    at("09:00")
+    MedicineEngine.replace(context, workspace, plans(ids, remindAt = "09:00", alarmAt = "09:30"))
+    at("09:30")
+    MedicineEngine.deliver(context, payload("alarm"))
+    MedicineReceiver().onReceive(context, tap("Postpone 1 hour"))
+    MedicineReceiver().onReceive(context, tap("Postpone 1 hour", "other"))
+    val back = payload("postponed")
+    val doses = JSONObject(back).getJSONArray("doses")
+    assertEquals(2, doses.length())
+    val other = (0 until doses.length()).map { doses.getJSONObject(it) }.first { it.getString("medicineId") == "other" }
+    MedicineEngine.taken(context, workspace, other.toString())
+    assertEquals(1, JSONObject(payload("postponed")).getJSONArray("doses").length())
+    MedicineEngine.replace(context, workspace, plans(ids, remindAt = "09:00", alarmAt = "09:45"))
+    assertFalse(kinds().contains("postponed"))
+    at("10:30")
+    MedicineEngine.deliver(context, back)
+    assertNull(notification())
+    assertNull(notification("other"))
+  }
+
+  @Test
+  fun rebootRearmsAPostponeAndRestoresAMissedReturnQuietly() {
+    at("09:00")
+    MedicineEngine.replace(context, workspace, plans(remindAt = "09:50", alarmAt = "10:30"))
+    at("09:50")
+    MedicineEngine.deliver(context, payload("reminder"))
+    MedicineReceiver().onReceive(context, tap("Postpone 1 hour"))
+    for (alarm in shadowOf(alarms).scheduledAlarms.toList()) alarms.cancel(alarm.operation!!)
+    MedicineEngine.restore(context, true)
+    assertEquals(ms("10:50"), JSONObject(payload("postponed")).getLong("time"))
+    for (alarm in shadowOf(alarms).scheduledAlarms.toList()) alarms.cancel(alarm.operation!!)
+    at("11:30")
+    MedicineEngine.restore(context, true)
+    assertEquals("10:30 dose due · After food", text())
+    assertEquals(Notification.GROUP_ALERT_SUMMARY, notification().groupAlertBehavior)
+  }
+
+  @Test
+  fun aPostponeNearMidnightReturnsAtTheLastMinuteOfTheDay() {
+    at("22:00")
+    MedicineEngine.replace(context, workspace, plans(remindAt = "22:30", alarmAt = "23:00"))
+    at("23:00")
+    MedicineEngine.deliver(context, payload("alarm"))
+    at("23:30")
+    MedicineReceiver().onReceive(context, tap("Postpone 1 hour"))
+    assertEquals(ms("23:59"), JSONObject(payload("postponed")).getLong("time"))
+    at("23:59")
+    MedicineEngine.deliver(context, payload("postponed"))
+    MedicineReceiver().onReceive(context, tap("Postpone 1 hour"))
+    assertNull(notification())
+    assertFalse(kinds().contains("postponed"))
   }
 }

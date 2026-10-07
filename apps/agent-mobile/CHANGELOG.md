@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-07: Add Postpone 1 hour to medicine reminders. The reminder comes back an hour later with sound, and a dose time within that hour waits for it.
+
 - 2026-10-06: Change the + on a project's screen to grow into the add drawer like everywhere else, and keep your text in the drawer when an add fails on any screen.
 
 - 2026-10-06: Fix the keyboard staying open after you add a project from Home.

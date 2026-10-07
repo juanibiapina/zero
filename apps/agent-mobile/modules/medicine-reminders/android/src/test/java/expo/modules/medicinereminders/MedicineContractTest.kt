@@ -70,7 +70,7 @@ class MedicineContractTest {
     at(contract.getString("takenAt"), zone)
     val expected = objects(contract.getJSONArray("receipts"))
     val notification = shadowOf(manager).getNotification(expected.first().getString("id"), 0)
-    MedicineReceiver().onReceive(context, shadowOf(notification.actions.single().actionIntent).savedIntent)
+    MedicineReceiver().onReceive(context, shadowOf(notification.actions.first { it.title == "Taken" }.actionIntent).savedIntent)
 
     val written = objects(JSONArray(MedicineEngine.receipts(context, workspace)))
     assertEquals(expected.map(::fields), written.map(::fields))

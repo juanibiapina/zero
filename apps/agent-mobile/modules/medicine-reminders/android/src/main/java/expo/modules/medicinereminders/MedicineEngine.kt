@@ -20,6 +20,7 @@ internal object MedicineEngine {
   private const val GROUP = "medicines"
   private const val STATE_FILE = "medicine-reminders.json"
   private const val SILENT_PROOF_FILE = "medicine-proof-silent"
+  private const val POSTPONE_MS = 60 * 60 * 1000L
   private val lock = Any()
   internal var clock: () -> Clock = { Clock.systemDefaultZone() }
   private fun stateFile(c: Context) = AtomicFile(File(c.noBackupFilesDir, STATE_FILE))
@@ -100,6 +101,11 @@ internal object MedicineEngine {
       if (receipt.getString("kind") == "taken" && !processedIds.contains(receipt.getString("actionId"))) suppressed.put(receipt.getString("id"), true)
     }
     state.put("suppressed", suppressed); state.put("generation", UUID.randomUUID().toString())
+    val postponed = obj(state, "postponed")
+    for (id in postponed.keys().asSequence().toList()) {
+      val entry = postponed.getJSONObject(id)
+      if (suppressed.optBoolean(id) || !eligible(state, entry) || !currentDose(state, entry)) postponed.remove(id)
+    }
     val visible = obj(state, "visible")
     for (id in visible.keys().asSequence().toList()) {
       val occurrence = visible.getJSONObject(id)
@@ -141,11 +147,37 @@ internal object MedicineEngine {
     }
     check(!obj(state, "suppressed").optBoolean(id)) { "This dose is already taken" }
     val receipt = JSONObject(dose.toString()).put("kind", "taken").put("actionId", UUID.randomUUID().toString()).put("takenAt", instant(clock().millis()))
-    array(state, "receipts").put(receipt); obj(state, "suppressed").put(id, true); obj(state, "visible").remove(id)
+    array(state, "receipts").put(receipt); obj(state, "suppressed").put(id, true); obj(state, "visible").remove(id); obj(state, "postponed").remove(id)
     save(c, state)
     notificationManager(c).cancel(id, 0)
     cancelIntents(c, state); schedule(c, state)
     receipt.toString()
+  }
+  fun postpone(c: Context, workspace: String, occurrence: String) = synchronized(lock) {
+    val state = load(c); val dose = JSONObject(occurrence)
+    check(state.optString("workspace") == workspace && !state.optBoolean("quiesced")) { "Reminder workspace is closed" }
+    check(eligible(state, dose)) { "This medicine reminder is no longer active" }
+    val id = dose.getString("id")
+    if (obj(state, "suppressed").optBoolean(id)) return@synchronized
+    val tap = JSONArray(listOf(id, "postpone", dose.optString("stageAt"))).toString()
+    val delivered = obj(state, "delivered")
+    if (delivered.has(tap)) return@synchronized
+    delivered.put(tap, dose.getString("on"))
+    val time = clock(); val now = time.millis()
+    val lastMinute = LocalDate.parse(dose.getString("on")).atTime(23, 59).atZone(time.zone).toInstant().toEpochMilli()
+    val until = minOf(now + POSTPONE_MS, lastMinute)
+    if (until > now) obj(state, "postponed").put(id, JSONObject(dose.toString()).put("until", instant(until)))
+    obj(state, "visible").remove(id)
+    save(c, state)
+    notificationManager(c).cancel(id, 0)
+    cancelIntents(c, state); schedule(c, state)
+  }
+  private fun due(state: JSONObject, stage: JSONObject): Boolean {
+    val postponed = obj(state, "postponed").optJSONObject(stage.getString("id"))
+    val returning = stage.getString("kind") == "postponed"
+    if (postponed == null) return !returning
+    val at = Instant.parse(stage.getString("stageAt")); val until = Instant.parse(postponed.getString("until"))
+    return if (returning) at == until else at > until
   }
   private fun eligible(state: JSONObject, dose: JSONObject): Boolean {
     val medicines = array(state, "medicines")
@@ -219,10 +251,13 @@ internal object MedicineEngine {
     for (identity in delivered.keys().asSequence().toList()) if (delivered.getString(identity) < today.toString()) delivered.remove(identity)
     val visible = obj(state, "visible")
     for (id in visible.keys().asSequence().toList()) if (visible.getJSONObject(id).getString("on") < today.toString()) { notificationManager(c).cancel(id, 0); visible.remove(id) }
+    val postponed = obj(state, "postponed")
+    for (id in postponed.keys().asSequence().toList()) if (postponed.getJSONObject(id).getString("on") < today.toString()) postponed.remove(id)
     fun plan(dose: JSONObject, kind: String, time: Long) {
       val stage = JSONObject(dose.toString()).put("kind", kind).put("stageAt", instant(time))
-      if (time > now && !delivered.has(stageKey(stage))) batches.getOrPut(time to kind) { JSONArray() }.put(stage)
-      else if (kind == "reminder" && time <= now && !delivered.has(stageKey(stage))) show(c, state, stage, false)
+      if (!due(state, stage) || delivered.has(stageKey(stage))) return
+      if (time > now) batches.getOrPut(time to kind) { JSONArray() }.put(stage)
+      else if (kind != "alarm") show(c, state, stage, false)
     }
     val medicines = array(state, "medicines")
     for (i in 0 until medicines.length()) {
@@ -239,6 +274,7 @@ internal object MedicineEngine {
             val alarmAt = day.atTime(LocalTime.parse(slot.getString("alarmAt"))).atZone(zone).toInstant().toEpochMilli()
             val remindAt = day.atTime(LocalTime.parse(slot.getString("remindAt"))).atZone(zone).toInstant().toEpochMilli()
             val dose = JSONObject().put("id", id).put("medicineId", m.getString("id")).put("slotId", slot.getString("id")).put("on", day.toString()).put("scheduledAt", instant(alarmAt)).put("takenAt", JSONObject.NULL).put("name", m.getString("name")).put("instructions", if (m.isNull("instructions")) "" else m.optString("instructions", "")).put("alarmLabel", slot.getString("alarmAt"))
+            postponed.optJSONObject(id)?.let { plan(dose, "postponed", Instant.parse(it.getString("until")).toEpochMilli()) }
             if (alarmAt > now) {
               plan(dose, "alarm", alarmAt)
               plan(dose, "reminder", remindAt)
@@ -253,7 +289,7 @@ internal object MedicineEngine {
       data.put("identity", identity).put("generation", state.optString("generation")).put("workspace", state.optString("workspace"))
       scheduled.put(data); save(c, state)
       val delivery = intent(c, identity, data)
-      if (data.getString("kind") == "alarm") {
+      if (data.getString("kind") == "alarm" || data.getString("kind") == "postponed") {
         val show = PendingIntent.getActivity(c, 0, Intent(Intent.ACTION_VIEW, Uri.parse("zeroagent:///browse/medicines")).setPackage(c.packageName), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         manager.setAlarmClock(AlarmManager.AlarmClockInfo(time, show), delivery)
       } else manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, delivery)
@@ -268,7 +304,7 @@ internal object MedicineEngine {
     val doses = batch.optJSONArray("doses") ?: JSONArray()
     for (i in 0 until doses.length()) {
       val dose = doses.getJSONObject(i)
-      if (eligible(state, dose) && currentDose(state, dose) && !obj(state, "suppressed").optBoolean(dose.getString("id")) && dose.getString("on") == LocalDate.now(clock()).toString()) show(c, state, dose, true)
+      if (eligible(state, dose) && currentDose(state, dose) && due(state, dose) && !obj(state, "suppressed").optBoolean(dose.getString("id")) && dose.getString("on") == LocalDate.now(clock()).toString()) show(c, state, dose, true)
     }
     cancelIntents(c, state); schedule(c, state)
   }
@@ -292,13 +328,19 @@ internal object MedicineEngine {
       .setData(Uri.parse("zero-medicine:$kind/${Uri.encode(workspace)}/${Uri.encode(id)}/${Uri.encode(dose.optString("stageAt"))}"))
       .putExtra("workspace", workspace).putExtra("payload", dose.toString()), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     val channel = if (proofMuted(c, workspace)) PROOF else ALERTS
-    val text = listOf(if (dose.optString("kind") == "alarm") "${dose.getString("alarmLabel")} dose due" else "Dose at ${dose.getString("alarmLabel")}", dose.optString("instructions", "")).filter { it.isNotBlank() }.joinToString(" · ")
+    val due = when (dose.optString("kind")) {
+      "alarm" -> true
+      "postponed" -> Instant.parse(dose.getString("stageAt")) >= Instant.parse(dose.getString("scheduledAt"))
+      else -> false
+    }
+    val text = listOf(if (due) "${dose.getString("alarmLabel")} dose due" else "Dose at ${dose.getString("alarmLabel")}", dose.optString("instructions", "")).filter { it.isNotBlank() }.joinToString(" · ")
     val public = Notification.Builder(c, channel).setSmallIcon(R.drawable.ic_medicine_notification).setContentTitle("Medicine reminder").setContentText("Open Zero Agent for details").build()
     val builder = Notification.Builder(c, channel).setSmallIcon(R.drawable.ic_medicine_notification).setContentTitle(dose.getString("name"))
       .setContentText(text).setStyle(Notification.BigTextStyle().bigText(text)).setContentIntent(openPending).setDeleteIntent(action("dismissed"))
       .setCategory(Notification.CATEGORY_REMINDER).setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(public)
       .setOnlyAlertOnce(!alert)
       .addAction(Notification.Action.Builder(null, "Taken", action("taken")).build())
+      .addAction(Notification.Action.Builder(null, "Postpone 1 hour", action("postponed")).build())
     if (!alert) builder.setGroup("medicine-quiet").setGroupAlertBehavior(Notification.GROUP_ALERT_SUMMARY)
     return builder.build()
   }
@@ -309,6 +351,7 @@ class MedicineReceiver : BroadcastReceiver() {
     try {
       when (intent.action) {
         "medicine.taken" -> MedicineEngine.taken(context, intent.getStringExtra("workspace") ?: return, intent.getStringExtra("payload") ?: return)
+        "medicine.postponed" -> MedicineEngine.postpone(context, intent.getStringExtra("workspace") ?: return, intent.getStringExtra("payload") ?: return)
         "medicine.dismissed" -> MedicineEngine.dismissed(context, intent.getStringExtra("workspace") ?: return, intent.getStringExtra("payload") ?: return)
         "medicine.delivery" -> MedicineEngine.deliver(context, intent.getStringExtra("payload") ?: return)
         else -> MedicineEngine.restore(context, intent.action == Intent.ACTION_BOOT_COMPLETED)
