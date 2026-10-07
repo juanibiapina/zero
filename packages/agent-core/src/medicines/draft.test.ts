@@ -7,7 +7,7 @@ import { createTaskdoReplica } from "../taskdo/replica";
 
 const today = "2026-10-03";
 const custom: MedicineInput = {
-  name: "Existing medicine", instructions: "After food", startsOn: "2026-10-01", endsOn: "2026-10-12", paused: true,
+  name: "Existing medicine", instructions: "After food", startsOn: "2026-10-01", endsOn: "2026-10-12", paused: true, weekdays: [1, 3, 5],
   doses: [{ id: "morning", alarmAt: "09:10", remindAt: "08:40" }, { id: "evening", alarmAt: "22:00", remindAt: "20:00" }],
 };
 
@@ -96,5 +96,21 @@ describe("Medicine drafts", () => {
     await expect(replica.medicines.add(input, "draft")).rejects.toThrow("already exists");
     expect(replica.snapshot().medicines).toHaveLength(0);
     await replica.close();
+  });
+  it("starts daily and keeps chosen weekdays through edits and Add again", () => {
+    expect(MedicineDraft.create(today).change({ name: "Routine" }).commit().weekdays).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(MedicineDraft.create(today, custom).commit().weekdays).toEqual([1, 3, 5]);
+    expect(MedicineDraft.create(today, custom, true).commit().weekdays).toEqual([1, 3, 5]);
+  });
+  it("toggles weekdays in order and never removes the last one", () => {
+    let draft = MedicineDraft.create(today).change({ name: "Routine" });
+    for (const day of [7, 2, 4, 6] as const) draft = draft.toggleWeekday(day);
+    expect(draft.commit().weekdays).toEqual([1, 3, 5]);
+    expect(draft.changed).toBe(true);
+    expect(draft.toggleWeekday(2).commit().weekdays).toEqual([1, 2, 3, 5]);
+    let single = draft.toggleWeekday(1).toggleWeekday(3);
+    expect(single.commit().weekdays).toEqual([5]);
+    single = single.toggleWeekday(5);
+    expect(single.commit().weekdays).toEqual([5]);
   });
 });

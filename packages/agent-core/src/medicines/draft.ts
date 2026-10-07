@@ -1,5 +1,5 @@
 import { safeRandomUUID } from "@tanstack/db";
-import { medicineEndDate, validateMedicine, type MedicineInput, type MedicineSlot } from "./model";
+import { EVERY_DAY, medicineEndDate, validateMedicine, type MedicineInput, type MedicineSlot, type Weekday } from "./model";
 
 const DAILY_TIMES: Record<number, string[]> = {
   1: ["20:00"],
@@ -28,7 +28,7 @@ export class MedicineDraft {
       paused: copy ? false : source.paused,
       doses: source.doses.map((slot) => ({ ...slot, id: copy ? safeRandomUUID() : slot.id })),
     } : {
-      name: "", instructions: null, startsOn: today, endsOn: null, paused: false,
+      name: "", instructions: null, startsOn: today, endsOn: null, paused: false, weekdays: EVERY_DAY,
       doses: [{ id: safeRandomUUID(), alarmAt: "20:00", remindAt: reminder("20:00", defaultLead(1)) }],
     };
     return new MedicineDraft(input, input.endsOn ? { kind: "last-day", on: input.endsOn } : { kind: "ongoing" });
@@ -72,6 +72,13 @@ export class MedicineDraft {
     return new MedicineDraft({ ...this.input, doses: this.input.doses.filter((slot) => slot.id !== slotId) }, this.course, true);
   }
 
+  toggleWeekday(day: Weekday): MedicineDraft {
+    const chosen = this.input.weekdays.includes(day);
+    if (chosen && this.input.weekdays.length === 1) return this;
+    const weekdays = chosen ? this.input.weekdays.filter((item) => item !== day) : [...this.input.weekdays, day].sort((a, b) => a - b);
+    return new MedicineDraft({ ...this.input, weekdays }, this.course, true);
+  }
+
   withCourse(course: MedicineCourse): MedicineDraft {
     return new MedicineDraft(this.input, course, true);
   }
@@ -92,6 +99,7 @@ export class MedicineDraft {
       ...this.input, name: this.input.name.trim(),
       instructions: this.input.instructions?.trim() || null,
       endsOn: this.endsOn,
+      weekdays: [...this.input.weekdays],
       doses: this.input.doses.map((slot) => ({ ...slot })),
     };
     validateMedicine(input);

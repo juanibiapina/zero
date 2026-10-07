@@ -121,7 +121,7 @@ describe("todo operation catalog", () => {
     const { ctx, run, value } = workspace();
     const model = new MedicineModel(ctx.store, ctx.now);
     const medicine = model.add("m", {
-      name: "Vitamin D", instructions: null, startsOn: "2026-03-01", endsOn: null, paused: false,
+      name: "Vitamin D", instructions: null, startsOn: "2026-03-01", endsOn: null, paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7],
       doses: [{ id: "morning", remindAt: "08:00", alarmAt: "08:30" }],
     });
     const [old] = medicineOccurrences(medicine, "2026-03-02");

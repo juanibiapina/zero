@@ -2,9 +2,11 @@
 
 ## What it is
 
-A Medicine is a daily routine: a name, optional instructions, one or more dose
-times each day, a start day, and an optional last day. "Vitamin D at 08:00" and
-"Antibiotic at 08:00, 14:00, and 20:00 for ten days" are Medicines.
+A Medicine is a routine: a name, optional instructions, one or more dose times,
+the days of the week it is taken (every day by default), a start day, and an
+optional last day. "Vitamin D at 08:00", "Antibiotic at 08:00, 14:00, and 20:00
+for ten days", and "Before breakfast at 07:30 on Monday, Wednesday, and Friday"
+are Medicines.
 
 A Dose is one dated occurrence of one dose time, such as "Antibiotic, 14:00,
 October 3". It records when you pressed Taken.
@@ -26,6 +28,9 @@ only what comes next.
 - Taken records the moment you confirmed. It works from the notification,
   without opening the app, signing in, or a network connection.
 - A course ends on its last day. Pausing and missed doses do not extend it.
+- A day of the week that is not chosen has no Doses and no reminders. The first
+  Dose is on the first chosen day on or after the start day. Pausing and missed
+  doses do not move the chosen days.
 - Changing a dose time affects only future reminders. Past ones do not replay.
 - An ended routine keeps its history. Adding it again starts a new routine.
 
@@ -33,7 +38,8 @@ only what comes next.
 
 Medicines has its own list under Browse on mobile and in the web sidebar. The
 list shows names and times. A Medicine's page shows today's doses and when you
-took them, with history on request.
+took them, with history on request. On a day that is not chosen, the list and
+the page show the day of the next dose instead.
 
 On Android, a normal notification arrives at the early reminder and again at
 the dose time, with Taken and Postpone 1 hour. A paired watch can show the same

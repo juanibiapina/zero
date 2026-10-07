@@ -138,6 +138,30 @@ describe('Medicine creation and management', () => {
     expect(screen.getByText(/Taken at /)).toBeTruthy();
     expect(screen.queryByLabelText('Taken 20:00 dose')).toBeNull();
   });
+  it('saves the chosen weekdays from the editor', async () => {
+    const screen = await openScreen(<MedicinesList />);
+    await fireEvent.press(screen.getByLabelText('Add medicine'));
+    await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Morning pill');
+    for (const name of ['Tuesday', 'Thursday', 'Saturday', 'Sunday']) await fireEvent.press(screen.getByLabelText(name));
+    expect(screen.getByLabelText('Tuesday').props.accessibilityState.checked).toBe(false);
+    await fireEvent.press(screen.getByLabelText('Add medicine'));
+    await waitFor(() => expect(screen.data.replica!.snapshot().medicines).toHaveLength(1));
+    expect(screen.data.replica!.snapshot().medicines[0].weekdays).toEqual([1, 3, 5]);
+  });
+  it('shows the next dose and no Taken on a day off', async () => {
+    const data = createInMemoryTodoData();
+    const today = medicineToday();
+    const weekday = ((new Date(`${today}T12:00:00`).getDay() + 6) % 7) + 1;
+    const tomorrow = ((weekday % 7) + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    await data.replica!.medicines.add({ ...MedicineDraft.create(today).change({ name: 'Morning pill' }).commit(), weekdays: [tomorrow] });
+    const list = await openScreen(<MedicinesList />, data);
+    expect(list.getByText(/^Next /)).toBeTruthy();
+    await list.unmount();
+    mockParams = { id: data.replica!.snapshot().medicines[0].id };
+    const screen = await openScreen(<MedicineDetail />, data);
+    expect(screen.getByText(/^Next dose /)).toBeTruthy();
+    expect(screen.queryByText('Taken')).toBeNull();
+  });
   it('offers no Taken while a medicine is paused', async () => {
     const data = createInMemoryTodoData();
     const medicine = await data.replica!.medicines.add({ ...MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit(), paused: true });

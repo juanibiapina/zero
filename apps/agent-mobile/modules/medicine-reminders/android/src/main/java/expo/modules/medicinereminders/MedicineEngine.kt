@@ -179,6 +179,10 @@ internal object MedicineEngine {
     val at = Instant.parse(stage.getString("stageAt")); val until = Instant.parse(postponed.getString("until"))
     return if (returning) at == until else at > until
   }
+  private fun onWeekday(m: JSONObject, day: LocalDate): Boolean {
+    val weekdays = m.optJSONArray("weekdays") ?: return true
+    return (0 until weekdays.length()).any { weekdays.getInt(it) == day.dayOfWeek.value }
+  }
   private fun eligible(state: JSONObject, dose: JSONObject): Boolean {
     val medicines = array(state, "medicines")
     for (i in 0 until medicines.length()) {
@@ -186,7 +190,7 @@ internal object MedicineEngine {
       if (m.getString("id") != dose.getString("medicineId")) continue
       if (m.optBoolean("paused")) return false
       val day = dose.getString("on")
-      if (day < m.getString("startsOn") || (!m.isNull("endsOn") && day > m.getString("endsOn"))) return false
+      if (day < m.getString("startsOn") || (!m.isNull("endsOn") && day > m.getString("endsOn")) || !onWeekday(m, LocalDate.parse(day))) return false
       val slots = m.getJSONArray("doses")
       return (0 until slots.length()).any { slots.getJSONObject(it).getString("id") == dose.getString("slotId") }
     }
@@ -267,10 +271,10 @@ internal object MedicineEngine {
       for (j in 0 until slots.length()) {
         val slot = slots.getJSONObject(j)
         var day = if (start > today) start else today
-        for (attempt in 0..1) {
+        for (attempt in 0..7) {
           if (end != null && day > end) break
           val id = key(m.getString("id"), slot.getString("id"), day.toString())
-          if (!obj(state, "suppressed").optBoolean(id)) {
+          if (onWeekday(m, day) && !obj(state, "suppressed").optBoolean(id)) {
             val alarmAt = day.atTime(LocalTime.parse(slot.getString("alarmAt"))).atZone(zone).toInstant().toEpochMilli()
             val remindAt = day.atTime(LocalTime.parse(slot.getString("remindAt"))).atZone(zone).toInstant().toEpochMilli()
             val dose = JSONObject().put("id", id).put("medicineId", m.getString("id")).put("slotId", slot.getString("id")).put("on", day.toString()).put("scheduledAt", instant(alarmAt)).put("takenAt", JSONObject.NULL).put("name", m.getString("name")).put("instructions", if (m.isNull("instructions")) "" else m.optString("instructions", "")).put("alarmLabel", slot.getString("alarmAt"))

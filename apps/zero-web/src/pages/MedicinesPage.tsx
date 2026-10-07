@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { MedicineDraft, medicineEndDate, medicineOccurrences, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose } from "@zero/agent-core";
+import { MedicineDraft, medicineCadence, medicineEndDate, medicineNextDay, medicineOccurrences, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose, type Weekday } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
@@ -8,6 +8,7 @@ import { useTodoData } from "@/lib/todo-data";
 import { useLocalDay } from "@/lib/local-day";
 
 const time = (instant: string) => new Date(instant).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+const WEEKDAYS: [Weekday, string][] = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [7, "Sunday"]];
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
 
 function MedicineForm({ replica, source, copy = false, onSaved }: { replica: TaskdoReplica; source?: Medicine; copy?: boolean; onSaved: (id: string) => void }) {
@@ -35,6 +36,7 @@ function MedicineForm({ replica, source, copy = false, onSaved }: { replica: Tas
         </div>)}
         <Button type="button" variant="outline" disabled={draft.doses.length >= 24} onClick={() => setDraft(MedicineDraft.create(medicineToday(), draft).addTime().input)}>Add dose time</Button>
       </fieldset>
+      <fieldset className="flex flex-col gap-2"><legend className="mb-2 font-semibold">Days</legend><div className="flex flex-wrap gap-3">{WEEKDAYS.map(([day, name]) => <label key={day} className="flex min-h-10 items-center gap-2"><input type="checkbox" checked={draft.weekdays.includes(day)} onChange={() => setDraft(MedicineDraft.create(medicineToday(), draft).toggleWeekday(day).input)} />{name}</label>)}</div></fieldset>
       <label className="flex flex-col gap-2">Starts<Input type="date" value={draft.startsOn} onChange={(event) => setDraft({ ...draft, startsOn: event.target.value })} required /></label>
       <fieldset className="flex flex-col gap-2"><legend>Ends</legend><div className="flex flex-wrap gap-3">{(["ongoing", "last-day", "days"] as const).map((mode) => <label key={mode} className="flex min-h-10 items-center gap-2"><input type="radio" name="end-mode" checked={endMode === mode} onChange={() => setEndMode(mode)} />{mode === "ongoing" ? "Ongoing" : mode === "days" ? "Number of days" : "Last day"}</label>)}</div></fieldset>
       {endMode === "days" ? <label className="flex flex-col gap-2">Number of days<Input type="number" min={1} max={36500} step={1} value={days} onChange={(event) => setDays(event.target.value)} required /></label> : null}
@@ -67,13 +69,13 @@ export function MedicinesPage() {
       {!snapshot.medicines.length ? <p>Add a medicine with one or more daily dose times.</p> : null}
       {snapshot.medicines.map((item) => {
         const expected = medicineOccurrences(item, today); const taken = expected.filter((dose) => snapshot.doses.some((row) => row.id === dose.id && row.takenAt)).length;
-        const state = medicineState(item, today);
-        return <Link key={item.id} to={`/medicines/${item.id}`} className="flex min-h-12 flex-col gap-1 border-b py-3"><span className="font-semibold">{item.name}</span><span className="text-sm text-muted-foreground">{item.doses.map((dose) => dose.alarmAt).join(" · ")} · {state === "active" ? `${taken} of ${expected.length} taken` : state}</span></Link>;
+        const state = medicineState(item, today); const next = state === "active" && !expected.length ? medicineNextDay(item, today) : null;
+        return <Link key={item.id} to={`/medicines/${item.id}`} className="flex min-h-12 flex-col gap-1 border-b py-3"><span className="font-semibold">{item.name}</span><span className="text-sm text-muted-foreground">{item.doses.map((dose) => dose.alarmAt).join(" · ")} · {next ? `Next dose ${next}` : state === "active" && !expected.length ? "No more doses" : state === "active" ? `${taken} of ${expected.length} taken` : state}</span></Link>;
       })}
     </> : null}
     {medicine ? <>
-      {medicine.instructions ? <p>{medicine.instructions}</p> : null}<p className="text-sm text-muted-foreground">Daily · {medicine.doses.length} {medicine.doses.length === 1 ? "time" : "times"} · {medicine.endsOn ? `Through ${medicine.endsOn}` : "Ongoing"}</p>
-      <h2 className="font-semibold">{medicineState(medicine, today) === "active" ? "Today" : medicineState(medicine, today)}</h2>
+      {medicine.instructions ? <p>{medicine.instructions}</p> : null}<p className="text-sm text-muted-foreground">{medicineCadence(medicine)} · {medicine.endsOn ? `Through ${medicine.endsOn}` : "Ongoing"}</p>
+      <h2 className="font-semibold">{medicineState(medicine, today) === "active" ? medicineOccurrences(medicine, today).length ? "Today" : (medicineNextDay(medicine, today) ? `Next dose ${medicineNextDay(medicine, today)}` : "No more doses") : medicineState(medicine, today)}</h2>
       {medicineOccurrences(medicine, today).map((planned) => {
         const dose = snapshot.doses.find((item) => item.id === planned.id) ?? planned;
         return <div key={dose.id} className="flex min-h-12 items-center justify-between gap-3 border-b py-2"><span>{time(dose.scheduledAt)}</span>{dose.takenAt ? <span className="text-sm">Taken at {time(dose.takenAt)} <Button variant="ghost" disabled={busy} onClick={() => void run(() => replica.medicines.undo(dose.id))}>Undo</Button></span> : <Button disabled={busy} onClick={() => take(dose)}>Taken {time(dose.scheduledAt)} dose</Button>}</div>;

@@ -12,6 +12,15 @@
         "startsOn": "2026-09-01",
         "endsOn": null,
         "paused": false,
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
         "doses": [
           {
             "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
@@ -55,6 +64,15 @@
         "startsOn": "2026-09-01",
         "endsOn": "2026-10-02",
         "paused": false,
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
         "doses": [
           {
             "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
@@ -86,6 +104,15 @@
         "startsOn": "2026-09-01",
         "endsOn": "2026-10-01",
         "paused": false,
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
         "doses": [
           {
             "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
@@ -109,6 +136,15 @@
         "startsOn": "2026-10-03",
         "endsOn": null,
         "paused": false,
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
         "doses": [
           {
             "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
@@ -132,6 +168,15 @@
         "startsOn": "2026-09-01",
         "endsOn": null,
         "paused": true,
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
         "doses": [
           {
             "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
@@ -155,6 +200,15 @@
         "startsOn": "2026-03-01",
         "endsOn": null,
         "paused": false,
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
         "doses": [
           {
             "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
@@ -186,6 +240,15 @@
         "startsOn": "2026-09-01",
         "endsOn": null,
         "paused": false,
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
         "doses": [
           {
             "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
@@ -217,6 +280,15 @@
         "startsOn": "2026-09-01",
         "endsOn": null,
         "paused": false,
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
         "doses": [
           {
             "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",
@@ -235,6 +307,70 @@
           "scheduledAt": "2026-10-02T23:00:00Z"
         }
       ]
+    },
+    {
+      "name": "chosen weekday",
+      "zone": "Europe/Berlin",
+      "now": "2026-10-09T04:00:00Z",
+      "on": "2026-10-09",
+      "medicine": {
+        "id": "7c1e2a90-3b4d-4e5f-8a6b-9c0d1e2f3a4b",
+        "name": "Morning pill",
+        "instructions": "Before breakfast",
+        "startsOn": "2026-10-05",
+        "endsOn": null,
+        "paused": false,
+        "weekdays": [
+          1,
+          3,
+          5
+        ],
+        "doses": [
+          {
+            "id": "e4f5a6b7-c8d9-4e0f-a1b2-c3d4e5f6a7b8",
+            "remindAt": "07:00",
+            "alarmAt": "07:30"
+          }
+        ],
+        "createdAt": "2026-10-05T06:00:00.000Z"
+      },
+      "doses": [
+        {
+          "id": "[\"7c1e2a90-3b4d-4e5f-8a6b-9c0d1e2f3a4b\",\"e4f5a6b7-c8d9-4e0f-a1b2-c3d4e5f6a7b8\",\"2026-10-09\"]",
+          "medicineId": "7c1e2a90-3b4d-4e5f-8a6b-9c0d1e2f3a4b",
+          "slotId": "e4f5a6b7-c8d9-4e0f-a1b2-c3d4e5f6a7b8",
+          "on": "2026-10-09",
+          "scheduledAt": "2026-10-09T05:30:00Z"
+        }
+      ]
+    },
+    {
+      "name": "weekday that is not chosen",
+      "zone": "Europe/Berlin",
+      "now": "2026-10-10T04:00:00Z",
+      "on": "2026-10-10",
+      "medicine": {
+        "id": "7c1e2a90-3b4d-4e5f-8a6b-9c0d1e2f3a4b",
+        "name": "Morning pill",
+        "instructions": "Before breakfast",
+        "startsOn": "2026-10-05",
+        "endsOn": null,
+        "paused": false,
+        "weekdays": [
+          1,
+          3,
+          5
+        ],
+        "doses": [
+          {
+            "id": "e4f5a6b7-c8d9-4e0f-a1b2-c3d4e5f6a7b8",
+            "remindAt": "07:00",
+            "alarmAt": "07:30"
+          }
+        ],
+        "createdAt": "2026-10-05T06:00:00.000Z"
+      },
+      "doses": []
     }
   ]
 }

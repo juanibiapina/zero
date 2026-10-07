@@ -1,6 +1,6 @@
 import { Host, Icon } from '@expo/ui';
 import { safeRandomUUID } from '@tanstack/db';
-import { MedicineDraft, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Dose, type Medicine } from '@zero/agent-core';
+import { MedicineDraft, medicineCadence, medicineNextDay, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Dose, type Medicine } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, View } from 'react-native';
@@ -74,7 +74,8 @@ function MedicineListContent({ snapshot, today }: {
         const state = medicineState(medicine, today);
         const expected = medicineOccurrences(medicine, today);
         const taken = expected.filter((dose) => snapshot.doses.some((item) => item.id === dose.id && item.takenAt)).length;
-        const status = state === 'active' ? taken ? `${taken}/${expected.length} taken` : null : state === 'paused' ? 'Paused' : state === 'ended' ? 'Ended' : `Starts ${day(medicine.startsOn)}`;
+        const next = state === 'active' && !expected.length ? medicineNextDay(medicine, today) : null;
+        const status = next ? `Next ${day(next)}` : state === 'active' ? taken ? `${taken}/${expected.length} taken` : null : state === 'paused' ? 'Paused' : state === 'ended' ? 'Ended' : `Starts ${day(medicine.startsOn)}`;
         return <Pressable accessibilityRole="button" accessibilityLabel={`Open ${medicine.name}`} onPress={() => router.push(`/browse/medicines/${medicine.id}`)} android_ripple={{ color: ripple }} className="min-h-16 gap-1 border-b border-divider px-screen-x py-3">
           <View className="flex-row flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><Text className="min-w-0 flex-1 font-semibold">{medicine.name}</Text>{status ? <Text variant="caption">{status}</Text> : null}</View>
           <Text variant="subtitle" className="text-foreground" style={{ fontVariant: ['tabular-nums'] }}>{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text>
@@ -115,6 +116,7 @@ export function MedicineDetail() {
   if (!medicine || !replica) return <Page title="Medicine"><Text variant="subtitle">This medicine is no longer available.</Text></Page>;
   const state = medicineState(medicine, today);
   const plannedToday = medicineOccurrences(medicine, today);
+  const nextDose = state === 'active' && !plannedToday.length ? medicineNextDay(medicine, today) : null;
   const focusedDose = params.dose ? doses.find((dose) => dose.id === params.dose && dose.medicineId === medicine.id) ?? plannedToday.find((dose) => dose.id === params.dose) : undefined;
   const visibleDoses = params.dose ? focusedDose ? [focusedDose] : [] : plannedToday;
   const history = doses.filter((dose) => dose.medicineId === medicine.id).sort((a, b) => b.on.localeCompare(a.on) || a.scheduledAt.localeCompare(b.scheduledAt));
@@ -122,10 +124,10 @@ export function MedicineDetail() {
   return <View className="flex-1 bg-background">
     <Page title={medicine.name}>
       {medicine.instructions ? <Text className="pb-2">{medicine.instructions}</Text> : null}
-      <View className="flex-row items-center justify-between gap-3 pb-5"><Text variant="subtitle" className="flex-1">{medicine.doses.length === 1 ? 'Once a day' : `${medicine.doses.length} times a day`}{medicine.endsOn ? ` · Through ${day(medicine.endsOn)}` : ''}</Text><Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable></View>
+      <View className="flex-row items-center justify-between gap-3 pb-5"><Text variant="subtitle" className="flex-1">{medicineCadence(medicine)}{medicine.endsOn ? ` · Through ${day(medicine.endsOn)}` : ''}</Text><Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable></View>
       {options ? <View className="border-y border-divider py-2"><Action label="Edit medicine" disabled={busy} onPress={() => setEditing(true)} />{state === 'ended' ? <Action label="Add again" disabled={busy} onPress={() => setCopying(true)} /> : <Action label={medicine.paused ? 'Resume reminders' : 'Pause reminders'} disabled={busy} onPress={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))} />}<Action label="Delete medicine" danger disabled={busy} onPress={remove} /></View> : null}
       {error ? <Text variant="error" selectable>{error}</Text> : null}
-      <Text accessibilityRole="header" variant="section" className="pb-2">{params.dose ? focusedDose ? `Dose · ${day(focusedDose.on)}` : 'This dose is no longer available.' : state === 'active' ? 'Today' : state === 'ended' ? `Ended ${day(medicine.endsOn!)}` : state === 'paused' ? 'Paused' : `Starts ${day(medicine.startsOn)}`}</Text>
+      <Text accessibilityRole="header" variant="section" className="pb-2">{params.dose ? focusedDose ? `Dose · ${day(focusedDose.on)}` : 'This dose is no longer available.' : nextDose ? `Next dose ${day(nextDose)}` : state === 'active' && !plannedToday.length ? 'No more doses' : state === 'active' ? 'Today' : state === 'ended' ? `Ended ${day(medicine.endsOn!)}` : state === 'paused' ? 'Paused' : `Starts ${day(medicine.startsOn)}`}</Text>
       {visibleDoses.map((planned) => {
         const dose = doses.find((item) => item.id === planned.id) ?? planned;
         const slot = medicine.doses.find((candidate) => candidate.id === dose.slotId);
@@ -141,7 +143,7 @@ export function MedicineDetail() {
           {!dose.takenAt && actionable ? <Action label="Taken" accessibilityLabel={`Taken ${time(dose.scheduledAt)} dose`} disabled={busy} onPress={() => void run(() => replica.medicines.take(dose))} /> : null}
         </View>;
       })}
-      {state !== 'active' && !params.dose ? <Text variant="subtitle" className="py-4">{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text> : null}
+      {(state !== 'active' || nextDose) && !params.dose ? <Text variant="subtitle" className="py-4">{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text> : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Dose history" accessibilityState={{ expanded: historyOpen }} onPress={() => setHistoryOpen((current) => !current)} className="min-h-14 flex-row items-center justify-between gap-3 pt-4"><Text variant="section">History</Text><MedicineGlyph name={historyOpen ? 'collapse' : 'expand'} /></Pressable>
       {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{day(dose.on)} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : 'Not recorded'}</Text></View>)}</View> : null}
     </Page>

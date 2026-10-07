@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-07: Add medicines taken only on chosen days of the week.
+
 - 2026-10-07: Fix Home saying "No projects yet" after you reopen the app when all your projects are done. It now says "No current projects".
 
 - 2026-10-07: Fix the + button sometimes floating in the middle of Home over a gray block when you open the app.

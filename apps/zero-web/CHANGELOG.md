@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-07: Add medicines taken only on chosen days of the week, such as Monday, Wednesday, and Friday. On other days, the medicine shows when the next dose is.
+
 - 2026-10-07: Fix Home saying "No projects yet" after you reopen the app when all your projects are done. It now says "No current projects".
 
 - 2026-10-07: Change the suggested project for a new task to show a spinner while Zero is still choosing, and to go back to No project when you edit the title, so the task is saved with the project you see. Replace the Suggested label with a button that clears the task's project.

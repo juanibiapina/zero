@@ -68,3 +68,25 @@ it("creates a finite multi-dose course and records, undoes, and retains independ
   fireEvent.click(screen.getByRole("button", { name: "Pause reminders" }));
   expect(await screen.findByRole("button", { name: "Resume reminders" })).toBeVisible();
 });
+
+it("saves chosen weekdays and shows the next dose on a day off", async () => {
+  const todo = createInMemoryTodoData();
+  replica = todo.replica;
+  render(<TodoDataContextProvider value={{ ...todo.data, authenticatedFeatures: false }}>
+    <MemoryRouter initialEntries={["/medicines"]}><Routes>
+      <Route path="/medicines" element={<MedicinesPage />} />
+      <Route path="/medicines/:id" element={<MedicinesPage />} />
+    </Routes></MemoryRouter>
+  </TodoDataContextProvider>);
+  const today = medicineToday();
+  const weekday = ((new Date(`${today}T12:00:00`).getDay() + 6) % 7) + 1;
+  const names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  fireEvent.click(screen.getByRole("button", { name: "Add medicine" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Medicine name" }), { target: { value: "Morning pill" } });
+  for (const name of names.filter((_, index) => index !== weekday % 7)) fireEvent.click(screen.getByRole("checkbox", { name }));
+  fireEvent.click(screen.getByRole("button", { name: "Save medicine" }));
+  await waitFor(() => expect(replica.snapshot().medicines).toHaveLength(1));
+  expect(replica.snapshot().medicines[0].weekdays).toEqual([(weekday % 7) + 1]);
+  expect(await screen.findByRole("heading", { name: /^Next dose / })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^Taken / })).toBeNull();
+});

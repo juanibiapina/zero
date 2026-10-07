@@ -39,7 +39,7 @@ the connection returns.
 - Home: the Tasks available today, and the place to add new work.
 - Upcoming: Tasks with a future date.
 - Projects: Projects grouped by attention, each with its own workspace.
-- Medicines: daily medicine routines and their doses.
+- Medicines: medicine routines and their doses.
 
 Mobile is the main daily surface, and web is the companion. Both show the same
 model, and both work before sign-in.

@@ -286,7 +286,7 @@ export const todoOperations: readonly TodoOperation[] = [
     name: "medicines_list",
     title: "List Medicines and recent Doses",
     description:
-      "List Medicines (daily routines with timed doses) and their Doses since a date. A Dose is one dated occurrence; " +
+      "List Medicines (routines with timed doses on chosen weekdays, ISO 1 = Monday) and their Doses since a date. A Dose is one dated occurrence; " +
       "takenAt is null until the user confirms it on their phone.",
     kind: "read",
     input: z.object({ dosesSince: PlainDate.optional().describe("Earliest Dose date; defaults to 7 days ago") }),

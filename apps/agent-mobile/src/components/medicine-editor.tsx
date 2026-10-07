@@ -1,6 +1,6 @@
 import { Host, Picker } from '@expo/ui';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
-import { MedicineDraft, medicineToday } from '@zero/agent-core';
+import { MedicineDraft, medicineToday, type Weekday } from '@zero/agent-core';
 import { useImperativeHandle, useState, type Ref } from 'react';
 import { Pressable, View } from 'react-native';
 
@@ -8,6 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 
 const FREQUENCIES = ['Once a day', 'Twice a day', 'Three times a day', 'Four times a day'];
+const WEEKDAYS: { day: Weekday; short: string; name: string }[] = [
+  { day: 1, short: 'M', name: 'Monday' }, { day: 2, short: 'T', name: 'Tuesday' }, { day: 3, short: 'W', name: 'Wednesday' },
+  { day: 4, short: 'T', name: 'Thursday' }, { day: 5, short: 'F', name: 'Friday' }, { day: 6, short: 'S', name: 'Saturday' }, { day: 7, short: 'S', name: 'Sunday' },
+];
 export type MedicineEditorHandle = { handleBack: () => boolean };
 export function MedicineEditorFields({ draft, onChange, disabled = false, error, editorRef }: {
   draft: MedicineDraft; onChange: (draft: MedicineDraft) => void; disabled?: boolean; error?: string | null; editorRef?: Ref<MedicineEditorHandle>;
@@ -42,6 +46,14 @@ export function MedicineEditorFields({ draft, onChange, disabled = false, error,
         {FREQUENCIES.map((label, index) => <Picker.Item key={label} label={label} value={String(index + 1)} />)}
         {count > 4 ? <Picker.Item label={`${count} times a day`} value={String(count)} /> : null}
       </Picker></Host>
+    </View>
+    <View className="flex-row justify-between px-screen-x pb-2">
+      {WEEKDAYS.map(({ day, short, name }) => {
+        const checked = draft.input.weekdays.includes(day);
+        return <Pressable key={day} accessibilityRole="checkbox" accessibilityLabel={name} accessibilityState={{ checked, disabled }} disabled={disabled} onPress={() => onChange(draft.toggleWeekday(day))} className="min-h-12 min-w-12 items-center justify-center">
+          <View className={`h-9 w-9 items-center justify-center rounded-full ${checked ? 'bg-accent' : 'border border-divider'}`}><Text className={checked ? 'font-semibold text-on-accent' : 'text-foreground-secondary'}>{short}</Text></View>
+        </Pressable>;
+      })}
     </View>
     <Pressable accessibilityRole="button" accessibilityLabel="Customize medicine schedule" accessibilityState={{ expanded: customizing }} disabled={disabled} onPress={() => setCustomizing((current) => !current)} className="min-h-14 gap-1 px-screen-x pb-4 pt-1">
       <View className="flex-row flex-wrap items-center justify-between gap-x-4 gap-y-1">

@@ -6,7 +6,7 @@ import { medicineOccurrences } from "./model";
 
 async function setup() {
   const replica = createInMemoryTaskdoReplica();
-  const medicine = await replica.medicines.add({ name: "Pill", instructions: null, startsOn: "2026-10-02", endsOn: null, paused: false, doses: [{ id: "evening", remindAt: "20:00", alarmAt: "22:00" }] });
+  const medicine = await replica.medicines.add({ name: "Pill", instructions: null, startsOn: "2026-10-02", endsOn: null, paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: "evening", remindAt: "20:00", alarmAt: "22:00" }] });
   const dose = medicineOccurrences(medicine, "2026-10-02")[0];
   const device = createInMemoryMedicineReminderDevice({ takenAt: () => "2026-10-02T20:35:00Z" }); const controller = createMedicineReminders(replica, device, "workspace");
   await controller.enable(); return { replica, device, controller, dose };

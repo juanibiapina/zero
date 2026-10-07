@@ -7,6 +7,7 @@
     "startsOn": "2026-09-01",
     "endsOn": null,
     "paused": false,
+    "weekdays": [1, 2, 3, 4, 5, 6, 7],
     "doses": [
       {
         "id": "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85",

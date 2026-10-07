@@ -54,6 +54,36 @@ class MedicineDeliveryTest {
   @After
   fun restoreClock() { MedicineEngine.clock = { Clock.systemDefaultZone() } }
 
+  private fun weekdayPlan(weekdays: List<Int>, remindAt: String, alarmAt: String) = JSONObject().put("medicines", JSONArray().put(
+    JSONObject("""{"id":"medicine","name":"Pill","instructions":null,"startsOn":"$day","endsOn":null,"paused":false,"doses":[{"id":"evening","remindAt":"$remindAt","alarmAt":"$alarmAt"}]}""").put("weekdays", JSONArray(weekdays))
+  )).put("confirmed", JSONArray()).toString()
+  private fun armedDays(kind: String) = shadowOf(alarms).scheduledAlarms.map { JSONObject(shadowOf(it.operation).savedIntent.getStringExtra("payload")!!) }
+    .filter { it.getString("kind") == kind }.flatMap { batch -> (0 until batch.getJSONArray("doses").length()).map { batch.getJSONArray("doses").getJSONObject(it).getString("on") } }
+
+  @Test
+  fun aFridayDoseWhoseTimeHasPassedArmsMondayAndMidnight() {
+    MedicineEngine.replace(context, workspace, weekdayPlan(listOf(1, 3, 5), "07:30", "08:00"))
+    assertEquals(listOf("2026-10-05"), armedDays("alarm"))
+    assertEquals(listOf("2026-10-05"), armedDays("reminder"))
+    assertTrue(kinds().contains("midnight"))
+  }
+
+  @Test
+  fun aWeeklyDoseWhoseTimeHasPassedArmsNextWeek() {
+    MedicineEngine.replace(context, workspace, weekdayPlan(listOf(5), "07:30", "08:00"))
+    assertEquals(listOf("2026-10-09"), armedDays("alarm"))
+  }
+
+  @Test
+  fun removingTodaysWeekdayClosesItsCard() {
+    MedicineEngine.replace(context, workspace, weekdayPlan(listOf(1, 3, 5), "23:57", "23:59"))
+    MedicineEngine.deliver(context, payload("reminder"))
+    assertNotNull(notification())
+    MedicineEngine.replace(context, workspace, weekdayPlan(listOf(1, 3), "23:57", "23:59"))
+    assertNull(notification())
+    assertEquals(listOf("2026-10-05"), armedDays("alarm"))
+  }
+
   @Test
   fun bothScheduledStagesAlertOnceWithoutOpeningTheApp() {
     MedicineEngine.replace(context, workspace, plans())
