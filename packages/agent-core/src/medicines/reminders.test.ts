@@ -7,7 +7,7 @@ import { MEDICINE_SOURCE, medicineOccurrence } from "./notifications";
 
 async function setup() {
   const replica = createInMemoryTaskdoReplica();
-  const medicine = await replica.medicines.add({ name: "Pill", instructions: null, startsOn: "2026-10-02", endsOn: null, paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: "evening", remindAt: "20:00", alarmAt: "22:00" }] });
+  const medicine = await replica.medicines.add({ name: "Pill", instructions: null, startsOn: "2026-10-02", endsOn: null, paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: "evening", remindAt: "20:00", alarmAt: "22:00", amount: 1 }] });
   const dose = medicineOccurrences(medicine, "2026-10-02")[0];
   const device = createInMemoryNotificationDevice({ now: () => "2026-10-02T20:35:00Z" });
   const controller = createMedicineReminders(replica, device, "workspace");
@@ -144,7 +144,7 @@ describe("medicine reminder durability", () => {
   it("records the dose time a notification Taken was scheduled for after the dose time changes", async () => {
     const { replica, controller, dose, medicine, settle } = await setup();
     await settle();
-    await replica.medicines.edit(medicine.id, { ...medicine, doses: [{ id: "evening", remindAt: "20:00", alarmAt: "21:00" }] });
+    await replica.medicines.edit(medicine.id, { ...medicine, doses: [{ id: "evening", remindAt: "20:00", alarmAt: "21:00", amount: 1 }] });
     await controller.refresh();
     const taken = replica.snapshot().doses.find((item) => item.id === dose.id);
     expect(taken?.takenAt).toBe("2026-10-02T20:35:00Z");

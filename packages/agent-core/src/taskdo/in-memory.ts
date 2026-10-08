@@ -28,6 +28,7 @@ export function createInMemoryTaskdoReplica(seed: InMemoryTodoSeed = {}): Taskdo
     ...(task.completedAt ? { completedAt: task.completedAt } : {}),
     ...(task.showUpDate ? { showUpDate: task.showUpDate } : {}),
     ...(task.parent?.kind === "project" ? { projectId: task.parent.projectId } : {}),
+    ...(task.parent?.kind === "medicine" ? { medicineId: task.parent.medicineId, ...(task.parent.role ? { role: task.parent.role } : {}) } : {}),
     ...(task.recurrence ? { recurrence: JSON.stringify(task.recurrence) } : {}),
     ...(task.recurrenceDate ? { recurrenceDate: task.recurrenceDate } : {}),
     ...(task.sortKey ? { sortKey: task.sortKey } : {}),

@@ -49,14 +49,14 @@ Read a row as "this block, when it meets that one".
 
 | | Task | Project | Waiting | After | Medicine |
 |---|---|---|---|---|---|
-| **Task** | Shares one manual order | Belongs to at most one. An arrived date makes it Active, a future date makes it Waiting until that day, no date keeps the Task off Home | Completing a Project Task offers to add what the Project now waits for | None. After never hides dated work | None |
+| **Task** | Shares one manual order | Belongs to at most one. An arrived date makes it Active, a future date makes it Waiting until that day, no date keeps the Task off Home | Completing a Project Task offers to add what the Project now waits for | None. After never hides dated work | A restock Task belongs to it, shows 💊, and asks how many pills you got when completed |
 | **Project** | Deleting it deletes its Tasks | After another Project, through After | Owns any number. One open condition makes it Waiting | Completing it releases the Projects that wait for it. Undo restores them | None |
 | **Waiting** | None | Belongs to one Project and goes when it goes | Each resolves on its own | Outranks After | None |
 | **After** | None | Points from one Project to another. No cycles | Ranks below Waiting | Several on one Project must all resolve | None |
-| **Medicine** | None | None | None | None | Each Medicine has its own Doses |
+| **Medicine** | A low supply adds one restock Task. Deleting it leaves its Tasks loose | None | None | None | Each Medicine has its own Doses |
 
-Medicine stands apart on purpose. It never appears on Home and never changes
-how much attention a Project needs.
+Medicine stands apart from Projects on purpose. It never changes how much
+attention a Project needs; only its restock Tasks reach Home.
 
 Places and agents:
 
@@ -66,7 +66,7 @@ Places and agents:
 | **Project** | Next and Waiting Projects, when Home has no Tasks | | Grouped by attention, each with its own workspace | | List, add, edit, change state, delete |
 | **Waiting** | | | In its Project | | List, add, resolve, delete |
 | **After** | | | In its Project, and as its own Projects section | | List, add, delete |
-| **Medicine** | | | | Its own list and detail | List only |
+| **Medicine** | Its restock Tasks, as loose Tasks | | | Its own list and detail | List only |
 
 ## Removed blocks
 
@@ -112,6 +112,7 @@ at one to teach the game.
 ## Open questions
 
 - Can the code refuse to build when a new block does not wire its required
-  interactions?
+  interactions? For a Task's parent, yes: every Task rule switches on the
+  parent kind, so a new kind does not compile until each rule handles it.
 - Do we list the interactions a block allows, or the ones it forbids?
 - Are Waiting and After blocks, or connectors between Projects?

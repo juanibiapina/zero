@@ -7,7 +7,7 @@ import { MEDICINE_CHANNEL, medicineReceipt, medicineSchedule } from "./notificat
 
 const medicine = (over: Partial<Medicine> = {}): Medicine => ({
   id: "vitamin", name: "Vitamin D", instructions: "After food", startsOn: "2026-09-01", endsOn: null, paused: false,
-  weekdays: [1, 3, 5], doses: [{ id: "morning", remindAt: "07:45", alarmAt: "08:00" }], createdAt: "2026-09-01T08:00:00.000Z", ...over,
+  weekdays: [1, 3, 5], doses: [{ id: "morning", remindAt: "07:45", alarmAt: "08:00", amount: 1 }], createdAt: "2026-09-01T08:00:00.000Z", supply: null, ...over,
 });
 const taken = (on: string, slotId = "morning"): Dose => ({ id: `${slotId}-${on}`, medicineId: "vitamin", slotId, on, scheduledAt: `${on}T06:00:00.000Z`, takenAt: `${on}T06:05:00.000Z` });
 
@@ -55,7 +55,7 @@ describe("native receipt contract", () => {
     process.env.TZ = contract.zone;
     const replica = createInMemoryTaskdoReplica();
     const id = "0d4c3f2e-8a51-4c7b-9f0e-2b6a1d9e7c31";
-    await replica.medicines.add({ name: "Evening pill", instructions: null, startsOn: "2026-09-01", endsOn: null, paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85", remindAt: "19:45", alarmAt: "20:00" }] }, id);
+    await replica.medicines.add({ name: "Evening pill", instructions: null, startsOn: "2026-09-01", endsOn: null, paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: "a3e9b1d2-5c47-4f68-8e12-7d0b9c4f6a85", remindAt: "19:45", alarmAt: "20:00", amount: 1 }] }, id);
     expect(medicineSchedule(replica.snapshot())).toEqual(contract.schedule);
     const receipts = contract.receipts.map((receipt, index) => medicineReceipt({ ...receipt, id: `receipt-${index}` } as Receipt)!);
     await replica.medicines.applyReceipts(receipts, "workspace");

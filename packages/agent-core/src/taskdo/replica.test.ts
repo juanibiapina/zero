@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createMergeableStore } from "tinybase";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createTaskdoReplica, projectTodoData } from "./replica";
 
@@ -81,6 +81,16 @@ describe("TaskDO replica adapter", () => {
     expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water later", recurrence, recurrenceDate: recurrence.origin, showUpDate: "2026-09-27" });
     await replica.tasks.edit(id, "Water weekly", { kind: "recurring", recurrence: { ...recurrence, origin: "2026-09-28", pattern: { unit: "week", interval: 1, weekdays: ["MO"] } } }).isPersisted.promise;
     expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water weekly", recurrenceDate: "2026-09-28", showUpDate: "2026-09-28", recurrence: { pattern: { unit: "week" } } });
+    await replica.close();
+  });
+
+  it("brings a Task written outside the collection, by sync or a Medicine, into the collection", async () => {
+    const { replica, store } = setup();
+    await replica.tasks.collection.preload();
+    const subscription = replica.tasks.collection.subscribeChanges(() => {});
+    store.setRow("tasks", "synced", { text: "From another device", createdAt: NOW });
+    await vi.waitFor(() => expect(replica.tasks.collection.get("synced")).toMatchObject({ text: "From another device" }));
+    subscription.unsubscribe();
     await replica.close();
   });
 

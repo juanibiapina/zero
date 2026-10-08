@@ -1,6 +1,7 @@
 import type { Project } from "../projects/types";
 import { compareByOrder } from "./order";
 import type { Task } from "../taskdo/types";
+import { unreachableParent } from "./parent";
 
 // Home is open work whose day has arrived. A Project Task needs an arrived date
 // and an In-play owner; manual Waiting and After do not suppress work the user
@@ -21,6 +22,10 @@ export function homeTasks(
         case "project":
           if (task.showUpDate == null || task.showUpDate > today) return false;
           return projectsById.get(parent.projectId)?.state === "in-play";
+        case "medicine":
+          return loose;
+        default:
+          return unreachableParent(parent);
       }
     })
     .sort(compareByOrder);

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { TaskDraft, messageOf, taskProjectId, toast, undoableAction, type Project, type Task, type TaskdoReplica, type WaitingCondition } from "@zero/agent-core";
+import { MEDICINE_TASK_ICON, TaskDraft, messageOf, taskMedicineId, taskProjectId, toast, undoableAction, type Project, type Task, type TaskdoReplica, type WaitingCondition } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { TaskFields } from "@/components/task-fields";
@@ -24,6 +24,8 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
   const selected = tasks.find((task) => task.id === selectedId) ?? null;
   const draftView = useMemo(() => draft.view(today, selected), [draft, today, selected]);
   const selectedProject = projects.find((project) => project.id === (selected ? taskProjectId(selected) : null));
+  const selectedMedicineId = selected ? taskMedicineId(selected) : null;
+  const selectedMedicine = selectedMedicineId ? replica.snapshot().medicines.find((medicine) => medicine.id === selectedMedicineId) : undefined;
   const fail = (error: unknown) => { onError(messageOf(error)); reportTodoError(error); };
   const completion = useTaskCompletionFeedback({ replica, projects, today, onError: fail });
 
@@ -100,8 +102,9 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
                 undoableAction({ message: "Completed forever", act: () => replica.tasks.completeForever(task.id), undo: () => replica.tasks.reopen(task), onError: fail });
               } : undefined,
             }}
-            projectField={{ projects, tasks, conditions, projectId: taskProjectId(selected), onPick: move, onOpen: commitDraft }}
+            projectField={selectedMedicine ? undefined : { projects, tasks, conditions, projectId: taskProjectId(selected), onPick: move, onOpen: commitDraft }}
           >
+            {selectedMedicine ? <Button type="button" variant="outline" aria-label={`Open medicine ${selectedMedicine.name}`} onClick={() => { if (commitDraft()) { setSelectedId(null); void navigate(`/medicines/${selectedMedicine.id}`); } }}><span aria-hidden>{MEDICINE_TASK_ICON}</span>For {selectedMedicine.name}</Button> : null}
             {selectedProject && selectedProject.id !== currentProjectId ? <Button type="button" variant="ghost" aria-label={`Open project ${selectedProject.title}`} onClick={() => { if (commitDraft()) { setSelectedId(null); void navigate(`/projects/${selectedProject.id}`); } }}>Open project</Button> : null}
           </TaskFields>
         </form> : null}

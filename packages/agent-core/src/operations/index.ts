@@ -72,9 +72,14 @@ function fromModel<T>(result: TodoModelResult<T, string>): OperationOutcome {
     : { ok: false, error: result.conflict };
 }
 
+function agentTask(task: Task) {
+  const medicine = task.parent?.kind === "medicine" ? task.parent : null;
+  return { ...taskRecord(task), medicineId: medicine?.medicineId ?? null, role: medicine?.role ?? null };
+}
+
 function fromTaskModel(result: TodoModelResult<Task, string>): OperationOutcome {
   return result.ok
-    ? { ok: true, changed: result.changed, value: taskRecord(result.value) }
+    ? { ok: true, changed: result.changed, value: agentTask(result.value) }
     : { ok: false, error: result.conflict };
 }
 
@@ -97,13 +102,15 @@ export const todoOperations: readonly TodoOperation[] = [
     description:
       "List open Tasks in the user's manual order. A Task is the only to-do item; it is loose or belongs to a Project. " +
       "showUpDate is the day it becomes current (null means always current); Home shows open Tasks whose showUpDate is " +
-      "null or on/before today, Upcoming shows later ones. Recurring Tasks carry recurrence and recurrenceDate (the current occurrence).",
+      "null or on/before today, Upcoming shows later ones. Recurring Tasks carry recurrence and recurrenceDate (the current occurrence). " +
+      "A Task with medicineId belongs to that Medicine; role restock means Zero added it because the supply ran low. " +
+      "Completing it here does not add pills; the user records the amount in the app.",
     kind: "read",
     input: z.object({ projectId: Id.optional().describe("Only Tasks in this Project") }),
     run: (ctx, input) => {
       const tasks = todo(ctx).project({ taskOrder: "manual" }).tasks;
       const listed = input.projectId ? tasks.filter((task) => taskProjectId(task) === input.projectId) : tasks;
-      return read({ today: ctx.today, tasks: listed.map(taskRecord) });
+      return read({ today: ctx.today, tasks: listed.map(agentTask) });
     },
   }),
   define({
@@ -298,7 +305,8 @@ export const todoOperations: readonly TodoOperation[] = [
     title: "List Medicines and recent Doses",
     description:
       "List Medicines (routines with timed doses on chosen weekdays, ISO 1 = Monday) and their Doses since a date. A Dose is one dated occurrence; " +
-      "takenAt is null until the user confirms it on their phone.",
+      "takenAt is null until the user confirms it on their phone. Each dose time takes amount pills. supply is null until the user counts their pills; " +
+      "otherwise pillsLeft, leadDays (Zero adds a restock Task when the pills left cover only this many days), and refill (the last restock amount).",
     kind: "read",
     input: z.object({ dosesSince: PlainDate.optional().describe("Earliest Dose date; defaults to 7 days ago") }),
     run: (ctx, input) => {

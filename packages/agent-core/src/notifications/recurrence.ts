@@ -7,7 +7,7 @@ function weekdayOf(date: LocalDate): number {
   return ((value.getUTCDay() + 6) % 7) + 1;
 }
 
-function addDays(date: LocalDate, days: number): LocalDate {
+export function addDays(date: LocalDate, days: number): LocalDate {
   const [year, month, day] = date.split("-").map(Number);
   const value = new Date(0);
   value.setUTCFullYear(year, month - 1, day + days);

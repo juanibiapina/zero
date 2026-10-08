@@ -3,7 +3,7 @@ import { createMergeableStore } from "tinybase";
 import { MedicineModel, medicineCadence, medicineEndDate, medicineNextDay, medicineOccurrences, medicineState, type MedicineInput, type MedicineReceipt } from "./model";
 
 const input: MedicineInput = { name: "Daily pill", instructions: "1 pill", startsOn: "2026-10-02", endsOn: "2026-10-11", paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7],
-  doses: [{ id: "morning", remindAt: "07:00", alarmAt: "08:00" }, { id: "evening", remindAt: "20:00", alarmAt: "22:00" }] };
+  doses: [{ id: "morning", remindAt: "07:00", alarmAt: "08:00", amount: 1 }, { id: "evening", remindAt: "20:00", alarmAt: "22:00", amount: 1 }] };
 const now = () => new Date("2026-10-02T12:00:00");
 function setup() { const store = createMergeableStore(); const model = new MedicineModel(store, now); model.add("medicine", input); return { model, store }; }
 
@@ -32,7 +32,7 @@ describe("daily medicines", () => {
     other.merge(store);
     model.take(dose, "take", "2026-10-02T20:35:00Z");
     const otherModel = new MedicineModel(other, now);
-    otherModel.edit("medicine", { ...input, doses: [{ id: "evening", remindAt: "20:00", alarmAt: "23:00" }] });
+    otherModel.edit("medicine", { ...input, doses: [{ id: "evening", remindAt: "20:00", alarmAt: "23:00", amount: 1 }] });
     otherModel.present({ ...dose, scheduledAt: new Date("2026-10-02T23:00:00").toISOString() });
     store.merge(other);
     expect(model.getDose(dose.id)?.scheduledAt).toBe(dose.scheduledAt);
@@ -88,7 +88,7 @@ describe("medicines on chosen weekdays", () => {
     expect(() => model.edit("medicine", { ...input, weekdays } as MedicineInput)).toThrow("day of the week");
   });
   it("finds the next dose day, ignoring pause, until the course ends", () => {
-    const medicine = { ...monWedFri, id: "mwf", createdAt: "2026-10-01T00:00:00Z" };
+    const medicine = { ...monWedFri, id: "mwf", createdAt: "2026-10-01T00:00:00Z", supply: null };
     expect(medicineNextDay(medicine, "2026-10-09")).toBe("2026-10-09");
     expect(medicineNextDay(medicine, "2026-10-10")).toBe("2026-10-12");
     expect(medicineNextDay(medicine, "2026-10-01")).toBe("2026-10-07");

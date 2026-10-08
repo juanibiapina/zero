@@ -4,7 +4,7 @@
 
 A Task is one line of work: "buy milk", "call the breeder", "renew passport".
 It is the entry point of the app. Anything you jot down becomes a Task. A Task
-can stand alone (a loose Task) or belong to a Project.
+can stand alone (a loose Task) or have one parent: a Project or a Medicine.
 
 ## Why it is its own block
 
@@ -44,12 +44,18 @@ turns it into the schedule. Tapping the phrase keeps the words as plain text.
 - Waiting: completing a Project Task offers "Waiting for…", to record what the
   Project now waits for.
 - After: none. After never hides a Task you dated on purpose.
-- Medicine: none.
+- Medicine: when a Medicine's supply gets low, Zero adds a loose 💊 Task
+  "Buy <name>" under it. The Task is yours from then on: Zero never renames,
+  dates, or deletes it. Its detail shows "For <Medicine>" instead of the Project
+  picker and opens the Medicine. Completing it first asks how many pills you
+  got; saving adds them and completes the Task, and Undo takes both back.
+  Deleting the Medicine leaves the Task loose.
 - Home: shows the Tasks that are open and available today.
 - Upcoming: shows open Tasks with a future date, grouped by day.
 - Quick add: while you type a new Task, Zero suggests the Project it most likely
   belongs to. Choosing a Project or "No project" by hand ends the suggestion.
-- Agents: list, add, edit, complete, reopen, and set repeats.
+- Agents: list, add, edit, complete, reopen, and set repeats. Completing a
+  restock Task over MCP does not add pills.
 
 ## Left out on purpose
 

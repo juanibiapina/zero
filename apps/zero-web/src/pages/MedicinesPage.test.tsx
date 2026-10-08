@@ -63,7 +63,7 @@ it("creates a finite multi-dose course and records, undoes, and retains independ
   fireEvent.click(screen.getByRole("button", { name: "Undo last taken dose" }));
   await waitFor(() => expect(replica.snapshot().doses.filter((dose) => dose.takenAt)).toHaveLength(1));
   expect(screen.getByRole("button", { name: "Taken 23:00 dose" })).toBeVisible();
-  await act(async () => { await replica.medicines.edit(replica.snapshot().medicines[0].id, { ...replica.snapshot().medicines[0], doses: [{ id: replica.snapshot().medicines[0].doses[0].id, remindAt: "19:00", alarmAt: "21:30" }] }); });
+  await act(async () => { await replica.medicines.edit(replica.snapshot().medicines[0].id, { ...replica.snapshot().medicines[0], doses: [{ id: replica.snapshot().medicines[0].doses[0].id, remindAt: "19:00", alarmAt: "21:30", amount: 1 }] }); });
   expect(screen.getByText(/Scheduled 22:00/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Pause reminders" }));
   expect(await screen.findByRole("button", { name: "Resume reminders" })).toBeVisible();

@@ -2,6 +2,7 @@ import { advance, validateRecurrence, type Recurrence } from "@zeroapps/recurren
 import { generateKeyBetween } from "fractional-indexing";
 import type { MergeableStore } from "tinybase";
 
+import { unreachableParent } from "../tasks/parent";
 import type {
   Project,
   ProjectAfter,
@@ -69,6 +70,15 @@ function put(store: MergeableStore, table: string, id: string, key: string, valu
   else store.setCell(table, id, key, value);
 }
 
+function parentCells(parent: TaskParent | null): { projectId: string | null; medicineId: string | null; role: string | null } {
+  if (parent == null) return { projectId: null, medicineId: null, role: null };
+  switch (parent.kind) {
+    case "project": return { projectId: parent.projectId, medicineId: null, role: null };
+    case "medicine": return { projectId: null, medicineId: parent.medicineId, role: parent.role };
+    default: return unreachableParent(parent);
+  }
+}
+
 export class TodoModel {
   readonly store: MergeableStore;
   private readonly now: () => Date;
@@ -129,9 +139,20 @@ export class TodoModel {
     };
   }
 
+  private medicineExists(id: string): boolean {
+    return this.store.hasRow("medicines", id) && !this.store.getCell("medicines", id, "deletedAt");
+  }
+
+  // An older app can move a Medicine Task into a Project without clearing the
+  // Medicine cells; the Project wins.
   private readParent(row: Record<string, unknown>): TaskParent | null {
     if (typeof row.projectId === "string") {
       return this.getProject(row.projectId) ? { kind: "project", projectId: row.projectId } : null;
+    }
+    if (typeof row.medicineId === "string") {
+      return this.medicineExists(row.medicineId)
+        ? { kind: "medicine", medicineId: row.medicineId, role: row.role === "restock" ? "restock" : null }
+        : null;
     }
     return null;
   }
@@ -140,11 +161,13 @@ export class TodoModel {
     if (parent == null) return false;
     switch (parent.kind) {
       case "project": return !this.getProject(parent.projectId);
+      case "medicine": return !this.medicineExists(parent.medicineId);
+      default: return unreachableParent(parent);
     }
   }
 
   private writeParent(id: string, parent: TaskParent | null) {
-    put(this.store, "tasks", id, "projectId", parent?.kind === "project" ? parent.projectId : null);
+    for (const [key, value] of Object.entries(parentCells(parent))) put(this.store, "tasks", id, key, value);
   }
 
   private getCondition(id: string): ProjectAttention | null {
@@ -403,7 +426,7 @@ export class TodoModel {
       createdAt: input.createdAt ?? this.timestamp(),
       sortKey: input.sortKey ?? sortKey,
       ...(showUpDate ? { showUpDate } : {}),
-      ...(input.parent?.kind === "project" ? { projectId: input.parent.projectId } : {}),
+      ...Object.fromEntries(Object.entries(parentCells(input.parent ?? null)).filter(([, value]) => value !== null)),
       ...(input.recurrence ? { recurrence: JSON.stringify(input.recurrence) } : {}),
       ...(recurrenceDate ? { recurrenceDate } : {}),
       ...(input.completedAt ? { completedAt: input.completedAt } : {}),

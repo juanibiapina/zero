@@ -68,7 +68,7 @@ function task(over: Partial<Task> & { projectId?: string } = {}): Task {
     recurrenceDate: over.recurrenceDate ?? null,
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
-    parent: projectParent(over.projectId ?? "p"),
+    parent: over.parent !== undefined ? over.parent : projectParent(over.projectId ?? "p"),
     sortKey: over.sortKey ?? null,
   };
 }
@@ -166,6 +166,11 @@ describe("projectDisplayStatus", () => {
         [waiting()],
       ),
     ).toBe("waiting");
+  });
+
+  it("does not count Medicine Tasks toward a Project", () => {
+    const pills = task({ parent: { kind: "medicine", medicineId: "m", role: "restock" } });
+    expect(projectDisplayStatus(project(), [pills], TODAY)).toBe("next");
   });
 });
 

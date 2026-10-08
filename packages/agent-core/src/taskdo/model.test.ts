@@ -219,4 +219,24 @@ describe("canonical TinyBase todo model", () => {
       { table: "tasks", id: "bad-task", projectId: "bad-project", reason: "missing-project" },
     ]);
   });
+
+  it("makes a Medicine Task an ordinary Project Task when it moves into a Project", () => {
+    const { model, store } = setup();
+    addProjects(model, "p");
+    store.setRow("medicines", "m", { details: "{}", createdAt: NOW });
+    model.createTask({ id: "t", text: "Buy pills", parent: { kind: "medicine", medicineId: "m", role: "restock" } });
+    expect(model.getTask("t")?.parent).toEqual({ kind: "medicine", medicineId: "m", role: "restock" });
+    model.patchTask("t", { parent: projectParent("p") });
+    expect(model.getTask("t")?.parent).toEqual({ kind: "project", projectId: "p" });
+    expect(store.getRow("tasks", "t")).not.toHaveProperty("medicineId");
+    expect(store.getRow("tasks", "t")).not.toHaveProperty("role");
+  });
+
+  it("reads a Task an older app moved into a Project as that Project's Task", () => {
+    const { model, store } = setup();
+    addProjects(model, "p");
+    store.setRow("medicines", "m", { details: "{}", createdAt: NOW });
+    store.setRow("tasks", "t", { text: "Buy pills", createdAt: NOW, medicineId: "m", role: "restock", projectId: "p" });
+    expect(model.getTask("t")?.parent).toEqual({ kind: "project", projectId: "p" });
+  });
 });

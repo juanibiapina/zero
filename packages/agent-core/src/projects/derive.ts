@@ -1,4 +1,5 @@
 import type { Task } from "../taskdo/types";
+import { unreachableParent } from "../tasks/parent";
 import type {
   ManualWaitingCondition,
   ProjectAttention,
@@ -15,6 +16,8 @@ function inProject(task: Task, project: Project): boolean {
   if (parent == null) return false;
   switch (parent.kind) {
     case "project": return parent.projectId === project.id;
+    case "medicine": return false;
+    default: return unreachableParent(parent);
   }
 }
 

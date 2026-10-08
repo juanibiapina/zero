@@ -1,12 +1,13 @@
 import { Host, Icon } from '@expo/ui';
 import { safeRandomUUID } from '@tanstack/db';
-import { doseId, MedicineDraft, medicineCadence, medicineNextDay, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Dose, type Medicine } from '@zero/agent-core';
+import { DEFAULT_LEAD_DAYS, doseId, MedicineDraft, medicineCadence, restockWithUndo, supplyLabel, medicineNextDay, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Dose, type Medicine } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MedicineEditorFields, MedicineSaveButton, type MedicineEditorHandle } from '@/components/medicine-editor';
+import { MedicineEditorFields, MedicineSaveButton, type MedicineEditorHandle, type SupplyFields } from '@/components/medicine-editor';
+import { PillCountSheet } from '@/components/pill-count-sheet';
 import { ScreenHeader } from '@/components/screen-header';
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -105,6 +106,7 @@ export function MedicineDetail() {
   const [editing, setEditing] = useState(false);
   const [copying, setCopying] = useState(false);
   const [undoing, setUndoing] = useState<Dose | null>(null);
+  const [counting, setCounting] = useState<'restock' | 'count' | null>(null);
   const actionPending = useRef(false);
   const run = async (operation: () => Promise<void>) => {
     if (actionPending.current) return;
@@ -127,8 +129,15 @@ export function MedicineDetail() {
       {medicine.instructions ? <Text className="pb-2">{medicine.instructions}</Text> : null}
       <View className="flex-row items-center justify-between gap-3 pb-5"><Text variant="subtitle" className="flex-1">{medicineCadence(medicine)}{medicine.endsOn ? ` · Through ${day(medicine.endsOn)}` : ''}</Text><Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable></View>
       {options ? <View className="border-y border-divider py-2"><Action label="Edit medicine" disabled={busy} onPress={() => setEditing(true)} />{state === 'ended' ? <Action label="Add again" disabled={busy} onPress={() => setCopying(true)} /> : <Action label={medicine.paused ? 'Resume reminders' : 'Pause reminders'} disabled={busy} onPress={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))} />}<Action label="Delete medicine" danger disabled={busy} onPress={remove} /></View> : null}
+      <View className="flex-row flex-wrap items-center justify-between gap-x-4 border-b border-divider pb-2">
+        <Text variant="subtitle" className="min-w-0 flex-1" style={{ fontVariant: ['tabular-nums'] }}>{supplyLabel(medicine) ?? 'Pills not counted'}</Text>
+        <View className="flex-row gap-4">
+          <Action label="Restock" disabled={busy} onPress={() => setCounting('restock')} />
+          <Action label="Set count" disabled={busy} onPress={() => setCounting('count')} />
+        </View>
+      </View>
       {error ? <Text variant="error" selectable>{error}</Text> : null}
-      <Text accessibilityRole="header" variant="section" className="pb-2">{focus ? focusedDose ? `Dose · ${day(focusedDose.on)}` : 'This dose is no longer available.' : nextDose ? `Next dose ${day(nextDose)}` : state === 'active' && !plannedToday.length ? 'No more doses' : state === 'active' ? 'Today' : state === 'ended' ? `Ended ${day(medicine.endsOn!)}` : state === 'paused' ? 'Paused' : `Starts ${day(medicine.startsOn)}`}</Text>
+      <Text accessibilityRole="header" variant="section" className="pb-2 pt-4">{focus ? focusedDose ? `Dose · ${day(focusedDose.on)}` : 'This dose is no longer available.' : nextDose ? `Next dose ${day(nextDose)}` : state === 'active' && !plannedToday.length ? 'No more doses' : state === 'active' ? 'Today' : state === 'ended' ? `Ended ${day(medicine.endsOn!)}` : state === 'paused' ? 'Paused' : `Starts ${day(medicine.startsOn)}`}</Text>
       {visibleDoses.map((planned) => {
         const dose = doses.find((item) => item.id === planned.id) ?? planned;
         const slot = medicine.doses.find((candidate) => candidate.id === dose.slotId);
@@ -149,12 +158,17 @@ export function MedicineDetail() {
       {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{day(dose.on)} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : 'Not recorded'}</Text></View>)}</View> : null}
     </Page>
     {undoing ? <ConfirmDialog title={`Mark ${time(undoing.scheduledAt)} dose as not taken?`} message="It will show as pending again." cancelLabel="Cancel" confirmLabel="Undo" onCancel={() => setUndoing(null)} onConfirm={() => { const dose = undoing; setUndoing(null); void run(() => replica.medicines.undo(dose.id)); }} /> : null}
+    {counting === 'restock' ? <PillCountSheet title="How many pills did you get?" initial={medicine.supply?.refill ?? null} onClose={() => setCounting(null)} onSave={(amount) => { setCounting(null); void restockWithUndo({ replica, medicineId: medicine.id, amount, onError: setError }); }} /> : null}
+    {counting === 'count' ? <PillCountSheet title="How many pills do you have?" initial={medicine.supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: medicine.supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} /> : null}
     {editing || copying ? <MedicineDrawer key={copying ? 'copy' : medicine.id} source={medicine} copy={copying} onClose={() => { setEditing(false); setCopying(false); }} onSaved={(id) => { setEditing(false); setCopying(false); if (copying) router.replace(`/browse/medicines/${id}`); }} /> : null}
   </View>;
 }
 function MedicineDrawer({ source, copy = false, onClose, onSaved }: { source?: Medicine; copy?: boolean; onClose: () => void; onSaved: (id: string) => void }) {
   const replica = useTodoReplica();
   const [draft, setDraft] = useState(() => MedicineDraft.create(medicineToday(), source, copy));
+  const initialSupply: SupplyFields = { pills: !copy && source?.supply ? String(source.supply.pillsLeft) : '', lead: String(source?.supply?.leadDays ?? DEFAULT_LEAD_DAYS) };
+  const [supply, setSupply] = useState(initialSupply);
+  const supplyChanged = supply.pills !== initialSupply.pills || supply.lead !== initialSupply.lead;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
@@ -162,15 +176,20 @@ function MedicineDrawer({ source, copy = false, onClose, onSaved }: { source?: M
   const creationId = useRef(safeRandomUUID());
   const editor = useRef<MedicineEditorHandle>(null);
   const editing = !!source && !copy;
-  const close = () => { if (pending.current) return; if (discard) setDiscard(false); else if (draft.changed) setDiscard(true); else onClose(); };
+  const close = () => { if (pending.current) return; if (discard) setDiscard(false); else if (draft.changed || supplyChanged) setDiscard(true); else onClose(); };
   const save = async () => {
     if (!replica || pending.current) return;
     let input;
     setError(null);
     try { input = draft.commit(); } catch (cause) { setError(errorText(cause)); return; }
+    const pills = supply.pills.trim();
+    if (pills && !/^\d+$/.test(pills)) { setError('Enter the number of pills you have'); return; }
+    if (pills && !/^\d+$/.test(supply.lead.trim())) { setError('Enter a whole number of days'); return; }
     pending.current = true; setBusy(true);
     try {
       const id = editing ? (await replica.medicines.edit(source.id, input), source.id) : (await replica.medicines.add(input, creationId.current)).id;
+      if (supplyChanged && pills) await replica.medicines.setSupply(id, { pillsLeft: Number(pills), leadDays: Number(supply.lead.trim()) });
+      else if (supplyChanged && editing) await replica.medicines.clearSupply(id);
       onSaved(id);
     } catch (cause) { setError(errorText(cause)); }
     finally { pending.current = false; setBusy(false); }
@@ -178,7 +197,7 @@ function MedicineDrawer({ source, copy = false, onClose, onSaved }: { source?: M
   return <TaskEditorSheet open onClose={close} onBack={() => { if (pending.current) return; if (discard) setDiscard(false); else if (!editor.current?.handleBack()) close(); }} dismissLabel="Dismiss medicine editor" draft={draft.input.name} onChangeDraft={(name) => setDraft((current) => current.change({ name }))} onSubmit={() => void save()} placeholder="Name a medicine" inputAccessibilityLabel="Medicine name" inputEditable={!busy}
     context={<View className="px-screen-x pt-3"><Text variant="section">{editing ? 'Edit medicine' : 'Add medicine'}</Text></View>}
     trailing={<MedicineSaveButton busy={busy} editing={editing} disabled={!draft.input.name.trim() || !replica} onPress={() => void save()} />}
-    secondaryContent={<MedicineEditorFields editorRef={editor} draft={draft} onChange={(next) => { setDraft(next); setError(null); }} disabled={busy} error={error} />}
+    secondaryContent={<MedicineEditorFields editorRef={editor} draft={draft} onChange={(next) => { setDraft(next); setError(null); }} supply={supply} onChangeSupply={(next) => { setSupply(next); setError(null); }} disabled={busy} error={error} />}
     overlay={discard ? <ConfirmDialog title="Discard changes?" message="The changes you've made will not be saved." cancelLabel="Cancel" confirmLabel="Discard" destructive onCancel={() => setDiscard(false)} onConfirm={onClose} /> : null}
   />;
 }

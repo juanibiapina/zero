@@ -90,7 +90,7 @@ describe('Medicine creation and management', () => {
   it.each([false, true])('preserves a taken dose without Undo when editing its description (dose-focused: %s)', async (doseFocused) => {
     const data = createInMemoryTodoData();
     const input = MedicineDraft.create(medicineToday()).change({ name: 'Custom routine' }).commit();
-    input.doses[0] = { id: 'evening', remindAt: '20:00', alarmAt: '22:00' };
+    input.doses[0] = { id: 'evening', remindAt: '20:00', alarmAt: '22:00', amount: 1 };
     const medicine = await data.replica!.medicines.add(input);
     const dose = medicineOccurrences(medicine, medicineToday())[0];
     await data.replica!.medicines.take(dose);
@@ -219,5 +219,79 @@ describe('Medicine creation and management', () => {
     await fireEvent.press(screen.getByLabelText('Dismiss medicine editor'));
     await fireEvent.press(screen.getByText('Discard'));
     expect(screen.data.replica!.snapshot().medicines).toHaveLength(0);
+  });
+
+});
+
+describe('Medicine supply', () => {
+  async function lowMedicine() {
+    const data = createInMemoryTodoData();
+    const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Ibuprofen' }).commit());
+    await data.replica!.medicines.setSupply(medicine.id, { pillsLeft: 4, leadDays: 14 });
+    return { data, medicine };
+  }
+  const restockTask = (data: ReturnType<typeof createInMemoryTodoData>) =>
+    data.replica!.snapshot().tasks.find((task) => task.parent?.kind === 'medicine');
+
+  it('asks how many pills were bought before completing a restock Task from Home', async () => {
+    const { data } = await lowMedicine();
+    const screen = await openScreen(<HomeScreen />, data);
+    expect(screen.getByText('💊')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Complete "Buy Ibuprofen"'));
+    expect(screen.getByText('How many pills did you get?')).toBeTruthy();
+    expect(restockTask(data)?.completedAt).toBeNull();
+    await fireEvent.changeText(screen.getByLabelText('How many pills did you get?'), '60');
+    await fireEvent.press(screen.getByLabelText('Save'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].supply).toMatchObject({ pillsLeft: 64, refill: 60 }));
+    expect(data.replica!.snapshot().tasks.filter((task) => !task.completedAt)).toEqual([]);
+    expect(defaultToastController.getSnapshot()[0]?.message).toBe('Restocked 60 pills');
+  });
+
+  it('shows the Medicine in place of the Project on a restock Task', async () => {
+    const { data, medicine } = await lowMedicine();
+    const screen = await openScreen(<HomeScreen />, data);
+    await fireEvent.press(screen.getByLabelText('Edit "Buy Ibuprofen"'));
+    expect(screen.getByText('💊 For Ibuprofen')).toBeTruthy();
+    expect(screen.queryByLabelText('Set project')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Open medicine Ibuprofen'));
+    expect(mockNavigate).toHaveBeenCalledWith(`/browse/medicines/${medicine.id}`);
+  });
+
+  it('changes nothing when the restock sheet is canceled', async () => {
+    const { data } = await lowMedicine();
+    const screen = await openScreen(<HomeScreen />, data);
+    await fireEvent.press(screen.getByLabelText('Complete "Buy Ibuprofen"'));
+    await fireEvent.press(screen.getByLabelText('Cancel'));
+    expect(screen.queryByText('How many pills did you get?')).toBeNull();
+    expect(restockTask(data)?.completedAt).toBeNull();
+    expect(data.replica!.snapshot().medicines[0].supply?.pillsLeft).toBe(4);
+  });
+
+  it('shows the pills left and sets the count from the Medicine page', async () => {
+    const data = createInMemoryTodoData();
+    const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
+    mockParams = { id: medicine.id };
+    const screen = await openScreen(<MedicineDetail />, data);
+    expect(screen.getByText('Pills not counted')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Set count'));
+    await fireEvent.changeText(screen.getByLabelText('How many pills do you have?'), '60');
+    await fireEvent.press(screen.getByLabelText('Save'));
+    await waitFor(() => expect(screen.getByText('60 pills left · about 60 days')).toBeTruthy());
+    expect(restockTask(data)).toBeUndefined();
+  });
+
+  it('saves pills per dose and the count from the editor', async () => {
+    const screen = await openScreen(<MedicinesList />);
+    await fireEvent.press(screen.getByLabelText('Add medicine'));
+    await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Ibuprofen');
+    await fireEvent.press(screen.getByLabelText('Customize medicine schedule'));
+    await fireEvent.press(screen.getByLabelText('More pills for dose 1'));
+    await fireEvent.changeText(screen.getByLabelText('Pills you have'), '20');
+    await fireEvent.press(screen.getByLabelText('Add medicine'));
+    await waitFor(() => expect(screen.data.replica!.snapshot().medicines).toHaveLength(1));
+    const [medicine] = screen.data.replica!.snapshot().medicines;
+    expect(medicine.doses[0].amount).toBe(2);
+    expect(medicine.supply).toMatchObject({ pillsLeft: 20, leadDays: 14 });
+    expect(restockTask(screen.data)).toMatchObject({ text: 'Buy Ibuprofen' });
   });
 });

@@ -33,7 +33,7 @@ export default function MedicineProof() {
     const hhmm = (date: Date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     await device.clear(workspace);
     for (const item of replica.snapshot().medicines) await replica.medicines.remove(item.id);
-    const medicine = await replica.medicines.add({ name: 'E2E medicine', instructions: 'Native proof only', startsOn: medicineToday(), endsOn: medicineToday(), paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: 'evening', remindAt: hhmm(early), alarmAt: hhmm(alarm) }] });
+    const medicine = await replica.medicines.add({ name: 'E2E medicine', instructions: 'Native proof only', startsOn: medicineToday(), endsOn: medicineToday(), paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: 'evening', remindAt: hhmm(early), alarmAt: hhmm(alarm), amount: 1 }] });
     const peer = multiple ? await replica.medicines.add({ ...medicine, name: 'E2E second medicine' }) : null;
     await device.install(workspace, MEDICINE_SOURCE, medicineSchedule({ medicines: peer ? [medicine, peer] : [medicine], doses: [] }));
     setStatus(`Notifications scheduled ${hhmm(alarm)}`);

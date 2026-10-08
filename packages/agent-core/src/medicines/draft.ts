@@ -29,7 +29,7 @@ export class MedicineDraft {
       doses: source.doses.map((slot) => ({ ...slot, id: copy ? safeRandomUUID() : slot.id })),
     } : {
       name: "", instructions: null, startsOn: today, endsOn: null, paused: false, weekdays: EVERY_DAY,
-      doses: [{ id: safeRandomUUID(), alarmAt: "20:00", remindAt: reminder("20:00", defaultLead(1)) }],
+      doses: [{ id: safeRandomUUID(), alarmAt: "20:00", remindAt: reminder("20:00", defaultLead(1)), amount: 1 }],
     };
     return new MedicineDraft(input, input.endsOn ? { kind: "last-day", on: input.endsOn } : { kind: "ongoing" });
   }
@@ -43,9 +43,10 @@ export class MedicineDraft {
     if (!times) throw new Error("Choose one to four daily times, or customize the schedule");
     const matching = new Map(this.input.doses.filter((slot) => times.includes(slot.alarmAt)).map((slot) => [slot.alarmAt, slot]));
     const remaining = this.input.doses.filter((slot) => !times.includes(slot.alarmAt));
-    const doses = times.map((alarmAt) => ({
-      id: matching.get(alarmAt)?.id ?? remaining.shift()?.id ?? safeRandomUUID(), alarmAt, remindAt: reminder(alarmAt, defaultLead(count)),
-    }));
+    const doses = times.map((alarmAt) => {
+      const kept = matching.get(alarmAt) ?? remaining.shift();
+      return { id: kept?.id ?? safeRandomUUID(), alarmAt, remindAt: reminder(alarmAt, defaultLead(count)), amount: kept?.amount ?? 1 };
+    });
     return new MedicineDraft({ ...this.input, doses }, this.course, true);
   }
 
@@ -59,11 +60,17 @@ export class MedicineDraft {
     return new MedicineDraft({ ...this.input, doses }, this.course, true);
   }
 
+  amount(slotId: string, value: number): MedicineDraft {
+    if (!Number.isInteger(value) || value < 1) return this;
+    const doses = this.input.doses.map((slot) => slot.id === slotId ? { ...slot, amount: value } : slot);
+    return new MedicineDraft({ ...this.input, doses }, this.course, true);
+  }
+
   addTime(): MedicineDraft {
     const occupied = new Set(this.input.doses.map((slot) => slot.alarmAt));
     const alarmAt = [...DAILY_TIMES[3], "12:00", "16:00", ...Array.from({ length: 23 }, (_, index) => [clock((index + 1) * 60), clock((index + 1) * 60 + 30)]).flat()].find((time) => !occupied.has(time));
     if (!alarmAt || this.input.doses.length >= 24) throw new Error("A medicine supports up to 24 daily times");
-    const slot: MedicineSlot = { id: safeRandomUUID(), alarmAt, remindAt: reminder(alarmAt, defaultLead(this.input.doses.length + 1)) };
+    const slot: MedicineSlot = { id: safeRandomUUID(), alarmAt, remindAt: reminder(alarmAt, defaultLead(this.input.doses.length + 1)), amount: 1 };
     return new MedicineDraft({ ...this.input, doses: [...this.input.doses, slot] }, this.course, true);
   }
 

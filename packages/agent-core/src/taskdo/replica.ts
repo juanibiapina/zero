@@ -9,7 +9,7 @@ import { projectParent } from "../tasks/parent";
 import { localToday } from "../tasks/today";
 import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
-import { MedicineModel, type MedicineInput, type Medicine, type Dose, type MedicineReceipt } from "../medicines/model";
+import { MedicineModel, type MedicineInput, type Medicine, type Dose, type MedicineReceipt, type MedicineRestock } from "../medicines/model";
 
 export type TodoRecoveryRepair =
   | "make-task-loose"
@@ -82,6 +82,10 @@ export type TodoMedicines = {
   take: (dose: Dose) => Promise<void>;
   undo: (id: string) => Promise<void>;
   applyReceipts: (receipts: MedicineReceipt[], deviceId: string) => Promise<void>;
+  setSupply: (id: string, supply: { pillsLeft: number; leadDays: number }) => Promise<void>;
+  clearSupply: (id: string) => Promise<void>;
+  restock: (id: string, amount: number, taskId?: string) => Promise<MedicineRestock>;
+  undoRestock: (id: string, restock: MedicineRestock, taskId?: string) => Promise<void>;
 };
 
 export type TaskdoReplica = {
@@ -202,7 +206,7 @@ export function createTaskdoReplica({
   randomId = safeRandomUUID,
 }: CreateTaskdoReplicaOptions): TaskdoReplica {
   const model = new TodoModel({ store, now });
-  const medicineModel = new MedicineModel(store, now);
+  const medicineModel = new MedicineModel(store, now, randomId);
   const keys = {
     tasks: ["taskdo", ...queryKeyScope, "tasks"],
     projects: ["taskdo", ...queryKeyScope, "projects"],
@@ -211,11 +215,16 @@ export function createTaskdoReplica({
   const listeners = new Set<(snapshot: TodoSnapshot) => void>();
   let closed = false;
   let snapshot = projectTodoData(store);
+  let collections: { utils: { refetch: () => Promise<unknown> }; status: string }[] = [];
   const publish = () => {
     snapshot = projectTodoData(store);
     queryClient.setQueryData(keys.tasks, snapshot.tasks);
     queryClient.setQueryData(keys.projects, snapshot.projects);
     queryClient.setQueryData(keys.conditions, snapshot.conditions);
+    // Sync and Medicine writes change rows outside the collections' handlers.
+    for (const collection of collections) {
+      if (collection.status === "ready") void collection.utils.refetch().catch(() => {});
+    }
     for (const listener of listeners) listener(snapshot);
   };
   publish();
@@ -330,6 +339,8 @@ export function createTaskdoReplica({
     },
   }));
 
+  collections = [tasks, projects, waits];
+
   const taskActions: TodoTasks = {
     collection: tasks,
     add: (text, showUpDate = null, projectId = null, recurrence = null) => tasks.insert({
@@ -409,6 +420,14 @@ export function createTaskdoReplica({
       take: (dose) => write(() => { medicineModel.take(dose, randomId()); }),
       undo: (id) => write(() => { medicineModel.undo(id, randomId()); }),
       applyReceipts: (receipts, deviceId) => write(() => { medicineModel.applyReceipts(receipts, deviceId); }),
+      setSupply: (id, supply) => write(() => { medicineModel.setSupply(id, supply); }),
+      clearSupply: (id) => write(() => { medicineModel.clearSupply(id); }),
+      async restock(id, amount, taskId) {
+        let result!: MedicineRestock;
+        await write(() => { result = medicineModel.restock(id, amount, taskId); });
+        return result;
+      },
+      undoRestock: (id, restock, taskId) => write(() => { medicineModel.undoRestock(id, restock, taskId); }),
     },
     snapshot: () => snapshot,
     subscribe(listener) {

@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-08: Add pill counts to medicines. Set how many pills each dose takes and how many you have; every Taken counts them down, and when they run low a 💊 Buy task appears on Home. Completing it asks how many pills you got and adds them.
+
 - 2026-10-07: Add medicines taken only on chosen days of the week, such as Monday, Wednesday, and Friday. On other days, the medicine shows when the next dose is.
 
 - 2026-10-07: Fix Home saying "No projects yet" after you reopen the app when all your projects are done. It now says "No current projects".

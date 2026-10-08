@@ -3,6 +3,7 @@
 
 import type { Project, ProjectDisplayStatus } from "./types";
 import type { Task } from "../taskdo/types";
+import { unreachableParent } from "../tasks/parent";
 
 export const PROJECT_DISPLAY_STATUS_LABELS: Record<
   ProjectDisplayStatus,
@@ -27,14 +28,19 @@ export const ALL_PROJECT_DISPLAY_STATUSES: ProjectDisplayStatus[] = [
 
 export const DEFAULT_ICON = "📁";
 
+export const MEDICINE_TASK_ICON = "💊";
+
 export const BACKLOG_COLLAPSE_THRESHOLD = 5;
 
-// The icon glyph shown for a task in a list: null for a loose task, otherwise
-// the task's project icon with a neutral fallback for a missing row.
+// The icon glyph shown for a task in a list: null for a loose task, 💊 for a
+// Medicine Task, otherwise the task's project icon with a neutral fallback for
+// a missing row.
 export function taskIcon(task: Task, projects: readonly Project[]): string | null {
   const parent = task.parent;
   if (parent == null) return null;
   switch (parent.kind) {
     case "project": return projects.find((p) => p.id === parent.projectId)?.icon ?? DEFAULT_ICON;
+    case "medicine": return MEDICINE_TASK_ICON;
+    default: return unreachableParent(parent);
   }
 }

@@ -1,4 +1,4 @@
-import { taskCompletionMessage, taskProjectId } from "@zero/agent-core";
+import { MEDICINE_TASK_ICON, restockWithUndo, taskCompletion, taskCompletionMessage, taskMedicineId, taskProjectId } from "@zero/agent-core";
 import {
   PROJECT_DISPLAY_STATUS_LABELS,
   projectStatusSections,
@@ -22,6 +22,7 @@ import { Keyboard, Modal, Pressable, ScrollView, SectionList, useWindowDimension
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
+import { PillCountSheet } from '@/components/pill-count-sheet';
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
 import { Input } from '@/components/ui/input';
 import { CheckCircle } from '@/components/ui/list-row';
@@ -494,6 +495,7 @@ export function useTaskDetail({
   const retrySave = useRef(false);
   const [scheduling, setScheduling] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [restocking, setRestocking] = useState<{ task: Task; medicineId: string } | null>(null);
   const today = useLocalDay();
   const projectJumpColor = useColor('--color-accent');
   const closingDetailRef = useRef(false);
@@ -503,6 +505,14 @@ export function useTaskDetail({
   const selectedProjectId = selected ? taskProjectId(selected) : null;
   const selectedProject = selectedProjectId
     ? (projects.find((p) => p.id === selectedProjectId) ?? null)
+    : null;
+
+  const selectedMedicineId = selected ? taskMedicineId(selected) : null;
+  const selectedMedicine = selectedMedicineId
+    ? (replica.snapshot().medicines.find((m) => m.id === selectedMedicineId) ?? null)
+    : null;
+  const restockMedicine = restocking
+    ? (replica.snapshot().medicines.find((m) => m.id === restocking.medicineId) ?? null)
     : null;
 
   const draftView = useMemo(() => draft.view(today, selected), [draft, today, selected]);
@@ -560,10 +570,22 @@ export function useTaskDetail({
     router.navigate(`/projects/${selectedProject.id}`, { withAnchor: true });
   }, [commitDraft, selectedProject]);
 
+  const openSelectedMedicine = useCallback(() => {
+    if (!selectedMedicine || !commitDraft()) return;
+    closingDetailRef.current = true;
+    setSelectedId(null);
+    router.navigate(`/browse/medicines/${selectedMedicine.id}`, { withAnchor: true });
+  }, [commitDraft, selectedMedicine]);
+
   const complete = useCallback(
     (item: Task) => {
       onError(null);
-      const itemProjectId = taskProjectId(item);
+      const completion = taskCompletion(item);
+      if (completion.kind === 'restock') {
+        setRestocking({ task: item, medicineId: completion.medicineId });
+        return;
+      }
+      const itemProjectId = completion.projectId;
       const project = itemProjectId
         ? projects.find((candidate) => candidate.id === itemProjectId)
         : null;
@@ -651,6 +673,10 @@ export function useTaskDetail({
   );
 
   const handleBack = useCallback(() => {
+    if (restocking) {
+      setRestocking(null);
+      return true;
+    }
     if (picking) {
       setPicking(false);
       return true;
@@ -664,7 +690,7 @@ export function useTaskDetail({
       return true;
     }
     return false;
-  }, [picking, scheduling, selected, commitAndClose]);
+  }, [restocking, picking, scheduling, selected, commitAndClose]);
 
   const sheets = (
     <>
@@ -693,7 +719,16 @@ export function useTaskDetail({
             : undefined
         }
         projectAction={
-          selected
+          selectedMedicine
+            ? {
+                label: `For ${selectedMedicine.name}`,
+                icon: MEDICINE_TASK_ICON,
+                accessibilityLabel: `Open medicine ${selectedMedicine.name}`,
+                active: true,
+                onPress: openSelectedMedicine,
+                testID: 'task-medicine',
+              }
+            : selected
             ? {
                 label: selectedProject ? selectedProject.title : 'No project',
                 icon: selectedProject?.icon ?? null,
@@ -743,6 +778,19 @@ export function useTaskDetail({
         onPick={onPickProject}
         onClose={() => setPicking(false)}
       />
+
+      {restocking ? (
+        <PillCountSheet
+          title="How many pills did you get?"
+          initial={restockMedicine?.supply?.refill ?? null}
+          onClose={() => setRestocking(null)}
+          onSave={(amount) => {
+            const { task, medicineId } = restocking;
+            setRestocking(null);
+            void restockWithUndo({ replica, medicineId, amount, taskId: task.id, onError });
+          }}
+        />
+      ) : null}
     </>
   );
 
@@ -751,6 +799,6 @@ export function useTaskDetail({
     complete,
     sheets,
     handleBack,
-    active: selected != null || scheduling || picking,
+    active: selected != null || scheduling || picking || restocking != null,
   };
 }

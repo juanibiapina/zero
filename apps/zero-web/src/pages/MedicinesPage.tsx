@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { MedicineDraft, medicineCadence, medicineEndDate, medicineNextDay, medicineOccurrences, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose, type Weekday } from "@zero/agent-core";
+import { DEFAULT_LEAD_DAYS, MedicineDraft, medicineCadence, restockWithUndo, supplyLabel, medicineEndDate, medicineNextDay, medicineOccurrences, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose, type Weekday } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
+import { PillCountSheet } from "@/components/pill-count-sheet";
 import { useTodoData } from "@/lib/todo-data";
 import { useLocalDay } from "@/lib/local-day";
 
@@ -15,13 +16,23 @@ function MedicineForm({ replica, source, copy = false, onSaved }: { replica: Tas
   const [draft, setDraft] = useState<MedicineInput>(() => MedicineDraft.create(medicineToday(), source, copy).input);
   const [endMode, setEndMode] = useState<"ongoing" | "last-day" | "days">(source?.endsOn && !copy ? "last-day" : "ongoing");
   const [days, setDays] = useState("10"); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
+  const initialPills = !copy && source?.supply ? String(source.supply.pillsLeft) : "";
+  const initialLead = String(source?.supply?.leadDays ?? DEFAULT_LEAD_DAYS);
+  const [pills, setPills] = useState(initialPills); const [lead, setLead] = useState(initialLead);
   const end = (() => { try { return endMode === "ongoing" ? null : endMode === "days" ? medicineEndDate(draft.startsOn, Number(days)) : draft.endsOn ?? draft.startsOn; } catch { return null; } })();
   const save = async () => {
     setBusy(true); setError(null);
     try {
       const value = { ...draft, instructions: draft.instructions?.trim() || null, endsOn: endMode === "days" ? medicineEndDate(draft.startsOn, Number(days)) : end };
-      if (source && !copy) { await replica.medicines.edit(source.id, value); onSaved(source.id); }
-      else { const medicine = await replica.medicines.add(value); onSaved(medicine.id); }
+      const count = pills.trim();
+      if (count && !/^\d+$/.test(count)) throw new Error("Enter the number of pills you have");
+      if (count && !/^\d+$/.test(lead.trim())) throw new Error("Enter a whole number of days");
+      const editing = !!source && !copy;
+      const id = editing ? (await replica.medicines.edit(source.id, value), source.id) : (await replica.medicines.add(value)).id;
+      const supplyChanged = pills !== initialPills || lead !== initialLead;
+      if (supplyChanged && count) await replica.medicines.setSupply(id, { pillsLeft: Number(count), leadDays: Number(lead.trim()) });
+      else if (supplyChanged && editing) await replica.medicines.clearSupply(id);
+      onSaved(id);
     } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   };
   return <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="flex flex-col gap-5">
@@ -32,7 +43,8 @@ function MedicineForm({ replica, source, copy = false, onSaved }: { replica: Tas
         {draft.doses.map((dose, index) => <div key={dose.id} className="flex flex-col gap-2 border-b pb-4">
           <div className="flex items-center justify-between"><span>Dose {index + 1}</span>{draft.doses.length > 1 ? <Button type="button" variant="ghost" onClick={() => setDraft({ ...draft, doses: draft.doses.filter((item) => item.id !== dose.id) })}>Remove dose {index + 1}</Button> : null}</div>
           <div className="flex gap-3"><label className="flex flex-1 flex-col gap-1">Alarm<Input type="time" aria-label={`Alarm ${index + 1}`} value={dose.alarmAt} onChange={(event) => setDraft({ ...draft, doses: draft.doses.map((item) => item.id === dose.id ? { ...item, alarmAt: event.target.value } : item) })} required /></label>
-            <label className="flex flex-1 flex-col gap-1">Remind from<Input type="time" aria-label={`Remind from ${index + 1}`} value={dose.remindAt} onChange={(event) => setDraft({ ...draft, doses: draft.doses.map((item) => item.id === dose.id ? { ...item, remindAt: event.target.value } : item) })} required /></label></div>
+            <label className="flex flex-1 flex-col gap-1">Remind from<Input type="time" aria-label={`Remind from ${index + 1}`} value={dose.remindAt} onChange={(event) => setDraft({ ...draft, doses: draft.doses.map((item) => item.id === dose.id ? { ...item, remindAt: event.target.value } : item) })} required /></label>
+            <label className="flex w-24 flex-col gap-1">Pills<Input type="number" min={1} step={1} aria-label={`Pills for dose ${index + 1}`} value={dose.amount} onChange={(event) => setDraft(MedicineDraft.create(medicineToday(), draft).amount(dose.id, Number(event.target.value)).input)} required /></label></div>
         </div>)}
         <Button type="button" variant="outline" disabled={draft.doses.length >= 24} onClick={() => setDraft(MedicineDraft.create(medicineToday(), draft).addTime().input)}>Add dose time</Button>
       </fieldset>
@@ -42,6 +54,10 @@ function MedicineForm({ replica, source, copy = false, onSaved }: { replica: Tas
       {endMode === "days" ? <label className="flex flex-col gap-2">Number of days<Input type="number" min={1} max={36500} step={1} value={days} onChange={(event) => setDays(event.target.value)} required /></label> : null}
       {endMode === "last-day" ? <label className="flex flex-col gap-2">Last day<Input type="date" min={draft.startsOn} value={end ?? draft.startsOn} onChange={(event) => setDraft({ ...draft, endsOn: event.target.value })} required /></label> : null}
       {endMode === "days" && end ? <p className="text-sm text-muted-foreground">Last day: {end}, inclusive</p> : null}
+      <fieldset className="flex flex-col gap-3"><legend className="mb-2 font-semibold">Supply</legend>
+        <label className="flex flex-col gap-2">Pills you have<Input type="number" min={0} step={1} aria-label="Pills you have" placeholder="Optional" value={pills} onChange={(event) => setPills(event.target.value)} /></label>
+        {pills.trim() ? <label className="flex flex-col gap-2">Remind me to buy, days before they run out<Input type="number" min={0} step={1} aria-label="Days before running out" value={lead} onChange={(event) => setLead(event.target.value)} required /></label> : null}
+      </fieldset>
     </fieldset>
     {error ? <p role="alert" className="text-destructive">{error}</p> : null}
     <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save medicine"}</Button>
@@ -57,6 +73,7 @@ export function MedicinesPage() {
   const [editor, setEditor] = useState<"new" | "edit" | "copy" | null>(search.has("new") ? "new" : null);
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   const [undo, setUndo] = useState<string | null>(null); const [confirmDelete, setConfirmDelete] = useState(false);
+  const [counting, setCounting] = useState<"restock" | "count" | null>(null);
   const run = async (operation: () => Promise<void>) => { setError(null); setBusy(true); try { await operation(); } catch (cause) { setError(message(cause)); } finally { setBusy(false); } };
   const take = (dose: Dose) => void run(async () => { await replica!.medicines.take(dose); setUndo(dose.id); });
   if (!replica || !snapshot) return <p className="p-6">Opening medicines…</p>;
@@ -75,6 +92,7 @@ export function MedicinesPage() {
     </> : null}
     {medicine ? <>
       {medicine.instructions ? <p>{medicine.instructions}</p> : null}<p className="text-sm text-muted-foreground">{medicineCadence(medicine)} · {medicine.endsOn ? `Through ${medicine.endsOn}` : "Ongoing"}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><span className="tabular-nums">{supplyLabel(medicine) ?? "Pills not counted"}</span><span className="flex gap-2"><Button variant="outline" disabled={busy} onClick={() => setCounting("restock")}>Restock</Button><Button variant="outline" disabled={busy} onClick={() => setCounting("count")}>Set count</Button></span></div>
       <h2 className="font-semibold">{medicineState(medicine, today) === "active" ? medicineOccurrences(medicine, today).length ? "Today" : (medicineNextDay(medicine, today) ? `Next dose ${medicineNextDay(medicine, today)}` : "No more doses") : medicineState(medicine, today)}</h2>
       {medicineOccurrences(medicine, today).map((planned) => {
         const dose = snapshot.doses.find((item) => item.id === planned.id) ?? planned;
@@ -89,6 +107,8 @@ export function MedicinesPage() {
     <Sheet open={editor !== null} onClose={() => { setEditor(null); setSearch({}); }} title={editor === "edit" ? "Edit medicine" : "Add medicine"}>
       {editor ? <MedicineForm key={`${editor}-${id ?? "new"}`} replica={replica} source={editor === "edit" || editor === "copy" ? medicine : undefined} copy={editor === "copy"} onSaved={(medicineId) => { setEditor(null); void navigate(`/medicines/${medicineId}`); }} /> : null}
     </Sheet>
+    {medicine && counting === "restock" ? <PillCountSheet title="How many pills did you get?" initial={medicine.supply?.refill ?? null} onClose={() => setCounting(null)} onSave={(amount) => { setCounting(null); void restockWithUndo({ replica, medicineId: medicine.id, amount, onError: setError }); }} /> : null}
+    {medicine && counting === "count" ? <PillCountSheet title="How many pills do you have?" initial={medicine.supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: medicine.supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} /> : null}
     <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete medicine?">
       <p>Its dose history will also be removed.</p><div className="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setConfirmDelete(false)}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={() => void run(async () => { await replica.medicines.remove(medicine!.id); setConfirmDelete(false); void navigate('/medicines'); })}>Delete</Button></div>
     </Sheet>

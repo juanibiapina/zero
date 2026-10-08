@@ -2,7 +2,9 @@ import type { PlainDate, Recurrence } from "@zeroapps/recurrence";
 
 export type ProjectState = "in-play" | "backlog" | "done";
 
-export type TaskParent = { kind: "project"; projectId: string };
+export type TaskParent =
+  | { kind: "project"; projectId: string }
+  | { kind: "medicine"; medicineId: string; role: "restock" | null };
 
 export type Task = {
   id: string;

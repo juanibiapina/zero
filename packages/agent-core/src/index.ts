@@ -1,7 +1,9 @@
 // @zero/agent-core — shared, platform-agnostic app code.
 
-export { MedicineModel, medicineToday, medicineEndDate, medicineOccurrences, medicineState, medicineDueOn, medicineNextDay, medicineCadence, medicineRecurrence, doseId, validateMedicine, type Weekday, type Medicine, type MedicineInput, type MedicineSlot, type Dose, type MedicineReceipt, type MedicineSnapshot } from "./medicines/model";
+export { MedicineModel, medicineToday, medicineEndDate, medicineOccurrences, medicineState, medicineDueOn, medicineNextDay, medicineCadence, medicineRecurrence, doseId, validateMedicine, type Weekday, type Medicine, type MedicineInput, type MedicineSlot, type MedicineSupply, type MedicineRestock, type Dose, type MedicineReceipt, type MedicineSnapshot } from "./medicines/model";
 export { MedicineDraft, type MedicineCourse } from "./medicines/draft";
+export { DEFAULT_LEAD_DAYS, daysLeft, restockThreshold, supplyIsLow, supplyLabel } from "./medicines/supply";
+export { pillCount, restockWithUndo } from "./medicines/restock-action";
 export type { TodoMedicines } from "./taskdo/replica";
 export { createMedicineReminders, type MedicineReminders } from "./medicines/reminders";
 export { MEDICINE_CHANNEL, MEDICINE_SOURCE, medicineOccurrence, medicineReceipt, medicineReminderKey, medicineSchedule } from "./medicines/notifications";
@@ -34,7 +36,7 @@ export { messageOf } from "./errors";
 
 // The Task data layer (the single list) shared by web + mobile.
 export type { Task, TaskParent } from "./taskdo/types";
-export { projectParent, taskProjectId, taskRecord, type TaskRecord } from "./tasks/parent";
+export { projectParent, taskCompletion, taskMedicineId, taskProjectId, taskRecord, type TaskCompletion, type TaskRecord } from "./tasks/parent";
 export { localToday } from "./tasks/today";
 export { TaskDraft, type TaskDraftView, type TaskDraftCommit } from "./tasks/draft";
 export {
@@ -127,6 +129,7 @@ export {
   ALL_PROJECT_DISPLAY_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,
   DEFAULT_ICON,
+  MEDICINE_TASK_ICON,
   PROJECT_DISPLAY_STATUS_LABELS,
   taskIcon,
 } from "./projects/display";

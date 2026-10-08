@@ -97,6 +97,9 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
   background or closed leaves the old alarms in place, and a dose time that
   passes before the app opens is skipped. Writes return once a server push can
   wake the app.
+- **Supply writes** (count, restock). Tasks report `medicineId` and `role`, which
+  agents cannot set, and completing a restock Task over MCP completes it without
+  adding pills.
 - **Dose confirmation** belongs to the Android receipt flow
   (see [`storage.md`](storage.md), Medicine and Dose storage).
 - **Project icon suggestion** is a UI helper.

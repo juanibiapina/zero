@@ -8,7 +8,7 @@ import { createTaskdoReplica } from "../taskdo/replica";
 const today = "2026-10-03";
 const custom: MedicineInput = {
   name: "Existing medicine", instructions: "After food", startsOn: "2026-10-01", endsOn: "2026-10-12", paused: true, weekdays: [1, 3, 5],
-  doses: [{ id: "morning", alarmAt: "09:10", remindAt: "08:40" }, { id: "evening", alarmAt: "22:00", remindAt: "20:00" }],
+  doses: [{ id: "morning", alarmAt: "09:10", remindAt: "08:40", amount: 1 }, { id: "evening", alarmAt: "22:00", remindAt: "20:00", amount: 1 }],
 };
 
 describe("Medicine drafts", () => {
@@ -49,7 +49,7 @@ describe("Medicine drafts", () => {
   });
   it("keeps a custom reminder lead when moving a dose and rejects midnight or duplicate alarms", () => {
     const draft = MedicineDraft.create(today, custom).time("morning", "alarmAt", "07:00");
-    expect(draft.commit().doses[0]).toEqual({ id: "morning", alarmAt: "07:00", remindAt: "06:30" });
+    expect(draft.commit().doses[0]).toEqual({ id: "morning", alarmAt: "07:00", remindAt: "06:30", amount: 1 });
     expect(() => draft.time("morning", "alarmAt", "00:00").commit()).toThrow("same day");
     expect(() => draft.time("morning", "alarmAt", "22:00").commit()).toThrow("different alarm time");
   });
@@ -71,7 +71,7 @@ describe("Medicine drafts", () => {
     expect(model.get(medicine.id)?.doses[0].alarmAt).toBe("21:00");
   });
   it("adds a valid final custom time when all twenty-three whole hours are occupied", () => {
-    const input = { ...custom, doses: Array.from({ length: 23 }, (_, index) => ({ id: `slot-${index}`, alarmAt: `${String(index + 1).padStart(2, "0")}:00`, remindAt: `${String(index).padStart(2, "0")}:45` })) };
+    const input = { ...custom, doses: Array.from({ length: 23 }, (_, index) => ({ id: `slot-${index}`, alarmAt: `${String(index + 1).padStart(2, "0")}:00`, remindAt: `${String(index).padStart(2, "0")}:45`, amount: 1 })) };
     const next = MedicineDraft.create(today, input).addTime();
     expect(next.commit().doses).toHaveLength(24);
     expect(() => next.addTime()).toThrow("up to 24");

@@ -62,6 +62,19 @@ describe("todo operation catalog", () => {
     expect(value<{ tasks: unknown[] }>(run("tasks_list")).tasks).toEqual([]);
   });
 
+  it("shows which Medicine a Task belongs to and does not let agents set it", () => {
+    const { ctx, run, value } = workspace();
+    new MedicineModel(ctx.store, ctx.now).add("m", { name: "Pill", instructions: null, startsOn: "2026-03-10", endsOn: null, paused: false,
+      weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: "a", remindAt: "07:00", alarmAt: "08:00", amount: 1 }] });
+    new MedicineModel(ctx.store, ctx.now, () => "restock").setSupply("m", { pillsLeft: 3, leadDays: 14 });
+    value(run("tasks_create", { id: "plain", text: "Plain", medicineId: "m", role: "restock" }));
+    const { tasks } = value<{ tasks: Array<{ id: string; projectId: string | null; medicineId: string | null; role: string | null }> }>(run("tasks_list"));
+    expect(tasks.map(({ id, projectId, medicineId, role }) => ({ id, projectId, medicineId, role }))).toEqual([
+      { id: "restock", projectId: null, medicineId: "m", role: "restock" },
+      { id: "plain", projectId: null, medicineId: null, role: null },
+    ]);
+  });
+
   it("reports model conflicts by name", () => {
     const { run } = workspace();
     expect(run("tasks_create", { text: "Orphan", projectId: "nope" })).toEqual({ ok: false, error: "missing-project" });
@@ -122,7 +135,7 @@ describe("todo operation catalog", () => {
     const model = new MedicineModel(ctx.store, ctx.now);
     const medicine = model.add("m", {
       name: "Vitamin D", instructions: null, startsOn: "2026-03-01", endsOn: null, paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7],
-      doses: [{ id: "morning", remindAt: "08:00", alarmAt: "08:30" }],
+      doses: [{ id: "morning", remindAt: "08:00", alarmAt: "08:30", amount: 1 }],
     });
     const [old] = medicineOccurrences(medicine, "2026-03-02");
     const [recent] = medicineOccurrences(medicine, "2026-03-09");

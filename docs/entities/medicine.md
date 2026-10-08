@@ -11,6 +11,10 @@ are Medicines.
 A Dose is one dated occurrence of one dose time, such as "Antibiotic, 14:00,
 October 3". It records when you pressed Taken.
 
+Each dose time takes a number of pills, one by default. A Medicine can also
+track its supply: the pills you have left, and how many days before they run
+out Zero reminds you to buy more (14 by default).
+
 ## Why it is its own block
 
 A Medicine repeats on a clock and must reach you on time even when the app is
@@ -33,13 +37,28 @@ only what comes next.
   doses do not move the chosen days.
 - Changing a dose time affects only future reminders. Past ones do not replay.
 - An ended routine keeps its history. Adding it again starts a new routine.
+- Supply is a count you set. Every Taken subtracts that dose time's pills, and
+  Undo adds them back. Taking a dose twice, or a notification Taken that
+  arrives again, subtracts once. The count never goes below zero.
+- The supply is low when the pills left are at or below what the schedule uses
+  in the chosen number of days: chosen weekdays × pills per day × days ÷ 7,
+  rounded up. A paused or ended Medicine, or a course whose remaining doses
+  need no more pills than you have, is never low.
+- When a Taken, a new count, or a schedule change makes the supply low, Zero
+  adds one restock Task "Buy <name>" to Home. A recount while already low adds
+  nothing. Time alone never makes the supply low.
+- Restock adds the pills you got and remembers the amount for next time. Set
+  count replaces the count.
 
 ## How it looks
 
 Medicines has its own list under Browse on mobile and in the web sidebar. The
 list shows names and times. A Medicine's page shows today's doses and when you
 took them, with history on request. On a day that is not chosen, the list and
-the page show the day of the next dose instead.
+the page show the day of the next dose instead. A counted Medicine shows
+"24 pills left · about 12 days" with Restock and Set count. The editor has the
+pills per dose time under Adjust, and optional "Pills you have" and days before
+running out.
 
 On Android, a normal notification arrives at the early reminder and again at
 the dose time, with Taken and Postpone 1 hour. At the dose time a locked phone
@@ -90,15 +109,21 @@ restriction.
 
 ## Interactions
 
-- Task, Project, Waiting, After: none, on purpose. Medicine never appears on
-  Home, never changes Project attention, and never counts toward the Task count
-  on the launcher icon.
+- Task: the parent of restock Tasks. A low supply adds one; completing it asks
+  how many pills you got. See [Task](task.md).
+- Project, Waiting, After: none, on purpose. Medicine never changes Project
+  attention, and its doses never appear on Home.
 - Agents: list only. An agent cannot change a Medicine, because the phone sets
   its alarms only when the app sees the change.
 
 ## Left out on purpose
 
 - A full record of missed doses or of old schedules.
+- A refill history, and lowering the supply for doses taken without pressing
+  Taken. Set count fixes the count.
+- Notifications for running low, and a "Needs prescription" option.
+- Two different doses taken on two phones before they sync each subtract from
+  the same count, so one subtraction is lost. Set count fixes it.
 - Medicine in global quick add, which offers only Task and Project.
 
 ## Ideas

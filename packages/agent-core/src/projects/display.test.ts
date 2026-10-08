@@ -41,4 +41,8 @@ describe("taskIcon", () => {
       DEFAULT_ICON,
     );
   });
+
+  it("shows a pill for a Medicine Task", () => {
+    expect(taskIcon(task({ id: "1", parent: { kind: "medicine", medicineId: "m", role: "restock" } }), [])).toBe("💊");
+  });
 });

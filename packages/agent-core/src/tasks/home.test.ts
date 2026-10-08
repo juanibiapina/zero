@@ -173,4 +173,17 @@ describe("homeTasks", () => {
     const out = homeTasks([task({ id: "t", projectId: "gone" })], [], TODAY);
     expect(out).toEqual([]);
   });
+
+  it("shows a Medicine Task like a loose Task", () => {
+    const medicine = { kind: "medicine" as const, medicineId: "m", role: "restock" as const };
+    const out = homeTasks(
+      [
+        task({ id: "now", parent: medicine, showUpDate: null }),
+        task({ id: "later", parent: medicine, showUpDate: "2099-01-01" }),
+      ],
+      [],
+      TODAY,
+    );
+    expect(out.map((t) => t.id)).toEqual(["now"]);
+  });
 });
