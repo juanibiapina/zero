@@ -1,3 +1,4 @@
+import { projectParent } from "@zero/agent-core";
 import type { ComponentProps, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -105,7 +106,7 @@ const task = (id: string, text: string, projectId: string): Task => ({
   recurrenceDate: null,
   createdAt: "2023-01-01T00:00:00.000Z",
   completedAt: null,
-  projectId,
+  parent: projectParent(projectId),
   sortKey: null,
 });
 
@@ -651,7 +652,7 @@ describe("ProjectsPage", () => {
           recurrenceDate: null,
           createdAt: "2023-01-01T00:00:00.000Z",
           completedAt: null,
-          projectId: "1",
+          parent: projectParent("1"),
           sortKey: null,
         },
       ],

@@ -1,3 +1,4 @@
+import { projectParent } from '@zero/agent-core';
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ProjectPickerSheet, ScheduleSheet } from '../task-detail';
@@ -18,7 +19,7 @@ const statusProjects = [
   })),
 ];
 const openTasks = [{
-  id: 'active-task', text: 'Work', projectId: 'active', showUpDate: '2000-01-01',
+  id: 'active-task', text: 'Work', parent: projectParent('active'), showUpDate: '2000-01-01',
   recurrence: null, recurrenceDate: null,
   createdAt: '2026-01-01', completedAt: null, sortKey: null,
 }];

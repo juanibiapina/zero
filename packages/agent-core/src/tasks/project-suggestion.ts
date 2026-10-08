@@ -1,4 +1,5 @@
 import type { Project, Task } from "../taskdo/types";
+import { taskProjectId } from "./parent";
 
 export type ProjectSuggestionCandidate = {
   id: string;
@@ -31,8 +32,9 @@ export const projectSuggestionCandidates = (
 ): ProjectSuggestionCandidate[] => {
   const tasksByProject = new Map<string, Task[]>();
   for (const task of openTasks) {
-    if (task.projectId == null || task.completedAt != null) continue;
-    tasksByProject.set(task.projectId, [...(tasksByProject.get(task.projectId) ?? []), task]);
+    const projectId = taskProjectId(task);
+    if (projectId == null || task.completedAt != null) continue;
+    tasksByProject.set(projectId, [...(tasksByProject.get(projectId) ?? []), task]);
   }
   return projects
     .filter((project) => project.state !== "done")

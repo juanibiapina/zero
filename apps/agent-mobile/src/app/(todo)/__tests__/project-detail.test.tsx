@@ -1,3 +1,4 @@
+import { projectParent } from '@zero/agent-core';
 import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
@@ -108,7 +109,7 @@ const task = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   recurrenceDate: null,
   createdAt: '2026-09-01T00:00:00.000Z',
   completedAt: null,
-  projectId: '1',
+  parent: projectParent('1'),
   sortKey: null,
   ...over,
 });
@@ -249,7 +250,7 @@ describe('ProjectDetailScreen', () => {
     await fireEvent(input, 'submitEditing');
 
     await waitFor(() => expect(screen.getByText('buy running shoes')).toBeTruthy());
-    expect([...screen.data.replica!.tasks.collection.values()][0]?.projectId).toBe('1');
+    expect([...screen.data.replica!.tasks.collection.values()][0]?.parent).toEqual({ kind: 'project', projectId: '1' });
   });
 
   it('adds a Waiting item from the completed task snackbar', async () => {

@@ -1,3 +1,4 @@
+import { projectParent } from "@zero/agent-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -43,7 +44,7 @@ const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   recurrenceDate: over.recurrenceDate ?? null,
   createdAt: over.createdAt ?? `2023-01-0${id}T00:00:00.000Z`,
   completedAt: over.completedAt ?? null,
-  projectId: over.projectId ?? null,
+  parent: over.parent ?? null,
   sortKey: over.sortKey ?? null,
 });
 
@@ -128,7 +129,7 @@ describe("HomePage", () => {
     setApi(
       [
         taskRow("1", "mail the letter", {
-          projectId: "p",
+          parent: projectParent("p"),
           showUpDate: "2023-01-01",
         }),
       ],
@@ -144,7 +145,7 @@ describe("HomePage", () => {
     setApi(
       [
         taskRow("1", "pack boxes", {
-          projectId: "p",
+          parent: projectParent("p"),
           showUpDate: "2023-01-01",
         }),
       ],
@@ -301,7 +302,7 @@ describe("HomePage", () => {
   it("groups both Project selectors using future work outside Home", async () => {
     setApi([
       taskRow('1', 'Loose task'),
-      taskRow('2', 'Future work', { projectId: 'p', showUpDate: '2099-01-01' }),
+      taskRow('2', 'Future work', { parent: projectParent('p'), showUpDate: '2099-01-01' }),
     ], [projectRow('p', { title: 'Future project' }), projectRow('n', { title: 'Next project' })]);
     render(<HomePage />, { wrapper: MemoryRouter });
     fireEvent.click(await screen.findByRole('button', { name: 'Add to a project' }));
@@ -531,7 +532,7 @@ describe("HomePage project suggestions", () => {
   it("suggests a Project while typing and files the Task there", async () => {
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ projectId: "p" }) });
-    setApi([taskRow("1", "choose tiles", { projectId: "p" })], [projectRow("p", { title: "Bathroom renovation", icon: "🛁" })]);
+    setApi([taskRow("1", "choose tiles", { parent: projectParent("p") })], [projectRow("p", { title: "Bathroom renovation", icon: "🛁" })]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.change(await screen.findByRole("textbox", { name: "Add a task" }), { target: { value: "buy grout tomorrow" } });
@@ -566,7 +567,7 @@ describe("HomePage project suggestions", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
     });
-    await waitFor(() => expect([...h.replica!.tasks.collection.values()].find((row) => row.text === "buy grout")).toMatchObject({ projectId: null }));
+    await waitFor(() => expect([...h.replica!.tasks.collection.values()].find((row) => row.text === "buy grout")).toMatchObject({ parent: null }));
   });
 
   it("keeps a Project chosen by hand and stops asking", async () => {

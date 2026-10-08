@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { TaskDraft, messageOf, toast, undoableAction, type Project, type Task, type TaskdoReplica, type WaitingCondition } from "@zero/agent-core";
+import { TaskDraft, messageOf, taskProjectId, toast, undoableAction, type Project, type Task, type TaskdoReplica, type WaitingCondition } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { TaskFields } from "@/components/task-fields";
@@ -23,7 +23,7 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
   const [draft, setDraft] = useState(() => TaskDraft.create());
   const selected = tasks.find((task) => task.id === selectedId) ?? null;
   const draftView = useMemo(() => draft.view(today, selected), [draft, today, selected]);
-  const selectedProject = projects.find((project) => project.id === selected?.projectId);
+  const selectedProject = projects.find((project) => project.id === (selected ? taskProjectId(selected) : null));
   const fail = (error: unknown) => { onError(messageOf(error)); reportTodoError(error); };
   const completion = useTaskCompletionFeedback({ replica, projects, today, onError: fail });
 
@@ -57,7 +57,7 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
   };
   const move = (projectId: string | null) => {
     const task = commitDraft();
-    if (!task || projectId === task.projectId) return;
+    if (!task || projectId === taskProjectId(task)) return;
     const tx = replica.tasks.moveToProject(task.id, projectId);
     setSelectedId(null);
     void tx.isPersisted.promise.then(() => {
@@ -100,7 +100,7 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
                 undoableAction({ message: "Completed forever", act: () => replica.tasks.completeForever(task.id), undo: () => replica.tasks.reopen(task), onError: fail });
               } : undefined,
             }}
-            projectField={{ projects, tasks, conditions, projectId: selected.projectId, onPick: move, onOpen: commitDraft }}
+            projectField={{ projects, tasks, conditions, projectId: taskProjectId(selected), onPick: move, onOpen: commitDraft }}
           >
             {selectedProject && selectedProject.id !== currentProjectId ? <Button type="button" variant="ghost" aria-label={`Open project ${selectedProject.title}`} onClick={() => { if (commitDraft()) { setSelectedId(null); void navigate(`/projects/${selectedProject.id}`); } }}>Open project</Button> : null}
           </TaskFields>

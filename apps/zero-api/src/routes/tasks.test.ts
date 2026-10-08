@@ -2,7 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { describe, expect, it, vi } from "vitest";
 import type { Recurrence } from "@zeroapps/recurrence";
 
-import type { Task } from "../TaskDO/domain";
+import type { TaskRecord as Task } from "../TaskDO/domain";
 import type { Env } from "../types";
 import { taskDoEnv } from "./taskdo-test-stub";
 import { createTasksRoutes, type SuggestTaskProject } from "./tasks";

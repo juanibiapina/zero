@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { projectParent } from "../tasks/parent";
 
 import type { Project } from "./types";
 import type { Task } from "../taskdo/types";
@@ -30,7 +31,7 @@ function task(over: Partial<Task>): Task {
     recurrenceDate: over.recurrenceDate ?? null,
     createdAt: "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
-    projectId: over.projectId ?? "p",
+    parent: projectParent("p"),
     sortKey: over.sortKey ?? null,
   };
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { projectParent } from "../tasks/parent";
 
 import {
   createInMemoryTaskdoClientState,
@@ -9,7 +10,7 @@ describe("in-memory TaskDO replica", () => {
   it("creates ready client state from the replica snapshot", async () => {
     const { state, replica } = createInMemoryTaskdoClientState({
       tasks: [{
-        id: "orphan", text: "Orphan", projectId: "missing", showUpDate: null,
+        id: "orphan", text: "Orphan", parent: projectParent("missing"), showUpDate: null,
         recurrence: null, recurrenceDate: null,
         completedAt: null, createdAt: "2026-09-25T10:00:00.000Z", sortKey: null,
       }],
@@ -41,7 +42,7 @@ describe("in-memory TaskDO replica", () => {
         state: "in-play", createdAt: "2026-09-25T10:00:00.000Z",
       }],
       tasks: [{
-        id: "task", text: "Task", projectId: "project", showUpDate: null,
+        id: "task", text: "Task", parent: projectParent("project"), showUpDate: null,
         recurrence: null, recurrenceDate: null,
         completedAt: null, createdAt: "2026-09-25T10:00:00.000Z", sortKey: null,
       }],
@@ -54,7 +55,7 @@ describe("in-memory TaskDO replica", () => {
 
     expect(replica.snapshot()).toMatchObject({
       projects: [{ id: "project" }],
-      tasks: [{ id: "task", projectId: "project", recurrence: null, recurrenceDate: null }],
+      tasks: [{ id: "task", parent: { kind: "project", projectId: "project" }, recurrence: null, recurrenceDate: null }],
       conditions: [{ id: "wait", projectId: "project" }],
     });
     await Promise.all([

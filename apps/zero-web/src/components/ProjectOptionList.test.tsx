@@ -1,3 +1,4 @@
+import { projectParent } from "@zero/agent-core";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { type Project, type Task, type WaitingCondition } from "@zero/agent-core";
@@ -12,7 +13,7 @@ const projects = [
   project("done", "done"),
 ];
 const tasks: Task[] = [{
-  id: "work", text: "Work", projectId: "active", showUpDate: "2000-01-01",
+  id: "work", text: "Work", parent: projectParent("active"), showUpDate: "2000-01-01",
   recurrence: null, recurrenceDate: null,
   completedAt: null, createdAt: "2026-01-01", sortKey: null,
 }];

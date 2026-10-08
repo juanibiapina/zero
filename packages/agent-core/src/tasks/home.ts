@@ -13,12 +13,15 @@ export function homeTasks(
   const projectsById = new Map(projects.map((project) => [project.id, project]));
   return tasks
     .filter((task) => task.completedAt == null)
-    .filter((task) => {
-      if (task.projectId == null) {
-        return task.showUpDate == null || task.showUpDate <= today;
+    .filter((task): boolean => {
+      const loose = task.showUpDate == null || task.showUpDate <= today;
+      const parent = task.parent;
+      if (parent == null) return loose;
+      switch (parent.kind) {
+        case "project":
+          if (task.showUpDate == null || task.showUpDate > today) return false;
+          return projectsById.get(parent.projectId)?.state === "in-play";
       }
-      if (task.showUpDate == null || task.showUpDate > today) return false;
-      return projectsById.get(task.projectId)?.state === "in-play";
     })
     .sort(compareByOrder);
 }

@@ -1,4 +1,4 @@
-import { taskCompletionMessage } from "@zero/agent-core";
+import { taskCompletionMessage, taskProjectId } from "@zero/agent-core";
 import {
   PROJECT_DISPLAY_STATUS_LABELS,
   projectStatusSections,
@@ -500,8 +500,9 @@ export function useTaskDetail({
   const selected = selectedId
     ? (openTasks.find((item) => item.id === selectedId) ?? null)
     : null;
-  const selectedProject = selected?.projectId
-    ? (projects.find((p) => p.id === selected.projectId) ?? null)
+  const selectedProjectId = selected ? taskProjectId(selected) : null;
+  const selectedProject = selectedProjectId
+    ? (projects.find((p) => p.id === selectedProjectId) ?? null)
     : null;
 
   const draftView = useMemo(() => draft.view(today, selected), [draft, today, selected]);
@@ -562,8 +563,9 @@ export function useTaskDetail({
   const complete = useCallback(
     (item: Task) => {
       onError(null);
-      const project = item.projectId
-        ? projects.find((candidate) => candidate.id === item.projectId)
+      const itemProjectId = taskProjectId(item);
+      const project = itemProjectId
+        ? projects.find((candidate) => candidate.id === itemProjectId)
         : null;
       undoableAction({
         message: () => taskCompletionMessage(api.collection.get(item.id), today),
@@ -636,12 +638,12 @@ export function useTaskDetail({
 
   const onPickProject = useCallback(
     (projectId: string | null) => {
-      if (selected && selected.projectId !== projectId) {
+      if (selected && taskProjectId(selected) !== projectId) {
         onError(null);
         const tx = api.moveToProject(selected.id, projectId);
         tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
         setSelectedId(null);
-        showTaskDestination({ ...selected, projectId }, projects, 'moved');
+        showTaskDestination({ showUpDate: selected.showUpDate, projectId }, projects, 'moved');
       }
       setPicking(false);
     },
@@ -737,7 +739,7 @@ export function useTaskDetail({
         projects={projects}
         openTasks={openTasks}
         conditions={conditions}
-        selectedProjectId={selected?.projectId ?? null}
+        selectedProjectId={selectedProjectId}
         onPick={onPickProject}
         onClose={() => setPicking(false)}
       />

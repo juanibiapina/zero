@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { projectParent } from "../tasks/parent";
 
 import type { Project } from "./types";
 import type { Task } from "../taskdo/types";
@@ -20,7 +21,7 @@ const task = (over: Partial<Task> & { id: string }): Task => ({
   recurrenceDate: null,
   createdAt: "2023-01-01T00:00:00.000Z",
   completedAt: null,
-  projectId: null,
+  parent: null,
   sortKey: null,
   ...over,
 });
@@ -32,11 +33,11 @@ describe("taskIcon", () => {
 
   it("returns the project's icon for a project task", () => {
     const p = project({ id: "p", icon: "🎓" });
-    expect(taskIcon(task({ id: "1", projectId: "p" }), [p])).toBe("🎓");
+    expect(taskIcon(task({ id: "1", parent: projectParent("p") }), [p])).toBe("🎓");
   });
 
   it("falls back to DEFAULT_ICON when the project is not in the list", () => {
-    expect(taskIcon(task({ id: "1", projectId: "gone" }), [])).toBe(
+    expect(taskIcon(task({ id: "1", parent: projectParent("gone") }), [])).toBe(
       DEFAULT_ICON,
     );
   });

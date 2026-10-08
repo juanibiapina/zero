@@ -31,7 +31,10 @@ export const BACKLOG_COLLAPSE_THRESHOLD = 5;
 
 // The icon glyph shown for a task in a list: null for a loose task, otherwise
 // the task's project icon with a neutral fallback for a missing row.
-export function taskIcon(task: Task, projects: Project[]): string | null {
-  if (task.projectId == null) return null;
-  return projects.find((p) => p.id === task.projectId)?.icon ?? DEFAULT_ICON;
+export function taskIcon(task: Task, projects: readonly Project[]): string | null {
+  const parent = task.parent;
+  if (parent == null) return null;
+  switch (parent.kind) {
+    case "project": return projects.find((p) => p.id === parent.projectId)?.icon ?? DEFAULT_ICON;
+  }
 }

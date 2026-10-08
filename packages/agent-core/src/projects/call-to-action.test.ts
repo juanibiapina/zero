@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { projectParent } from "../tasks/parent";
 
 import { homeCallToAction } from "./call-to-action";
 import type { Project, ProjectState } from "./types";
@@ -18,7 +19,7 @@ function project(id: string, state: ProjectState = "in-play"): Project {
   };
 }
 
-function task(over: Partial<Task> & Pick<Task, "id">): Task {
+function task(over: Partial<Task> & Pick<Task, "id"> & { projectId?: string | null }): Task {
   return {
     id: over.id,
     text: over.text ?? over.id,
@@ -27,7 +28,7 @@ function task(over: Partial<Task> & Pick<Task, "id">): Task {
     recurrenceDate: over.recurrenceDate ?? null,
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
-    projectId: over.projectId ?? null,
+    parent: projectParent(over.projectId),
     sortKey: over.sortKey ?? null,
   };
 }

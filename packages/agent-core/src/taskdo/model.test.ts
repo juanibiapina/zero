@@ -1,6 +1,7 @@
 import type { Recurrence } from "@zeroapps/recurrence";
 import { createMergeableStore } from "tinybase";
 import { describe, expect, it } from "vitest";
+import { projectParent } from "../tasks/parent";
 
 import { TodoModel } from "./model";
 
@@ -56,12 +57,12 @@ describe("canonical TinyBase todo model", () => {
 
   it("rejects missing Projects and classifies late offline children without hiding them", () => {
     const { model, store } = setup();
-    expect(model.createTask({ id: "missing", text: "x", projectId: "p" })).toEqual({ ok: false, conflict: "missing-project" });
+    expect(model.createTask({ id: "missing", text: "x", parent: projectParent("p") })).toEqual({ ok: false, conflict: "missing-project" });
     model.createProject({ id: "p", title: "P" });
     model.deleteProject("p");
     store.setRow("tasks", "late", { text: "Keep", createdAt: NOW, projectId: "p" });
 
-    expect(model.project().tasks).toMatchObject([{ id: "late", projectId: null }]);
+    expect(model.project().tasks).toMatchObject([{ id: "late", parent: null }]);
     expect(model.project().issues).toContainEqual({ table: "tasks", id: "late", projectId: "p", reason: "deleted-project" });
   });
 
@@ -69,9 +70,9 @@ describe("canonical TinyBase todo model", () => {
     const { model, setNow } = setup();
     model.createProject({ id: "p", title: "P" });
     model.createTask({ id: "task", text: "draft" });
-    expect(model.patchTask("task", { text: "final", showUpDate: "2027-01-01", projectId: "p", sortKey: "a5" }))
-      .toMatchObject({ ok: true, value: { text: "final", showUpDate: "2027-01-01", projectId: "p", sortKey: "a5" } });
-    expect(model.patchTask("task", { projectId: "missing" })).toEqual({ ok: false, conflict: "missing-project" });
+    expect(model.patchTask("task", { text: "final", showUpDate: "2027-01-01", parent: projectParent("p"), sortKey: "a5" }))
+      .toMatchObject({ ok: true, value: { text: "final", showUpDate: "2027-01-01", parent: { kind: "project", projectId: "p" }, sortKey: "a5" } });
+    expect(model.patchTask("task", { parent: projectParent("missing") })).toEqual({ ok: false, conflict: "missing-project" });
     setNow("2026-09-26T11:00:00.000Z");
     expect(model.completeTask("task")).toMatchObject({ ok: true, changed: true, value: { completedAt: "2026-09-26T11:00:00.000Z" } });
     expect(model.completeTask("task")).toMatchObject({ ok: true, changed: false });
@@ -95,7 +96,7 @@ describe("canonical TinyBase todo model", () => {
   it("creates, edits, transitions, restores, and tombstones Projects with cascades", () => {
     const { model } = setup();
     addProjects(model, "a", "b", "c");
-    model.createTask({ id: "task", text: "task", projectId: "a" });
+    model.createTask({ id: "task", text: "task", parent: projectParent("a") });
     model.createWaiting("wait", "a", "reply");
     model.createAfter("out", "a", "b");
     model.createAfter("in", "c", "a");
@@ -145,7 +146,7 @@ describe("canonical TinyBase todo model", () => {
   it("keeps raw row representation stable", () => {
     const { model, store } = setup();
     model.createProject({ id: "p", title: "P", description: null });
-    model.createTask({ id: "task", text: "Task", recurrence: daily, projectId: "p" });
+    model.createTask({ id: "task", text: "Task", recurrence: daily, parent: projectParent("p") });
     model.createAfter("after", "p", "p2");
     expect(store.getRow("projects", "p")).toEqual({ title: "P", icon: "📁", state: "in-play", createdAt: NOW });
     expect(store.getRow("tasks", "task")).toMatchObject({

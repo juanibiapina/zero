@@ -9,6 +9,7 @@ import type {
   ProjectAttention,
   ProjectState,
   Task,
+  TaskParent,
   TodoIssue,
 } from "./types";
 
@@ -34,7 +35,7 @@ export type TaskInput = {
   id: string;
   text: string;
   showUpDate?: string | null;
-  projectId?: string | null;
+  parent?: TaskParent | null;
   recurrence?: Recurrence | null;
   recurrenceDate?: string | null;
   completedAt?: string | null;
@@ -123,9 +124,27 @@ export class TodoModel {
       completedAt: typeof row.completedAt === "string" ? row.completedAt : null,
       recurrence: parseRecurrence(row.recurrence),
       recurrenceDate: typeof row.recurrenceDate === "string" ? row.recurrenceDate : null,
-      projectId: typeof row.projectId === "string" && this.getProject(row.projectId) ? row.projectId : null,
+      parent: this.readParent(row),
       sortKey: typeof row.sortKey === "string" ? row.sortKey : null,
     };
+  }
+
+  private readParent(row: Record<string, unknown>): TaskParent | null {
+    if (typeof row.projectId === "string") {
+      return this.getProject(row.projectId) ? { kind: "project", projectId: row.projectId } : null;
+    }
+    return null;
+  }
+
+  private parentMissing(parent: TaskParent | null | undefined): boolean {
+    if (parent == null) return false;
+    switch (parent.kind) {
+      case "project": return !this.getProject(parent.projectId);
+    }
+  }
+
+  private writeParent(id: string, parent: TaskParent | null) {
+    put(this.store, "tasks", id, "projectId", parent?.kind === "project" ? parent.projectId : null);
   }
 
   private getCondition(id: string): ProjectAttention | null {
@@ -370,7 +389,7 @@ export class TodoModel {
       const existing = this.getTask(input.id);
       return existing ? success(existing, false) : conflict("id-conflict");
     }
-    if (input.projectId && !this.getProject(input.projectId)) return conflict("missing-project");
+    if (this.parentMissing(input.parent)) return conflict("missing-project");
     const keys = Object.values(this.store.getTable("tasks"))
       .flatMap((row) => typeof row.sortKey === "string" ? [row.sortKey] : []).sort().reverse();
     let sortKey = TodoModel.orderKeyBetween(null, null);
@@ -384,7 +403,7 @@ export class TodoModel {
       createdAt: input.createdAt ?? this.timestamp(),
       sortKey: input.sortKey ?? sortKey,
       ...(showUpDate ? { showUpDate } : {}),
-      ...(input.projectId ? { projectId: input.projectId } : {}),
+      ...(input.parent?.kind === "project" ? { projectId: input.parent.projectId } : {}),
       ...(input.recurrence ? { recurrence: JSON.stringify(input.recurrence) } : {}),
       ...(recurrenceDate ? { recurrenceDate } : {}),
       ...(input.completedAt ? { completedAt: input.completedAt } : {}),
@@ -393,7 +412,7 @@ export class TodoModel {
   }
 
   restoreTask(task: Task): TodoModelResult<Task, "id-conflict" | "missing-project"> {
-    if (task.projectId && !this.getProject(task.projectId)) return conflict("missing-project");
+    if (this.parentMissing(task.parent)) return conflict("missing-project");
     if (!this.store.hasRow("tasks", task.id)) return this.createTask({ ...task, completedAt: null });
     const existing = this.getTask(task.id);
     if (!existing || !existing.completedAt) return conflict("id-conflict");
@@ -405,11 +424,14 @@ export class TodoModel {
     return success(this.getTask(task.id)!, true);
   }
 
-  patchTask(id: string, fields: { text?: string; showUpDate?: string | null; sortKey?: string; projectId?: string | null }): TodoModelResult<Task, "missing-task" | "missing-project"> {
+  patchTask(id: string, fields: { text?: string; showUpDate?: string | null; sortKey?: string; parent?: TaskParent | null }): TodoModelResult<Task, "missing-task" | "missing-project"> {
     if (!this.getTask(id)) return conflict("missing-task");
-    if (fields.projectId && !this.getProject(fields.projectId)) return conflict("missing-project");
+    if (this.parentMissing(fields.parent)) return conflict("missing-project");
     this.store.transaction(() => {
-      for (const [key, value] of Object.entries(fields)) put(this.store, "tasks", id, key, value);
+      for (const [key, value] of Object.entries(fields)) {
+        if (key === "parent") this.writeParent(id, value as TaskParent | null);
+        else put(this.store, "tasks", id, key, value as string | null | undefined);
+      }
     });
     return success(this.getTask(id)!, true);
   }
@@ -419,9 +441,10 @@ export class TodoModel {
     if (!task) return conflict("missing-task");
     if (("completedAt" in fields || "recurrenceDate" in fields) &&
         this.store.hasCell("tasks", id, "recurrence") && !task.recurrence) return conflict("invalid-recurrence");
-    if (fields.projectId && !this.getProject(fields.projectId)) return conflict("missing-project");
+    if (this.parentMissing(fields.parent)) return conflict("missing-project");
     this.store.transaction(() => {
       for (const [key, value] of Object.entries(fields)) {
+        if (key === "parent") { this.writeParent(id, value as TaskParent | null); continue; }
         put(this.store, "tasks", id, key, key === "recurrence" && value ? JSON.stringify(value) : value as string | null | undefined);
       }
     });
@@ -530,5 +553,6 @@ export type {
   ProjectAttention,
   ProjectState,
   Task,
+  TaskParent,
   TodoIssue,
 } from "./types";

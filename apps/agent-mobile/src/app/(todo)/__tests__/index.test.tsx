@@ -1,4 +1,4 @@
-import { localToday } from '@zero/agent-core';
+import { localToday, projectParent } from '@zero/agent-core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
@@ -29,7 +29,7 @@ const task = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   showUpDate: null,
   recurrence: null,
   recurrenceDate: null,
-  projectId: null,
+  parent: null,
   sortKey: null,
   ...over,
 });
@@ -188,7 +188,7 @@ describe('HomeScreen', () => {
   it('shows arrived project work even when the project has an unresolved After relationship', async () => {
     const screen = await renderScreen({
       projects: [project('p', 'Diploma')],
-      tasks: [task('t', 'pack boxes', { projectId: 'p', showUpDate: '2026-09-01' })],
+      tasks: [task('t', 'pack boxes', { parent: projectParent('p'), showUpDate: '2026-09-01' })],
       waits: [after('p', 'missing-prerequisite')],
     });
     await waitFor(() => expect(screen.getByText('pack boxes')).toBeTruthy());
@@ -205,14 +205,14 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(screen.getByText('call the dentist')).toBeTruthy());
     expect([...screen.data.replica!.tasks.collection.values()][0]).toMatchObject({
       text: 'call the dentist',
-      projectId: null,
+      parent: null,
     });
   });
 
   it('adds Waiting for a completed task\'s project, then offers only Task and Project from Add', async () => {
     const screen = await renderScreen({
       projects: [project('p', 'Run a 5K')],
-      tasks: [task('t', 'register for the race', { projectId: 'p', showUpDate: '2026-09-01' })],
+      tasks: [task('t', 'register for the race', { parent: projectParent('p'), showUpDate: '2026-09-01' })],
     });
     await waitFor(() => expect(screen.getByText('register for the race')).toBeTruthy());
     await fireEvent.press(screen.getByLabelText('Complete "register for the race"'));
@@ -429,7 +429,7 @@ describe('HomeScreen project suggestions', () => {
   it('suggests a Project while typing and files the Task there', async () => {
     const screen = await renderScreen({
       projects: [project('bathroom', 'Bathroom renovation', { icon: '🛁' })],
-      tasks: [task('t', 'choose tiles', { projectId: 'bathroom' })],
+      tasks: [task('t', 'choose tiles', { parent: projectParent('bathroom') })],
     });
     await fireEvent.press(screen.getByLabelText('Add'));
     const input = screen.getByPlaceholderText('Add a task');
@@ -448,7 +448,7 @@ describe('HomeScreen project suggestions', () => {
     await waitFor(() =>
       expect(
         [...screen.data.replica!.tasks.collection.values()].find((row) => row.text === 'buy grout'),
-      ).toMatchObject({ projectId: 'bathroom' }),
+      ).toMatchObject({ parent: { kind: 'project', projectId: 'bathroom' } }),
     );
   });
 
@@ -469,7 +469,7 @@ describe('HomeScreen project suggestions', () => {
     await waitFor(() =>
       expect(
         [...screen.data.replica!.tasks.collection.values()].find((row) => row.text === 'buy grout'),
-      ).toMatchObject({ projectId: null }),
+      ).toMatchObject({ parent: null }),
     );
   });
 

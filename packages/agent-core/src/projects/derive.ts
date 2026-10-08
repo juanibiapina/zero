@@ -9,6 +9,15 @@ import {
 } from "./afters";
 import type { Project, ProjectDisplayStatus } from "./types";
 
+// Project attention counts only the Tasks that belong to the Project.
+function inProject(task: Task, project: Project): boolean {
+  const parent = task.parent;
+  if (parent == null) return false;
+  switch (parent.kind) {
+    case "project": return parent.projectId === project.id;
+  }
+}
+
 function isShownUpDatedOpen(task: Task, today: string): boolean {
   return (
     task.completedAt == null &&
@@ -27,7 +36,7 @@ function projectBaseStatus(
   }
   return tasks.some(
     (task) =>
-      task.projectId === project.id && isShownUpDatedOpen(task, today),
+      inProject(task, project) && isShownUpDatedOpen(task, today),
   )
     ? "active"
     : "next";
@@ -41,7 +50,7 @@ export function waitingUntil(
   let soonest: string | null = null;
   for (const task of tasks) {
     if (
-      task.projectId === project.id &&
+      inProject(task, project) &&
       task.completedAt == null &&
       task.showUpDate != null &&
       task.showUpDate > today &&

@@ -26,6 +26,7 @@ import {
   type TaskdoReplica,
   type WaitingCondition,
   type TodoWaits,
+  taskProjectId,
 } from '@zero/agent-core';
 import {
   useCallback,
@@ -322,7 +323,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
   const projectTasks = useMemo(
     () =>
       (openTasks ?? [])
-        .filter((task) => task.projectId === id)
+        .filter((task) => taskProjectId(task) === id)
         .sort(compareByOrder),
     [openTasks, id],
   );

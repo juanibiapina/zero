@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { projectParent } from "./parent";
 
 import { upcomingSections } from "./upcoming";
 import type { Task } from "../taskdo/types";
@@ -11,7 +12,7 @@ const task = (id: string, over: Partial<Task> = {}): Task => ({
   recurrenceDate: null,
   createdAt: "2024-01-01T00:00:00.000Z",
   completedAt: null,
-  projectId: null,
+  parent: null,
   sortKey: null,
   ...over,
 });
@@ -57,7 +58,7 @@ describe("upcomingSections", () => {
         task("loose-future", { showUpDate: "2024-01-12" }),
         task("proj-future", {
           showUpDate: "2024-01-12",
-          projectId: "p",
+          parent: projectParent("p"),
         }),
       ],
       today,

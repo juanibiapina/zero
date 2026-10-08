@@ -195,7 +195,7 @@ describe('ProjectsScreen', () => {
     await waitFor(() => expect(screen.queryByPlaceholderText('Add a task')).toBeNull());
     expect([...screen.data.replica!.tasks.collection.values()][0]).toMatchObject({
       text: 'Call the dentist',
-      projectId: null,
+      parent: null,
       showUpDate: null,
     });
     expect(mockPush).not.toHaveBeenCalled();

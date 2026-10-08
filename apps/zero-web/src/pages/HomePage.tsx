@@ -7,7 +7,7 @@ import { Link } from "react-router";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { homeTasks, listView, LOADING_TEXT_DELAY_MS, messageOf, orderKeyBetween, projectStatusContext, projectStatusSections, tomorrow, type Task, type TaskdoReplica } from "@zero/agent-core";
+import { homeTasks, listView, taskIcon, LOADING_TEXT_DELAY_MS, messageOf, orderKeyBetween, projectStatusContext, projectStatusSections, tomorrow, type Task, type TaskdoReplica } from "@zero/agent-core";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { TodoComposer } from "@/components/todo-composer";
 import { useTaskEditor } from "@/components/task-editor";
@@ -55,7 +55,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
     {view === "loading" || (view === "empty" && hydrating) ? showLoading ? <p className="text-sm text-muted-foreground">Loading your tasks…</p> : <div className="min-h-24" /> : list.length ? <section aria-label="Tasks">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={list.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-          <ul className="flex flex-col gap-3">{list.map((task) => <Row key={task.id} id={task.id} text={task.text} task={task} icon={projects.find((project) => project.id === task.projectId)?.icon}
+          <ul className="flex flex-col gap-3">{list.map((task) => <Row key={task.id} id={task.id} text={task.text} task={task} icon={taskIcon(task, projects) ?? undefined}
             onComplete={() => detail.complete(task)} onOpen={() => detail.open(task)} onPostpone={() => { void replica.tasks.reschedule(task.id, tomorrow(today)).isPersisted.promise.catch((cause) => setError(messageOf(cause))); }} />)}</ul>
         </SortableContext>
       </DndContext>

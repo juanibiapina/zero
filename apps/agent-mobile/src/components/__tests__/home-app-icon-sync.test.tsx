@@ -1,3 +1,4 @@
+import { projectParent } from '@zero/agent-core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, render, waitFor } from '@testing-library/react-native';
@@ -25,7 +26,7 @@ const task = (id: string, over: Partial<Task> = {}): Task => ({
   recurrenceDate: null,
   createdAt: '2026-09-14T07:00:00.000Z',
   completedAt: null,
-  projectId: null,
+  parent: null,
   sortKey: null,
   ...over,
 });
@@ -111,11 +112,11 @@ describe('HomeAppIconSync', () => {
       projects: [project('next', 'in-play'), project('backlog', 'backlog')],
       tasks: [
         task('visible'),
-        task('scheduled', { projectId: 'next', showUpDate: '2026-09-14' }),
+        task('scheduled', { parent: projectParent('next'), showUpDate: '2026-09-14' }),
         task('complete', { completedAt: '2026-09-14T07:30:00.000Z' }),
         task('future', { showUpDate: '9999-12-31' }),
-        task('groomed', { projectId: 'next' }),
-        task('backlog', { projectId: 'backlog', showUpDate: '2026-09-14' }),
+        task('groomed', { parent: projectParent('next') }),
+        task('backlog', { parent: projectParent('backlog'), showUpDate: '2026-09-14' }),
       ],
     });
     await expectIcon('TwoTasks');
@@ -155,7 +156,7 @@ describe('HomeAppIconSync', () => {
   it('follows the owning Project entering and leaving play', async () => {
     const replica = await renderSync({
       projects: [project('owner', 'backlog')],
-      tasks: [task('scheduled', { projectId: 'owner', showUpDate: '2026-09-14' })],
+      tasks: [task('scheduled', { parent: projectParent('owner'), showUpDate: '2026-09-14' })],
     });
     await expectIcon('Empty');
     await act(async () => {

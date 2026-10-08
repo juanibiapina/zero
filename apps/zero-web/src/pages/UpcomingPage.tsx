@@ -3,7 +3,7 @@ import { TaskRecurrence } from "@/components/task-recurrence";
 import { useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
-import { dayLabel, upcomingSections, type TaskdoReplica } from "@zero/agent-core";
+import { dayLabel, taskIcon, upcomingSections, type TaskdoReplica } from "@zero/agent-core";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { useTaskEditor } from "@/components/task-editor";
 import { useTodoData } from "@/lib/todo-data";
@@ -32,7 +32,7 @@ function Upcoming({ replica }: { replica: TaskdoReplica }) {
       <h2 className="text-sm font-semibold text-muted-foreground">{dayLabel(section.date, today)}</h2>
       <ul className="flex flex-col gap-3">{section.tasks.map((task) => <li key={task.id} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-4">
         <button type="button" aria-label={`Complete "${task.text}"`} className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 hover:border-primary" onClick={() => detail.complete(task)} />
-        {task.projectId ? <span aria-hidden>{projects.find((project) => project.id === task.projectId)?.icon}</span> : null}
+        {taskIcon(task, projects) ? <span aria-hidden>{taskIcon(task, projects)}</span> : null}
         <button type="button" className="min-w-0 flex-1 break-words text-left" aria-label={[`Edit "${task.text}"`, taskRecurrenceLabel(task)].filter(Boolean).join(", ")} onClick={() => detail.open(task)}><span>{task.text}</span><TaskRecurrence task={task} /></button>
       </li>)}</ul>
     </section>)}

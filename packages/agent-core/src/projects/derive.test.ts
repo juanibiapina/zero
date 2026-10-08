@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { projectParent } from "../tasks/parent";
 
 import {
   projectDisplayStatus,
@@ -57,7 +58,7 @@ function project(
   };
 }
 
-function task(over: Partial<Task> = {}): Task {
+function task(over: Partial<Task> & { projectId?: string } = {}): Task {
   return {
     id: over.id ?? "t",
     text: over.text ?? "t",
@@ -67,7 +68,7 @@ function task(over: Partial<Task> = {}): Task {
     recurrenceDate: over.recurrenceDate ?? null,
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
-    projectId: over.projectId ?? "p",
+    parent: projectParent(over.projectId ?? "p"),
     sortKey: over.sortKey ?? null,
   };
 }

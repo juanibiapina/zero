@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { homeTasks } from "./home";
+import { projectParent } from "./parent";
 import type { Task } from "../taskdo/types";
 import type { Project } from "../projects/types";
 // The default task's showUpDate; TODAY is a day after it so it is "shown up".
 const TODAY = "2026-01-02";
 
-function task(over: Partial<Task> & Pick<Task, "id">): Task {
+function task(over: Partial<Task> & Pick<Task, "id"> & { projectId?: string | null }): Task {
   return {
     id: over.id,
     text: over.text ?? over.id,
@@ -15,7 +16,7 @@ function task(over: Partial<Task> & Pick<Task, "id">): Task {
     recurrenceDate: over.recurrenceDate ?? null,
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
-    projectId: over.projectId ?? null,
+    parent: over.parent ?? projectParent(over.projectId),
     sortKey: over.sortKey ?? null,
   };
 }

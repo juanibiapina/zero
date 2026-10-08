@@ -1,4 +1,4 @@
-import { taskRecurrenceLabel } from "@zero/agent-core";
+import { taskProjectId, taskRecurrenceLabel } from "@zero/agent-core";
 import { TaskRecurrence } from "@/components/task-recurrence";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
@@ -616,7 +616,7 @@ function ProjectTasks({
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
   const list = (tasks ?? [])
-    .filter((t: Task) => t.projectId === projectId)
+    .filter((t: Task) => taskProjectId(t) === projectId)
     .sort(compareByOrder);
   const sensors = useSensors(
     useSensor(PointerSensor),

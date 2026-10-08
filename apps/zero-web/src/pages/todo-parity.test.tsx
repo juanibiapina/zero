@@ -1,3 +1,4 @@
+import { projectParent } from "@zero/agent-core";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +14,7 @@ import { ProjectsPage } from "./ProjectsPage";
 import { ProjectDetailPage } from "./ProjectDetailPage";
 
 const project = (id: string, title: string, state: Project["state"] = "in-play"): Project => ({ id, title, state, icon: "🏠", description: null, createdAt: "2026-09-01T12:00:00Z" });
-const task = (id: string, text: string, fields: Partial<Task> = {}): Task => ({ id, text, projectId: null, showUpDate: null, recurrence: null, recurrenceDate: null, completedAt: null, sortKey: "a1", createdAt: "2026-09-01T12:00:00Z", ...fields });
+const task = (id: string, text: string, fields: Partial<Task> = {}): Task => ({ id, text, parent: null, showUpDate: null, recurrence: null, recurrenceDate: null, completedAt: null, sortKey: "a1", createdAt: "2026-09-01T12:00:00Z", ...fields });
 const opened: TaskdoReplica[] = [];
 function open(path: string, seed: InMemoryTodoSeed = {}) {
   const todo = createInMemoryTodoData(seed);
@@ -43,7 +44,7 @@ describe("web todo parity", () => {
     const today = localToday();
     const origin = path === "/upcoming" ? tomorrow(today) : today;
     const recurrence = { version: 1 as const, origin, anchor: "scheduled" as const, weekStartsOn: "MO" as const, pattern: { unit: "day" as const, interval: 1 } };
-    const before = task("t", "Water plants", { projectId: "p", showUpDate: origin, recurrenceDate: origin, recurrence });
+    const before = task("t", "Water plants", { parent: projectParent("p"), showUpDate: origin, recurrenceDate: origin, recurrence });
     const replica = open(path, { projects: [project("p", "Garden")], tasks: [before] });
     expect(await screen.findByText("Every day")).toBeVisible();
     expect(screen.getByRole("button", { name: 'Edit "Water plants", Every day' })).toBeVisible();
@@ -60,7 +61,7 @@ describe("web todo parity", () => {
   });
 
   it.each(["/home", "/upcoming", "/projects/p"])("recognizes and saves a recurrence while editing on %s", async (path) => {
-    const replica = open(path, { projects: [project("p", "Garden")], tasks: [task("t", "Water plants", { projectId: "p", showUpDate: path === "/upcoming" ? tomorrow(localToday()) : localToday() })] });
+    const replica = open(path, { projects: [project("p", "Garden")], tasks: [task("t", "Water plants", { parent: projectParent("p"), showUpDate: path === "/upcoming" ? tomorrow(localToday()) : localToday() })] });
     await rename("Water plants", "Water plants every day");
     expect(screen.getByTestId("schedule-highlight")).toHaveTextContent("every day");
     expect(screen.getByRole("button", { name: "every day" })).toBeVisible();
@@ -148,7 +149,7 @@ describe("web todo parity", () => {
   });
 
   it.each(["/home", "/upcoming", "/projects/p"])("keeps edited titles through completion and Undo from %s", async (path) => {
-    const replica = open(path, { projects: [project("p", "Renovate")], tasks: [task("t", "Original", { projectId: "p", showUpDate: path === "/upcoming" ? tomorrow(localToday()) : localToday() })] });
+    const replica = open(path, { projects: [project("p", "Renovate")], tasks: [task("t", "Original", { parent: projectParent("p"), showUpDate: path === "/upcoming" ? tomorrow(localToday()) : localToday() })] });
     await rename("Original", "Edited before completion");
     fireEvent.click(screen.getByRole("button", { name: "Complete task" }));
     await act(async () => { defaultToastController.getSnapshot().find((toast) => toast.message === "Completed")!.action!.onPress(); });
@@ -167,15 +168,15 @@ describe("web todo parity", () => {
 
   it("moves an Upcoming Task to loose while keeping its edited title and date", async () => {
     const date = tomorrow(localToday());
-    const replica = open("/upcoming", { projects: [project("p", "Renovate")], tasks: [task("t", "Original", { projectId: "p", showUpDate: date })] });
+    const replica = open("/upcoming", { projects: [project("p", "Renovate")], tasks: [task("t", "Original", { parent: projectParent("p"), showUpDate: date })] });
     await rename("Original", "Moved loose");
     fireEvent.click(screen.getByRole("button", { name: "Renovate" }));
     fireEvent.click(screen.getByRole("button", { name: "No project" }));
-    await waitFor(() => expect(replica.snapshot().tasks[0]).toMatchObject({ projectId: null, text: "Moved loose", showUpDate: date }));
+    await waitFor(() => expect(replica.snapshot().tasks[0]).toMatchObject({ parent: null, text: "Moved loose", showUpDate: date }));
   });
 
   it("saves a Task draft before navigating directly to its Project", async () => {
-    const replica = open("/home", { projects: [project("p", "Renovate")], tasks: [task("t", "Original", { projectId: "p", showUpDate: localToday() })] });
+    const replica = open("/home", { projects: [project("p", "Renovate")], tasks: [task("t", "Original", { parent: projectParent("p"), showUpDate: localToday() })] });
     await rename("Original", "Edited before navigation");
     fireEvent.click(screen.getByRole("button", { name: "Open project Renovate" }));
     expect(await screen.findByRole("textbox", { name: "Project title" })).toHaveValue("Renovate");
@@ -185,7 +186,7 @@ describe("web todo parity", () => {
   it.each(["/upcoming", "/projects/p"])("can complete a repeat forever and Undo from %s", async (path) => {
     const parsed = parseSchedule("Inspect every day", { today: tomorrow(localToday()), weekStartsOn: "MO" });
     if (parsed.kind !== "scheduled" || parsed.schedule.kind !== "recurring") throw new Error("Expected repeat");
-    const before = task("t", "Inspect", { projectId: "p", showUpDate: tomorrow(localToday()), recurrence: parsed.schedule.recurrence, recurrenceDate: parsed.schedule.recurrence.origin });
+    const before = task("t", "Inspect", { parent: projectParent("p"), showUpDate: tomorrow(localToday()), recurrence: parsed.schedule.recurrence, recurrenceDate: parsed.schedule.recurrence.origin });
     const replica = open(path, { projects: [project("p", "Renovate")], tasks: [before] });
     fireEvent.click(await screen.findByRole("button", { name: 'Edit "Inspect", Every day' }));
     fireEvent.click(screen.getByRole("button", { name: "every day" }));
@@ -202,7 +203,7 @@ describe("web todo parity", () => {
     expect(screen.getByTestId("schedule-highlight")).toHaveTextContent("every Monday");
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Inspect", projectId: "p" });
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Inspect", parent: { kind: "project", projectId: "p" } });
     expect(toText(replica.snapshot().tasks[0].recurrence!)).toBe("every week on Monday");
   });
 
@@ -213,7 +214,7 @@ describe("web todo parity", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add to a project" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Renovate" }));
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    await waitFor(() => expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Buy tools", projectId: "p", showUpDate: tomorrow(localToday()) }));
+    await waitFor(() => expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Buy tools", parent: { kind: "project", projectId: "p" }, showUpDate: tomorrow(localToday()) }));
     expect(replica.snapshot().projects).toHaveLength(1);
   });
 
@@ -284,7 +285,7 @@ describe("web todo parity", () => {
   it.each(["/home", "/upcoming"])("updates available work on foreground return in %s without a write", async (path) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 8, 30, 12));
-    const replica = open(path, { projects: [project("p", "Renovate")], tasks: [task("t", "Due on October 1", { projectId: "p", showUpDate: "2026-10-01" })] });
+    const replica = open(path, { projects: [project("p", "Renovate")], tasks: [task("t", "Due on October 1", { parent: projectParent("p"), showUpDate: "2026-10-01" })] });
     if (path === "/home") await screen.findByRole("region", { name: "Home is clear" });
     else await screen.findByRole("button", { name: 'Edit "Due on October 1"' });
     const before = replica.snapshot();
@@ -297,7 +298,7 @@ describe("web todo parity", () => {
   });
 
   it("shows every Waiting Project and keeps Backlog and After out of clear Home", async () => {
-    open("/home", { projects: [project("p", "First waiting"), project("q", "Second waiting"), project("back", "Backlog", "backlog"), project("after", "After project")], tasks: [task("t", "Later", { projectId: "p", showUpDate: tomorrow(localToday()) })], waits: [
+    open("/home", { projects: [project("p", "First waiting"), project("q", "Second waiting"), project("back", "Backlog", "backlog"), project("after", "After project")], tasks: [task("t", "Later", { parent: projectParent("p"), showUpDate: tomorrow(localToday()) })], waits: [
       { id: "w", projectId: "q", kind: "free-text", text: "A reply", createdAt: "2026-09-01T12:00:00Z", resolvedAt: null, refId: null, targetStatus: null },
       { id: "a", projectId: "after", kind: "project-status", text: null, createdAt: "2026-09-01T12:00:00Z", resolvedAt: null, refId: "p", targetStatus: "done" },
     ] });

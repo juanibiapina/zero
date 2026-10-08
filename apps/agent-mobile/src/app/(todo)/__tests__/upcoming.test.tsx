@@ -1,3 +1,4 @@
+import { projectParent } from '@zero/agent-core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -33,7 +34,7 @@ const task = (
   showUpDate,
   recurrence: null,
   recurrenceDate: null,
-  projectId,
+  parent: projectParent(projectId),
   sortKey: null,
 });
 const project = (id: string): Project => ({

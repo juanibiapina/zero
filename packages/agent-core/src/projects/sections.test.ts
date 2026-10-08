@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { projectParent } from "../tasks/parent";
 import type { Task } from "../taskdo/types";
 import type { WaitingCondition } from "../taskdo/types";
 import { projectStatusSections } from "./sections";
@@ -9,7 +10,7 @@ const project = (id: string, state: ProjectState = "in-play", createdAt = "2023-
   id, title: id, icon: "📁", description: null, state, createdAt,
 });
 const task = (projectId: string, showUpDate: string): Task => ({
-  id: `${projectId}-task`, text: "Work", projectId, showUpDate,
+  id: `${projectId}-task`, text: "Work", parent: projectParent(projectId), showUpDate,
   recurrence: null, recurrenceDate: null,
   createdAt: "2023-01-01", completedAt: null, sortKey: null,
 });

@@ -79,7 +79,7 @@ describe('TodoLayout', () => {
       id: 'visible', text: 'Visible task', showUpDate: null,
       recurrence: null, recurrenceDate: null,
       createdAt: '2026-09-14T07:00:00.000Z', completedAt: null,
-      projectId: null, sortKey: null,
+      parent: null, sortKey: null,
     }] });
     mockUseTodoData.mockReturnValue(todoData);
   });

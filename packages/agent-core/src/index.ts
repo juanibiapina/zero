@@ -33,7 +33,8 @@ export { listView, LOADING_TEXT_DELAY_MS, type ListView } from "./collection/vie
 export { messageOf } from "./errors";
 
 // The Task data layer (the single list) shared by web + mobile.
-export type { Task } from "./taskdo/types";
+export type { Task, TaskParent } from "./taskdo/types";
+export { projectParent, taskProjectId, taskRecord, type TaskRecord } from "./tasks/parent";
 export { localToday } from "./tasks/today";
 export { TaskDraft, type TaskDraftView, type TaskDraftCommit } from "./tasks/draft";
 export {

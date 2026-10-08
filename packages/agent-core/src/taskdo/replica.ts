@@ -5,6 +5,7 @@ import type { PlainDate, Recurrence, Schedule } from "@zeroapps/recurrence";
 import type { MergeableStore } from "tinybase";
 
 import type { Project, ProjectState } from "../projects/types";
+import { projectParent } from "../tasks/parent";
 import { localToday } from "../tasks/today";
 import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
@@ -333,7 +334,7 @@ export function createTaskdoReplica({
     collection: tasks,
     add: (text, showUpDate = null, projectId = null, recurrence = null) => tasks.insert({
       id: randomId(), text, createdAt: now().toISOString(), showUpDate: recurrence?.origin ?? showUpDate,
-      projectId, recurrence, recurrenceDate: recurrence?.origin ?? null,
+      parent: projectParent(projectId), recurrence, recurrenceDate: recurrence?.origin ?? null,
       completedAt: null, sortKey: null,
     }),
     edit: (id, text, schedule) => tasks.update(id, (draft) => {
@@ -358,7 +359,7 @@ export function createTaskdoReplica({
       : tasks.insert({ ...task, completedAt: null }),
     reschedule: (id, date) => tasks.update(id, (draft) => { draft.showUpDate = date; }),
     reorder: (id, sortKey) => tasks.update(id, (draft) => { draft.sortKey = sortKey; }),
-    moveToProject: (id, projectId) => tasks.update(id, (draft) => { draft.projectId = projectId; }),
+    moveToProject: (id, projectId) => tasks.update(id, (draft) => { draft.parent = projectParent(projectId); }),
   };
   const projectActions: TodoProjects = {
     collection: projects,

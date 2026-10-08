@@ -132,7 +132,7 @@ describe("TaskDO replica adapter", () => {
     store.setRow("projects", "deleted", { title: "Old", icon: "📁", state: "in-play", createdAt: NOW, deletedAt: NOW });
     store.setRow("tasks", "late", { text: "Keep", createdAt: NOW, projectId: "deleted", recurrence: "bad" });
     const snapshot = projectTodoData(store);
-    expect(snapshot.tasks).toMatchObject([{ id: "late", projectId: null, recurrence: null }]);
+    expect(snapshot.tasks).toMatchObject([{ id: "late", parent: null, recurrence: null }]);
     expect(snapshot.recoveries).toEqual([
       { table: "tasks", id: "late", text: "Keep", reason: "Invalid recurrence", repair: "clear-task-recurrence" },
       { table: "tasks", id: "late", text: "Keep", reason: "Deleted Project", repair: "make-task-loose" },
