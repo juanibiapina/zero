@@ -30,8 +30,6 @@ export const DEFAULT_ICON = "📁";
 
 export const MEDICINE_TASK_ICON = "💊";
 
-export const BACKLOG_COLLAPSE_THRESHOLD = 5;
-
 // The icon glyph shown for a task in a list: null for a loose task, 💊 for a
 // Medicine Task, otherwise the task's project icon with a neutral fallback for
 // a missing row.

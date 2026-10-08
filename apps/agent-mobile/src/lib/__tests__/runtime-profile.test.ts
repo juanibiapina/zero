@@ -16,6 +16,7 @@ describe('mobile runtime profile', () => {
       storageKeys: {
         timezoneKey: 'zero.timezone.synced',
         iconSuggestionsKey: 'zero.icon-suggestions.v1',
+        projectSectionFoldsKey: 'zero.project-section-folds.v1',
         todoWorkspaceKey: 'zero.todo-workspace.v1',
       },
       todoWorkspaceId: undefined,
@@ -48,6 +49,7 @@ describe('mobile runtime profile', () => {
       storageKeys: {
         timezoneKey: 'zero.e2e.timezone.synced',
         iconSuggestionsKey: 'zero.e2e.icon-suggestions.v1',
+        projectSectionFoldsKey: 'zero.e2e.project-section-folds.v1',
         todoWorkspaceKey: 'zero.e2e.todo-workspace.v1',
       },
       todoWorkspaceId: 'hermetic-e2e-guest',

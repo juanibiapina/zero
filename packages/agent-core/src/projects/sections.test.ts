@@ -54,13 +54,13 @@ describe("projectStatusSections", () => {
       .toEqual(["early", "late"]);
   });
 
-  it("uses mobile's reactive fold defaults until the user toggles a section", () => {
-    const five = Array.from({ length: 5 }, (_, i) => project(`backlog ${i}`, "backlog"));
-    const six = [...five, project("backlog 5", "backlog")];
-    expect(sections(five)[0].collapsed).toBe(false);
-    expect(sections(six)[0].collapsed).toBe(true);
-    expect(projectStatusSections({ projects: six, tasks: [], conditions: [], today,
-      collapseOverride: { backlog: false } })[0].collapsed).toBe(false);
+  it("folds After and Backlog by default until the user toggles a section", () => {
+    const projects = [project("backlog", "backlog"), project("next"), project("after"), project("target")];
+    const fold = (override = {}) => projectStatusSections({
+      projects, tasks: [], conditions: [after("after", "target")], today, collapseOverride: override,
+    }).map((section) => [section.status, section.collapsed]);
+    expect(fold()).toEqual([["next", false], ["after", true], ["backlog", true]]);
+    expect(fold({ backlog: false, next: true })).toEqual([["next", true], ["after", true], ["backlog", false]]);
   });
 
   it("reveals folded matches during search without changing the manual fold", () => {

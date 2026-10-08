@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-09: Change Projects to start with After and Backlog collapsed, and remember which sections you open or close on this phone.
+
 - 2026-10-08: Edit a medicine's name and notes right on its page. Adding a medicine opens with the keyboard ready on the name. Choose when a medicine starts (today, tomorrow, or another day) in its own Starts section. Remove the day line for dragging dose times, which could crash the app; tap a dose to change its time.
 
 - 2026-10-08: Move the back link on Upcoming, Medicines and a medicine's page to the top of the screen, above the title, as on a Project's page.

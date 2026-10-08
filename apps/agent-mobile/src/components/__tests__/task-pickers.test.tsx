@@ -116,7 +116,7 @@ describe('task pickers', () => {
     expect(screen.getByText('No available projects')).toBeTruthy();
   });
 
-  it('orders status sections and folds After and a large Backlog', async () => {
+  it('orders status sections and folds After and Backlog', async () => {
     const onPick = jest.fn();
     const screen = await render(<ProjectPickerSheet open projects={statusProjects}
       openTasks={openTasks} conditions={conditions} selectedProjectId={null}
@@ -133,12 +133,8 @@ describe('task pickers', () => {
     expect(onPick).toHaveBeenCalledWith('backlog-0');
   });
 
-  it('keeps five Backlog projects open and reveals a folded match when filtering', async () => {
-    const screen = await render(<ProjectPickerSheet open projects={statusProjects.slice(0, -1)}
-      openTasks={openTasks} conditions={conditions} selectedProjectId={null}
-      onPick={() => {}} onClose={() => {}} />);
-    expect(screen.getByLabelText('Backlog, 5').props.accessibilityState.expanded).toBe(true);
-    await screen.rerender(<ProjectPickerSheet open projects={statusProjects}
+  it('reveals a folded Backlog match when filtering', async () => {
+    const screen = await render(<ProjectPickerSheet open projects={statusProjects}
       openTasks={openTasks} conditions={conditions} selectedProjectId={null}
       onPick={() => {}} onClose={() => {}} />);
     expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(false);

@@ -15,6 +15,7 @@ import { useQuickAdd } from '@/components/quick-add-composer';
 import { ScreenHeader } from '@/components/screen-header';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
+import { useProjectSectionFolds } from '@/lib/project-section-folds';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
 import { useDelayed, usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
@@ -58,12 +59,9 @@ function Projects({ replica }: { replica: TaskdoReplica }) {
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
   const conds = useMemo(() => conditions ?? [], [conditions]);
   const [writeError, setWriteError] = useState<string | null>(null);
-  const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
+  const { folds: collapseOverride, toggle: onToggle } = useProjectSectionFolds();
   const accent = useColor('--color-accent');
   const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
-  const onToggle = useCallback((status: ProjectDisplayStatus, current: boolean) => {
-    setCollapseOverride((prev) => ({ ...prev, [status]: !current }));
-  }, []);
   const today = useLocalDay();
   const grouped = useMemo(() => projectStatusSections({
     projects: list, tasks, conditions: conds, today, collapseOverride,

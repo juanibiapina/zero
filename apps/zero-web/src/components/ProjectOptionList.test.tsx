@@ -42,10 +42,8 @@ describe("ProjectOptionList", () => {
     expect(onPick).toHaveBeenCalledWith("backlog 0");
   });
 
-  it("keeps Backlog open at five and reveals folded matches without losing the fold", () => {
-    const { rerender } = render(<ProjectOptionList {...props} projects={projects.slice(0, -2)} />);
-    expect(screen.getByRole("button", { name: "Backlog, 5" })).toHaveAttribute("aria-expanded", "true");
-    rerender(<ProjectOptionList {...props} />);
+  it("reveals folded Backlog matches without losing the fold", () => {
+    render(<ProjectOptionList {...props} />);
     expect(screen.getByRole("button", { name: "Backlog, 6" })).toHaveAttribute("aria-expanded", "false");
     fireEvent.change(screen.getByRole("textbox", { name: "Filter projects" }), { target: { value: "BACKLOG 5" } });
     expect(screen.getByRole("button", { name: "Backlog, 1" })).toHaveAttribute("aria-expanded", "true");

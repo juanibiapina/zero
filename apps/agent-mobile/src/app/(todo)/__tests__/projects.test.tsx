@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -72,9 +73,10 @@ async function renderScreen(seed: InMemoryTodoSeed = {}, guest = false) {
 }
 
 describe('ProjectsScreen', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mockPush.mockReset();
     __resetIconSuggestions();
+    await AsyncStorage.clear();
   });
 
   it('shows projects and navigates through a row', async () => {
@@ -210,6 +212,35 @@ describe('ProjectsScreen', () => {
     });
     await waitFor(() => expect(screen.getByLabelText('Next, 1')).toBeTruthy());
     expect(screen.getByLabelText('Backlog, 1')).toBeTruthy();
+  });
+
+  it('starts After and Backlog folded and remembers a fold across restarts', async () => {
+    const seed: InMemoryTodoSeed = {
+      projects: [
+        project('next', 'Run a 5K'),
+        project('after', 'Paint the nursery'),
+        project('later', 'Write a book', { state: 'backlog' }),
+      ],
+      waits: [{
+        id: 'after-link', projectId: 'after', kind: 'project-status', text: null,
+        refId: 'next', targetStatus: 'done', createdAt: '2026-09-01T00:00:00.000Z', resolvedAt: null,
+      }],
+    };
+    const expanded = (screen: Awaited<ReturnType<typeof renderScreen>>, label: string) =>
+      screen.getByLabelText(label).props.accessibilityState.expanded;
+    const first = await renderScreen(seed);
+    await waitFor(() => expect(first.getByLabelText('Backlog, 1')).toBeTruthy());
+    expect(expanded(first, 'After, 1')).toBe(false);
+    expect(expanded(first, 'Backlog, 1')).toBe(false);
+    expect(first.queryByText('Write a book')).toBeNull();
+    await fireEvent.press(first.getByLabelText('Backlog, 1'));
+    expect(first.getByText('Write a book')).toBeTruthy();
+    await waitFor(async () => expect(await AsyncStorage.getAllKeys()).toHaveLength(1));
+
+    const second = await renderScreen(seed);
+    await waitFor(() => expect(expanded(second, 'Backlog, 1')).toBe(true));
+    expect(second.getByText('Write a book')).toBeTruthy();
+    expect(expanded(second, 'After, 1')).toBe(false);
   });
 
   it('orders waiting projects by the oldest unresolved condition', async () => {

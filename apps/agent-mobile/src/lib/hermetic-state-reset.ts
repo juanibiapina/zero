@@ -11,5 +11,6 @@ export async function resetHermeticTodoState(): Promise<void> {
     storageKeys.todoWorkspaceKey,
     storageKeys.timezoneKey,
     storageKeys.iconSuggestionsKey,
+    storageKeys.projectSectionFoldsKey,
   ]);
 }

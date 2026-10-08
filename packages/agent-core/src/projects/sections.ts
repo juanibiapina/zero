@@ -4,7 +4,6 @@ import type { Task } from "../taskdo/types";
 import type { ProjectAttention } from "../taskdo/types";
 import { candidateAfterProjects } from "./afters";
 import { projectDisplayStatus } from "./derive";
-import { BACKLOG_COLLAPSE_THRESHOLD } from "./display";
 import { projectStatusContext } from "./status-context";
 import type { Project, ProjectDisplayStatus } from "./types";
 
@@ -67,8 +66,7 @@ export function projectStatusSections({
     sections.push({
       status,
       count: matches.length,
-      collapsed: !needle && (collapseOverride[status] ??
-        (status === "after" || (status === "backlog" && all.length > BACKLOG_COLLAPSE_THRESHOLD))),
+      collapsed: !needle && (collapseOverride[status] ?? (status === "after" || status === "backlog")),
       projects: matches,
     });
   }

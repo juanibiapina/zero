@@ -291,16 +291,14 @@ describe("ProjectsPage", () => {
     expect(screen.queryByText("auto")).toBeNull();
   });
 
-  it("folds a growing Backlog until its section is manually expanded", async () => {
+  it("folds Backlog until its section is manually expanded", async () => {
     setApi([
-      ...Array.from({ length: 5 }, (_, i) => project(String(i + 1), `Backlog ${i}`, "backlog")),
+      project("1", "Backlog 0", "backlog"),
       project("6", "Another Project"),
     ]);
     renderApp();
     const backlog = await screen.findByRole("button", { name: /^Backlog·/ });
-    expect(backlog).toHaveAttribute("aria-expanded", "true");
-    await act(async () => { await h.replica!.projects.setState("6", "backlog").isPersisted.promise; });
-    await waitFor(() => expect(backlog).toHaveAttribute("aria-expanded", "false"));
+    expect(backlog).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(backlog);
     expect(backlog).toHaveAttribute("aria-expanded", "true");
     await act(async () => { await h.replica!.projects.setState("6", "in-play").isPersisted.promise; });
