@@ -1,5 +1,5 @@
 import { createMergeableStore, type MergeableStore } from "tinybase";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { keepTaskParentsMigrated, parentCellValue, readParentCell } from "./task-parent-cell";
 
@@ -10,6 +10,18 @@ const parentOf = (s: MergeableStore, id = "t") => readParentCell(s.getRow("tasks
 const sync = (a: MergeableStore, b: MergeableStore) => { a.merge(b); b.merge(a); };
 
 describe("task parent cell migration", () => {
+  it("loads without random values, which Workers forbid in global scope", async () => {
+    vi.resetModules();
+    const getRandomValues = vi.spyOn(crypto, "getRandomValues").mockImplementation(() => {
+      throw new Error("Disallowed operation called within global scope");
+    });
+    try {
+      await expect(import("./task-parent-cell")).resolves.toBeDefined();
+    } finally {
+      getRandomValues.mockRestore();
+    }
+  });
+
   it("turns a legacy Project parent into the parent cell", () => {
     const s = store("s");
     s.setRow("tasks", "t", { text: "Task", projectId: "p1" });

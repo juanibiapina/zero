@@ -8,7 +8,9 @@ const LEGACY = ["projectId", "medicineId", "role"] as const;
 
 type CellStamp = [value: unknown, hlc: string, hash?: number];
 
-const [, , encodeHlc, decodeHlc] = getHlcFunctions();
+// A fixed id keeps tinybase from drawing random values at import time, which
+// Workers forbid in global scope.
+const [, , encodeHlc, decodeHlc] = getHlcFunctions("task-parent-cell");
 
 // The next stamp after a cell's own stamp outranks that cell and never runs
 // ahead of the store's clock, which would make the store reject the change.
