@@ -98,8 +98,8 @@ proof_schedule() {
   proof_kill_react
 }
 proof_no_playback() {
-  adb shell dumpsys activity services "$PROOF_PACKAGE" > "$PROOF_DIR/services.txt"
-  ! rg -q 'MedicineAlarmService' "$PROOF_DIR/services.txt"
+  adb shell dumpsys audio > "$PROOF_DIR/audio.txt"
+  ! rg -F "package:$PROOF_PACKAGE " "$PROOF_DIR/audio.txt" | rg -q 'usage=USAGE_ALARM'
 }
 proof_await_stage() {
   local kind="$1" deadline="$2" stage

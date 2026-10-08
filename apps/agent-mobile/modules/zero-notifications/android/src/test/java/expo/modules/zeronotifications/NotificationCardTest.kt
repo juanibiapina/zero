@@ -31,14 +31,14 @@ class NotificationCardTest {
   private val context: Context get() = RuntimeEnvironment.getApplication()
   private val manager: NotificationManager get() = context.getSystemService(NotificationManager::class.java)
   private val day = "2026-10-02"
-  private fun schedule(channelName: String = "Alerts") = JSONObject()
+  private fun schedule(channelName: String = "Alerts", fullScreen: Boolean = false) = JSONObject()
     .put("channels", JSONArray().put(JSONObject().put("id", "alerts").put("name", channelName).put("group", JSONObject().put("id", "group").put("name", "Group"))))
     .put("reminders", JSONArray().put(JSONObject()
       .put("key", "item").put("channel", "alerts").put("icon", "pill").put("title", "Title")
       .put("lockScreen", JSONObject().put("title", "Reminder").put("text", "Open the app"))
       .put("url", "app:///items/item?date={date}")
       .put("recurrence", JSONObject().put("from", "2026-09-01").put("until", JSONObject.NULL).put("weekdays", JSONArray((1..7).toList())))
-      .put("stages", JSONArray().put(JSONObject().put("at", "08:00").put("wake", "alarmClock").put("text", "Due")))
+      .put("stages", JSONArray().put(JSONObject().put("at", "08:00").put("wake", "alarmClock").put("text", "Due").also { if (fullScreen) it.put("fullScreen", true) }))
       .put("actions", JSONArray()
         .put(JSONObject().put("id", "done").put("label", "Done").put("kind", "settle"))
         .put(JSONObject().put("id", "later").put("label", "Later").put("kind", "snooze").put("minutes", 60)))
@@ -49,6 +49,7 @@ class NotificationCardTest {
   @Before
   fun showACard() {
     ShadowAlarmManager.setCanScheduleExactAlarms(true)
+    NotificationEngine.canUseFullScreen = { true }
     at("07:00")
     NotificationEngine.install(context, "workspace", "source", schedule())
     at("08:00")
@@ -86,6 +87,43 @@ class NotificationCardTest {
     assertEquals(Notification.VISIBILITY_PRIVATE, notification.visibility)
     assertEquals("Reminder", notification.publicVersion.extras.getString(Notification.EXTRA_TITLE))
     assertEquals("Open the app", notification.publicVersion.extras.getString(Notification.EXTRA_TEXT))
+  }
+
+  private fun showFullScreenCard() {
+    manager.cancelAll()
+    at("07:00")
+    NotificationEngine.install(context, "workspace", "source", schedule(fullScreen = true))
+    at("08:00")
+    NotificationEngine.wake(context)
+  }
+
+  @Test
+  fun anAlertingFullScreenStageOpensTheReminderScreen() {
+    NotificationEngine.clear(context, "workspace")
+    showFullScreenCard()
+    val screen = shadowOf(card().fullScreenIntent).savedIntent
+    assertEquals(ReminderScreenActivity::class.java.name, screen.component?.className)
+    assertEquals(listOf("workspace", "source", "item", day), listOf("workspace", "source", "key", "date").map { screen.getStringExtra(it) })
+    assertEquals(NotificationEngine.screen(context, "workspace", "source", "item", day, screen.getLongExtra("shownAt", -1))?.text, "Due")
+  }
+
+  @Test
+  fun aRestoredFullScreenCardOpensNoScreen() {
+    NotificationEngine.clear(context, "workspace")
+    showFullScreenCard()
+    manager.cancelAll()
+    NotificationEngine.restore(context, true)
+    assertNull(card().fullScreenIntent)
+  }
+
+  @Test
+  fun withoutFullScreenAccessTheCardStillArrives() {
+    NotificationEngine.clear(context, "workspace")
+    NotificationEngine.canUseFullScreen = { false }
+    showFullScreenCard()
+    assertNull(card().fullScreenIntent)
+    assertEquals("Due", card().extras.getString(Notification.EXTRA_TEXT))
+    assertEquals(false, NotificationEngine.capabilities(context)["fullScreen"])
   }
 
   @Test

@@ -21,7 +21,7 @@ jest.mock('../../../modules/zero-notifications', () => ({
   notificationSettings: {
     capabilities: async () => mockCapabilities,
     requestNotifications: jest.fn(), openNotificationSettings: jest.fn(),
-    openExactAlarmSettings: jest.fn(), openChannelSettings: jest.fn(), openBatterySettings: jest.fn(),
+    openExactAlarmSettings: jest.fn(), openFullScreenSettings: jest.fn(), openChannelSettings: jest.fn(), openBatterySettings: jest.fn(),
   },
   notificationProof: null,
 }));
@@ -32,7 +32,7 @@ const returnToApp = () => act(async () => { for (const listener of foreground) l
 beforeEach(async () => {
   await AsyncStorage.clear();
   mockDevice = createInMemoryNotificationDevice();
-  mockCapabilities = { notifications: true, exactAlarms: true, backgroundRestricted: false, channels: { [MEDICINE_CHANNEL]: true } };
+  mockCapabilities = { notifications: true, exactAlarms: true, backgroundRestricted: false, fullScreen: true, channels: { [MEDICINE_CHANNEL]: true } };
   foreground.clear();
   jest.spyOn(AppState, 'addEventListener').mockImplementation((event, listener) => {
     if (event === 'change') foreground.add(listener);
@@ -69,6 +69,8 @@ describe('Medicine reminder notice', () => {
     { capability: 'channel', change: { channels: { [MEDICINE_CHANNEL]: false } }, message: 'Medicine notifications are turned off.', action: 'Open settings', opens: 'openChannelSettings' },
     { capability: 'exactAlarms', change: { exactAlarms: false }, message: 'Reminders can’t arrive on time.', action: 'Allow', opens: 'openExactAlarmSettings' },
     { capability: 'backgroundRestricted', change: { backgroundRestricted: true }, message: 'Battery restrictions may delay reminders.', action: 'Battery settings', opens: 'openBatterySettings' },
+    { capability: 'fullScreen', change: { fullScreen: false }, message: 'The dose alarm can’t open on the lock screen.', action: 'Allow', opens: 'openFullScreenSettings' },
+    { capability: 'backgroundRestricted before fullScreen', change: { backgroundRestricted: true, fullScreen: false }, message: 'Battery restrictions may delay reminders.', action: 'Battery settings', opens: 'openBatterySettings' },
   ])('offers one fix when $capability blocks reminders', async ({ change, message, action, opens }) => {
     mockCapabilities = { ...mockCapabilities, ...change };
     const screen = await open(<MedicinesList />);

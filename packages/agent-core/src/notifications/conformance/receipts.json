@@ -45,7 +45,8 @@
           {
             "at": "20:00",
             "wake": "alarmClock",
-            "text": "20:00 dose due"
+            "text": "20:00 dose due",
+            "fullScreen": true
           }
         ],
         "actions": [

@@ -80,6 +80,7 @@ function reminderIssue(controller: MedicineReminders, settings: NotificationSett
   if (capabilities.channels[MEDICINE_CHANNEL] === false) return { message: 'Medicine notifications are turned off.', action: 'Open settings', fix: () => settings.openChannelSettings(MEDICINE_CHANNEL) };
   if (!capabilities.exactAlarms) return { message: 'Reminders can’t arrive on time.', action: 'Allow', fix: () => settings.openExactAlarmSettings() };
   if (capabilities.backgroundRestricted) return { message: 'Battery restrictions may delay reminders.', action: 'Battery settings', fix: () => settings.openBatterySettings() };
+  if (!capabilities.fullScreen) return { message: 'The dose alarm can’t open on the lock screen.', action: 'Allow', fix: () => settings.openFullScreenSettings() };
   return null;
 }
 

@@ -26,8 +26,11 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArraySet
 
 internal class Card(val source: String, val key: String, val date: String, val stage: Int, val at: String, val shownAt: Long)
+
+internal class ScreenContent(val title: String, val text: String, val actions: List<Action>)
 
 internal class Snooze(val source: String, val key: String, val date: String, val until: Long, val at: String)
 
@@ -94,6 +97,7 @@ internal object NotificationEngine {
   private const val QUIET_GROUP = "zero-notifications-quiet"
   private const val DAY_MS = 24 * 60 * 60 * 1000L
   private val lock = Any()
+  private val listeners = CopyOnWriteArraySet<() -> Unit>()
   internal var clock: () -> Clock = { Clock.systemDefaultZone() }
 
   private class Candidate(val source: String, val reminder: Reminder, val date: LocalDate, val stage: Int, val time: Long, val snooze: Boolean)
@@ -111,6 +115,13 @@ internal object NotificationEngine {
     val out = file.startWrite()
     try { out.write(state.toJson().toString().toByteArray(Charsets.UTF_8)); file.finishWrite(out) }
     catch (error: Exception) { file.failWrite(out); throw IllegalStateException("Notification storage failed", error) }
+    publish()
+  }
+  private fun publish() = listeners.forEach { it() }
+
+  fun observe(listener: () -> Unit): () -> Unit {
+    listeners += listener
+    return { listeners -= listener }
   }
   private fun alarmManager(c: Context) = c.getSystemService(AlarmManager::class.java)
   private fun notificationManager(c: Context) = c.getSystemService(NotificationManager::class.java)
@@ -121,7 +132,7 @@ internal object NotificationEngine {
     date in reminder.settled || occurrence(source, reminder.key, date.toString()) in state.settledHere
   private fun unacknowledgedSettles(state: State) = state.receipts.filter { it.getString("type") == "settled" }
   private fun debuggable(c: Context) = c.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-  private fun muted(c: Context, workspace: String?) = debuggable(c) && workspace != null && File(c.noBackupFilesDir, SILENT_FILE).let { it.exists() && it.readText() == workspace }
+  fun muted(c: Context, workspace: String?) = debuggable(c) && workspace != null && File(c.noBackupFilesDir, SILENT_FILE).let { it.exists() && it.readText() == workspace }
   private fun groupEnabled(c: Context, group: String?) = Build.VERSION.SDK_INT < 28 || group == null || notificationManager(c).getNotificationChannelGroup(group)?.isBlocked != true
 
   fun install(c: Context, workspace: String, source: String, json: String) = synchronized(lock) {
@@ -247,6 +258,15 @@ internal object NotificationEngine {
     if (state.workspace != workspace) return@synchronized
     closeEverything(c, state)
     stateFile(c).delete()
+    publish()
+  }
+
+  fun screen(c: Context, workspace: String, source: String, key: String, date: String, shownAt: Long): ScreenContent? = synchronized(lock) {
+    val state = load(c)
+    if (state.workspace != workspace || state.quiesced) return@synchronized null
+    val card = state.cards[occurrence(source, key, date)]?.takeIf { it.shownAt == shownAt } ?: return@synchronized null
+    val reminder = schedules(state)[source]?.reminder(key) ?: return@synchronized null
+    ScreenContent(reminder.title, stageOf(reminder, card).text, reminder.actions)
   }
 
   fun silence(c: Context, workspace: String) {
@@ -262,6 +282,7 @@ internal object NotificationEngine {
       "notifications" to manager.areNotificationsEnabled(),
       "exactAlarms" to (Build.VERSION.SDK_INT < 31 || alarmManager(c).canScheduleExactAlarms()),
       "backgroundRestricted" to (Build.VERSION.SDK_INT >= 28 && c.getSystemService(ActivityManager::class.java).isBackgroundRestricted),
+      "fullScreen" to canUseFullScreen(c),
       "channels" to channels,
     )
   }
@@ -449,10 +470,13 @@ internal object NotificationEngine {
     state.alarms = armed
   }
 
+  internal var canUseFullScreen: (Context) -> Boolean = { c -> Build.VERSION.SDK_INT < 34 || notificationManager(c).canUseFullScreenIntent() }
+  private fun stageOf(reminder: Reminder, card: Card) = reminder.stages.firstOrNull { it.at.toString() == card.at } ?: reminder.stages[card.stage.coerceIn(reminder.stages.indices)]
+
   fun notification(c: Context, state: State, card: Card, reminder: Reminder, alert: Boolean): Notification {
     val workspace = state.workspace!!
     val id = occurrence(card.source, card.key, card.date)
-    val stage = reminder.stages.firstOrNull { it.at.toString() == card.at } ?: reminder.stages[card.stage.coerceIn(reminder.stages.indices)]
+    val stage = stageOf(reminder, card)
     val open = Intent(Intent.ACTION_VIEW, Uri.parse(reminder.url.replace("{date}", card.date))).setPackage(c.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     val openPending = PendingIntent.getActivity(c, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     fun broadcast(action: String, button: String) = PendingIntent.getBroadcast(c, 0, Intent(c, NotificationReceiver::class.java).setAction(action)
@@ -467,6 +491,12 @@ internal object NotificationEngine {
       .setOnlyAlertOnce(!alert)
     for (action in reminder.actions) builder.addAction(Notification.Action.Builder(null, action.label, broadcast(BUTTON, action.id)).build())
     if (!alert) builder.setGroup(QUIET_GROUP).setGroupAlertBehavior(Notification.GROUP_ALERT_SUMMARY)
+    if (alert && stage.fullScreen && canUseFullScreen(c)) {
+      val screen = Intent(c, ReminderScreenActivity::class.java)
+        .setData(Uri.parse("zero-notifications:screen/${Uri.encode(id)}/${card.shownAt}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        .putExtra("workspace", workspace).putExtra("source", card.source).putExtra("key", card.key).putExtra("date", card.date).putExtra("shownAt", card.shownAt)
+      builder.setFullScreenIntent(PendingIntent.getActivity(c, 0, screen, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE), true)
+    }
     return builder.build()
   }
 }

@@ -42,8 +42,9 @@ took them, with history on request. On a day that is not chosen, the list and
 the page show the day of the next dose instead.
 
 On Android, a normal notification arrives at the early reminder and again at
-the dose time, with Taken and Postpone 1 hour. A paired watch can show the same
-notification. When reminders cannot reach you, the top of the list shows one
+the dose time, with Taken and Postpone 1 hour. At the dose time a locked phone
+also opens a full-screen alarm with the same buttons. A paired watch can show
+the same notification. When reminders cannot reach you, the top of the list shows one
 notice with one button to fix it.
 
 ## Reminders on Android
@@ -55,6 +56,15 @@ notice with one button to fix it.
 - Both stages use the Medicine reminders category with high importance, the
   system notification sound and vibration. Android may show a banner. Sound
   follows the phone's volume, Do Not Disturb and your category settings.
+- At the dose time, a locked phone or one with the screen off opens a
+  full-screen alarm with the medicine's name, the dose text, Taken and Postpone
+  1 hour, and plays the alarm sound for up to a minute. The alarm sound follows
+  the alarm volume and Android's alarm rules for Do Not Disturb. Back, the
+  power button, or either button stops the sound; after a minute it stops by
+  itself and the screen stays. The screen shows the medicine's details over the
+  lock screen. A phone in use shows the notification instead, as Android does.
+  When Android denies full-screen access, the notification still arrives and
+  the list's notice offers to allow it.
 - Taken records that Dose, closes its notification, and cancels its dose-time
   alarm, without opening the app. Tapping the notification opens that Dose.
 - Postpone 1 hour closes the notification and brings it back an hour later with
@@ -70,7 +80,7 @@ notice with one button to fix it.
 - If the phone was off through a reminder, the latest one for each dose time
   appears quietly when the phone starts, and open notifications come back
   quietly.
-- Medicine details are private on the lock screen.
+- Medicine details are private in the lock-screen notification.
 - Reminders are turned on separately on each phone. A Taken pressed with no
   network reaches the shared history the next time the app opens.
 
@@ -88,7 +98,6 @@ restriction.
 
 ## Left out on purpose
 
-- A looping alarm sound or a full-screen alarm.
 - A full record of missed doses or of old schedules.
 - Medicine in global quick add, which offers only Task and Project.
 

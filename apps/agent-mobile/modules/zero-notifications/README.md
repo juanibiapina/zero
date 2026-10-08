@@ -24,7 +24,9 @@ This native module shows scheduled notifications and runs their buttons with no 
 8. Cards never expire.
 9. Install closes a card or cancels a snooze when its occurrence is settled, its Reminder is gone or no longer occurs on that date, or the stage that showed the card no longer exists at the same time.
 10. Times are wall times in the phone's current zone. A time inside a daylight-saving gap moves forward by the gap.
-11. One workspace owns the store. Another workspace takes it over unless unacknowledged settle receipts remain. A quiesced store shows nothing and refuses settle until the next install.
+11. A stage with `fullScreen: true` gives its card a full-screen intent when it alerts and Android grants full-screen access. Quiet presentations never carry one. On a locked phone or with the screen off, Android opens the reminder screen: the title, the stage text and one button per action. On a phone in use, Android shows the card as a banner instead.
+12. The reminder screen plays the default alarm sound on a loop, with alarm usage, for at most 60 seconds, once per card. Any button, leaving the screen (Back, Home, the power button) or the 60 seconds stop it; the screen stays open until a button or its card closes it. Its buttons run the same path as the card's buttons. The screen closes when its card closes for any reason. A silenced test workspace never plays the sound.
+13. One workspace owns the store. Another workspace takes it over unless unacknowledged settle receipts remain. A quiesced store shows nothing and refuses settle until the next install.
 
 The parser rejects a whole schedule on any error, including unknown fields, so a schedule this APK does not understand fails loudly.
 
@@ -38,11 +40,11 @@ Reboot clears alarms and notifications. After a reboot the module restores visib
 
 ## What needs an APK
 
-Any change to the schedule format or the module's behavior: a new field, a new repeat rule, a new button kind, a new icon, a new wake kind, or new channel behavior. Such a change updates both parsers and adds fixture cases in [`conformance/`](../../../../packages/agent-core/src/notifications/conformance). Everything a schedule expresses (text, buttons, links, stage times, which Reminders exist) ships as an EAS Update.
+Any change to the schedule format or the module's behavior: a new field, a new repeat rule, a new button kind, a new icon, a new wake kind, new channel behavior, or a change to the reminder screen. Such a change updates both parsers and adds fixture cases in [`conformance/`](../../../../packages/agent-core/src/notifications/conformance). Everything a schedule expresses (text, buttons, links, stage times, which Reminders exist) ships as an EAS Update.
 
 ## Limits
 
-Android stops posting an app's notifications once it has 50 open, and this module does not guard against that. Force-stop cancels all alarms until the app opens again. Missing permissions, a blocked channel, manufacturer power controls, a muted phone or a disconnected watch limit delivery or alerting.
+Android stops posting an app's notifications once it has 50 open, and this module does not guard against that. On Android 14 and later the user can revoke full-screen access; `capabilities()` reports it as `fullScreen` and `openFullScreenSettings()` opens the setting. Force-stop cancels all alarms until the app opens again. Missing permissions, a blocked channel, manufacturer power controls, a muted phone or a disconnected watch limit delivery or alerting.
 
 ## Development and verification
 

@@ -8,7 +8,7 @@ export type Channel = { id: string; name: string; group: { id: string; name: str
 
 export type Recurrence = { from: LocalDate; until: LocalDate | null; weekdays: Weekday[] };
 
-export type Stage = { at: LocalTime; wake: "exact" | "alarmClock"; text: string };
+export type Stage = { at: LocalTime; wake: "exact" | "alarmClock"; text: string; fullScreen?: true };
 
 export type Action =
   | { id: string; label: string; kind: "settle" }
@@ -52,6 +52,7 @@ export type NotificationCapabilities = {
   notifications: boolean;
   exactAlarms: boolean;
   backgroundRestricted: boolean;
+  fullScreen: boolean;
   channels: Record<string, boolean>;
 };
 
@@ -83,7 +84,7 @@ const shape = z.strictObject({
     lockScreen: z.strictObject({ title: z.string(), text: z.string() }),
     url: z.string(),
     recurrence: z.strictObject({ from: z.string(), until: z.string().nullable(), weekdays: z.array(z.number().int()) }),
-    stages: z.array(z.strictObject({ at: z.string(), wake: z.enum(["exact", "alarmClock"]), text: z.string() })),
+    stages: z.array(z.strictObject({ at: z.string(), wake: z.enum(["exact", "alarmClock"]), text: z.string(), fullScreen: z.literal(true).optional() })),
     actions: z.array(z.discriminatedUnion("kind", [
       z.strictObject({ id: z.string(), label: z.string(), kind: z.literal("settle") }),
       z.strictObject({ id: z.string(), label: z.string(), kind: z.literal("snooze"), minutes: z.number().int() }),

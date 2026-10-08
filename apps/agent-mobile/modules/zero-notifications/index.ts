@@ -7,6 +7,7 @@ export type NotificationSettings = {
   openNotificationSettings(): void;
   openChannelSettings(channel: string): void;
   openExactAlarmSettings(): void;
+  openFullScreenSettings(): void;
   openBatterySettings(): void;
 };
 
@@ -27,6 +28,7 @@ type NativeZeroNotifications = {
   openNotificationSettings(): void;
   openChannelSettings(channel: string): void;
   openExactAlarmSettings(): void;
+  openFullScreenSettings(): void;
   openBatterySettings(): void;
 };
 
@@ -49,6 +51,7 @@ export const notificationSettings: NotificationSettings | null = native && {
   openNotificationSettings: () => native.openNotificationSettings(),
   openChannelSettings: (channel) => native.openChannelSettings(channel),
   openExactAlarmSettings: () => native.openExactAlarmSettings(),
+  openFullScreenSettings: () => native.openFullScreenSettings(),
   openBatterySettings: () => native.openBatterySettings(),
 };
 

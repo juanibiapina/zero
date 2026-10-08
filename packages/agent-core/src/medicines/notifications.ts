@@ -34,7 +34,7 @@ export function medicineSchedule(snapshot: { medicines: Medicine[]; doses: Dose[
         recurrence: medicineRecurrence(medicine),
         stages: [
           { at: slot.remindAt, wake: "exact", text: withInstructions(`Dose at ${slot.alarmAt}`, medicine.instructions) },
-          { at: slot.alarmAt, wake: "alarmClock", text: withInstructions(`${slot.alarmAt} dose due`, medicine.instructions) },
+          { at: slot.alarmAt, wake: "alarmClock", text: withInstructions(`${slot.alarmAt} dose due`, medicine.instructions), fullScreen: true },
         ],
         actions: [
           { id: "taken", label: "Taken", kind: "settle" },

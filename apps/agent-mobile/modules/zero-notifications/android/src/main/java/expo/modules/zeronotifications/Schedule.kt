@@ -27,7 +27,7 @@ internal data class Recurrence(val from: LocalDate, val until: LocalDate?, val w
 
 internal enum class Wake { EXACT, ALARM_CLOCK }
 
-internal data class Stage(val at: LocalTime, val wake: Wake, val text: String)
+internal data class Stage(val at: LocalTime, val wake: Wake, val text: String, val fullScreen: Boolean = false)
 
 internal data class Action(val id: String, val label: String, val snoozeMinutes: Int?) {
   val settles get() = snoozeMinutes == null
@@ -79,7 +79,7 @@ internal object ScheduleParser {
 
   private class RawChannel(val id: String, val name: String, val groupId: String, val groupName: String)
   private class RawAction(val id: String, val label: String, val minutes: Int?)
-  private class RawStage(val at: String, val wake: Wake, val text: String)
+  private class RawStage(val at: String, val wake: Wake, val text: String, val fullScreen: Boolean)
   private class RawReminder(
     val key: String, val channel: String, val icon: String, val title: String, val lockTitle: String, val lockText: String,
     val url: String, val from: String, val until: String?, val weekdays: List<Int>, val stages: List<RawStage>,
@@ -120,9 +120,11 @@ internal object ScheduleParser {
       val recurrence = obj(reminder.get("recurrence"), "from", "until", "weekdays")
       val until = recurrence.get("until").let { value -> if (value == JSONObject.NULL) null else string(value) }
       val stages = list(reminder.get("stages")).map { item ->
-        val stage = obj(item, "at", "wake", "text")
+        val fullScreen = item is JSONObject && item.has("fullScreen")
+        val stage = if (fullScreen) obj(item, "at", "wake", "text", "fullScreen") else obj(item, "at", "wake", "text")
+        if (fullScreen && stage.get("fullScreen") != true) shapeError()
         val wake = when (string(stage.get("wake"))) { "exact" -> Wake.EXACT; "alarmClock" -> Wake.ALARM_CLOCK; else -> shapeError() }
-        RawStage(string(stage.get("at")), wake, string(stage.get("text")))
+        RawStage(string(stage.get("at")), wake, string(stage.get("text")), fullScreen)
       }
       val actions = list(reminder.get("actions")).map { item ->
         if (item !is JSONObject) shapeError()
@@ -180,7 +182,7 @@ internal object ScheduleParser {
       Reminder(
         reminder.key, reminder.channel, reminder.icon, reminder.title, reminder.lockTitle, reminder.lockText, reminder.url,
         Recurrence(LocalDate.parse(reminder.from), reminder.until?.let(LocalDate::parse), reminder.weekdays.toSet()),
-        reminder.stages.map { Stage(LocalTime.parse(it.at), it.wake, it.text) },
+        reminder.stages.map { Stage(LocalTime.parse(it.at), it.wake, it.text, it.fullScreen) },
         reminder.actions.map { Action(it.id, it.label, it.minutes) },
         reminder.settled.map(LocalDate::parse).toSet(),
         reminder.data,

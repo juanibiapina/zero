@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-08: Add a full-screen medicine alarm with sound, Taken and Postpone 1 hour when a dose is due on a locked phone; the sound stops after a minute.
+
 - 2026-10-07: Change medicine reminders so an untaken dose's notification stays after midnight until you take it or swipe it away, Postpone late in the evening returns after midnight, and the latest reminder missed while the phone was off appears quietly when it starts. Turning reminders on after a dose's early reminder now waits for its dose-time alarm.
 
 - 2026-10-07: Add medicines taken only on chosen days of the week.

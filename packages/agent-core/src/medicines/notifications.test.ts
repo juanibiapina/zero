@@ -20,7 +20,7 @@ describe("medicine notification schedule", () => {
     expect(reminder.recurrence).toEqual({ from: "2026-09-01", until: null, weekdays: [1, 3, 5] });
     expect(reminder.stages).toEqual([
       { at: "07:45", wake: "exact", text: "Dose at 08:00 · After food" },
-      { at: "08:00", wake: "alarmClock", text: "08:00 dose due · After food" },
+      { at: "08:00", wake: "alarmClock", text: "08:00 dose due · After food", fullScreen: true },
     ]);
     expect(reminder.actions.map((action) => action.label)).toEqual(["Taken", "Postpone 1 hour"]);
     expect(reminder.url).toBe("zeroagent:///browse/medicines/vitamin?slot=morning&date={date}");
