@@ -48,7 +48,7 @@ async function open(screen: ReactElement, { enabled = true } = {}) {
   data.replica = replica;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const rendered = await render(<QueryClientProvider client={client}><InMemoryTodoDataProvider data={data}>{screen}</InMemoryTodoDataProvider></QueryClientProvider>);
-  await waitFor(() => expect(rendered.getByText('Evening medicine')).toBeTruthy());
+  await waitFor(() => expect(rendered.queryByText('Evening medicine') ?? rendered.getByDisplayValue('Evening medicine')).toBeTruthy());
   if (enabled) {
     await waitFor(() => expect(rendered.getByLabelText('Turn on')).toBeTruthy());
     await fireEvent.press(rendered.getByLabelText('Turn on'));

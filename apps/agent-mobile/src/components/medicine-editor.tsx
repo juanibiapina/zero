@@ -4,7 +4,6 @@ import { useImperativeHandle, useState, type Ref } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DoseTrack } from '@/components/dose-track';
 import { Text } from '@/components/ui/text';
 
 const WEEKDAYS: { day: Weekday; short: string; name: string }[] = [
@@ -16,6 +15,7 @@ const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.
 const clockOf = (date: Date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 const leadLabel = (minutes: number) => minutes % 60 === 0 ? `${minutes / 60} ${minutes === 60 ? 'hour' : 'hours'}` : minutes > 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 const courseDays = (start: string, end: string) => Math.round((Date.parse(`${end}T12:00:00`) - Date.parse(`${start}T12:00:00`)) / 86_400_000) + 1;
+const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const sorted = (doses: MedicineSlot[]) => [...doses].sort((a, b) => a.alarmAt.localeCompare(b.alarmAt));
 
 export function Chip({ label, accessibilityLabel = label, selected = false, disabled = false, onPress }: { label: string; accessibilityLabel?: string; selected?: boolean; disabled?: boolean; onPress: () => void }) {
@@ -47,7 +47,9 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
     return false;
   } }), [picker, openSlot]);
   const today = medicineToday();
+  const tomorrow = medicineEndDate(today, 2);
   const { doses, weekdays, startsOn } = draft.input;
+  const otherStart = startsOn !== today && startsOn !== tomorrow;
   const endsOn = (() => { try { return draft.endsOn; } catch { return null; } })();
   const slot = doses.find((item) => item.id === openSlot) ?? null;
   const pickDate = (value: string, save: (day: string) => void) => setPicker({ mode: 'date', value: new Date(`${value}T12:00:00`), save: (date) => save(medicineToday(date)) });
@@ -57,7 +59,6 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
     {presets ? <View className="flex-row flex-wrap gap-x-2">
       {[1, 2, 3, 4].map((count) => <Chip key={count} label={`${count}× a day`} accessibilityLabel={count === 1 ? 'Once a day' : `${count} times a day`} selected={doses.length === count} disabled={disabled} onPress={() => void onChange(draft.frequency(count))} />)}
     </View> : null}
-    <DoseTrack doses={doses} disabled={disabled} onMove={(id, time) => onChange(draft.time(id, 'alarmAt', time))} onAdd={(time) => { const next = draft.addTime(); const added = next.input.doses.at(-1)!; void onChange(next.time(added.id, 'alarmAt', time)); }} />
     <View className="flex-row flex-wrap gap-x-2">
       {sorted(doses).map((item) => <Chip key={item.id} label={`${item.alarmAt} · ${pillCount(item.amount)}`} accessibilityLabel={`Dose at ${item.alarmAt}, ${pillCount(item.amount)}. Change`} disabled={disabled} onPress={() => setOpenSlot(item.id)} />)}
       {doses.length < 24 ? <Chip label="+ Time" accessibilityLabel="Add dose time" disabled={disabled} onPress={() => void onChange(draft.addTime())} /> : null}
@@ -72,9 +73,15 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
         })}
       </View>
     </Section>
+    <Section title={startsOn < today ? 'Started' : 'Starts'}>
+      <View className="flex-row flex-wrap items-center gap-x-2">
+        <Chip label="Today" accessibilityLabel="Start today" selected={startsOn === today} disabled={disabled} onPress={() => void onChange(draft.change({ startsOn: today }))} />
+        <Chip label="Tomorrow" accessibilityLabel="Start tomorrow" selected={startsOn === tomorrow} disabled={disabled} onPress={() => void onChange(draft.change({ startsOn: tomorrow }))} />
+        <Chip label={otherStart ? capitalized(medicineDay(startsOn, today)) : 'Pick a day'} accessibilityLabel={otherStart ? `Change start day, ${medicineDay(startsOn, today)}` : 'Pick a start day'} selected={otherStart} disabled={disabled} onPress={() => pickDate(startsOn, (day) => void onChange(draft.change({ startsOn: day })))} />
+      </View>
+    </Section>
     <Section title="How long">
       <View className="flex-row flex-wrap items-center gap-x-2">
-        <Chip label={startsOn <= today ? (startsOn === today ? 'From today' : `Since ${medicineDay(startsOn, today)}`) : `From ${medicineDay(startsOn, today)}`} accessibilityLabel="Change start day" disabled={disabled} onPress={() => pickDate(startsOn, (day) => void onChange(draft.change({ startsOn: day })))} />
         <Chip label="Ongoing" selected={!endsOn} disabled={disabled} onPress={() => void onChange(draft.withCourse({ kind: 'ongoing' }))} />
         <Chip label={endsOn ? `Until ${medicineDay(endsOn, today)}` : 'Until…'} accessibilityLabel={endsOn ? `Change last day, ${endsOn}` : 'Set a last day'} selected={!!endsOn} disabled={disabled} onPress={() => endsOn ? pickDate(endsOn, (day) => void onChange(draft.withCourse({ kind: 'last-day', on: day }))) : setDays(10)} />
       </View>
@@ -141,6 +148,6 @@ function DoseSheet({ slot, canRemove, disabled, onClose, onChange, onPickTime }:
   </Modal>;
 }
 
-export function MedicineSaveButton({ busy, disabled, onPress, editing = false }: { busy: boolean; disabled: boolean; onPress: () => void; editing?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={editing ? 'Save medicine' : 'Add medicine'} accessibilityState={{ busy, disabled: disabled || busy }} disabled={disabled || busy} onPress={onPress} className={`min-h-12 min-w-12 items-center justify-center rounded-xl bg-accent px-4 ${disabled || busy ? 'opacity-40' : ''}`}><Text className="font-semibold text-on-accent">{busy ? 'Saving…' : editing ? 'Save' : 'Add'}</Text></Pressable>;
+export function MedicineSaveButton({ busy, disabled, onPress }: { busy: boolean; disabled: boolean; onPress: () => void }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel="Add medicine" accessibilityState={{ busy, disabled: disabled || busy }} disabled={disabled || busy} onPress={onPress} className={`min-h-12 min-w-12 items-center justify-center rounded-xl bg-accent px-4 ${disabled || busy ? 'opacity-40' : ''}`}><Text className="font-semibold text-on-accent">{busy ? 'Saving…' : 'Add'}</Text></Pressable>;
 }

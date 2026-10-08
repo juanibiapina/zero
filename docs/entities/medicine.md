@@ -62,15 +62,15 @@ Medicine shows "24 pills left · about 12 days" with Restock and Recount; an
 uncounted one offers Count pills.
 
 On mobile, the Medicine's page is also its editor, and every change saves at
-once. Today's doses are tiles: tap one to record it as taken, with Undo in the
-toast, and long-press a taken one to undo it later. The schedule is a 24-hour
-line with a handle per dose: drag a handle to move the dose in 15-minute steps,
-or tap the line to add a dose there. A chip per dose opens its exact time, its
-pills, how early to remind, and Remove. Weekdays, start day, Ongoing or a last
-day, and when to remind you to buy more (1 week, 2 weeks, 1 month) are chips on
-the same page. The add sheet asks for the name, optional notes, and the same
-schedule, with 1× to 4× a day presets; the options menu edits the name and
-notes.
+once. The name and notes are text fields at the top and save when you leave
+them; a cleared name keeps the old one. Today's doses are tiles: tap one to
+record it as taken, with Undo in the toast, and long-press a taken one to undo
+it later. A chip per dose opens its exact time, its pills, how early to remind,
+and Remove; "+ Time" adds a dose. Weekdays, the start day (Starts: Today,
+Tomorrow, or a picked day; "Started" once it is past), Ongoing or a last day,
+and when to remind you to buy more (1 week, 2 weeks, 1 month) are chips on the
+same page. The add sheet opens with the keyboard on the name and asks for the
+name, optional notes, and the same schedule, with 1× to 4× a day presets.
 
 On Android, a normal notification arrives at the early reminder and again at
 the dose time, with Taken and Postpone 1 hour. Both say how many pills to take

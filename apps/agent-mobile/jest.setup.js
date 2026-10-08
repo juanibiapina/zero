@@ -85,7 +85,6 @@ jest.mock('react-native-reanimated', () => {
       };
     },
     useAnimatedStyle: () => ({}),
-    useAnimatedReaction: () => {},
     useReducedMotion: () => false,
     // Return the target synchronously and complete it immediately so tests can
     // observe work that is deliberately deferred until a slide finishes.

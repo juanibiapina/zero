@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-08: Edit a medicine's name and notes right on its page. Adding a medicine opens with the keyboard ready on the name. Choose when a medicine starts (today, tomorrow, or another day) in its own Starts section. Remove the day line for dragging dose times, which could crash the app; tap a dose to change its time.
+
 - 2026-10-08: Move the back link on Upcoming, Medicines and a medicine's page to the top of the screen, above the title, as on a Project's page.
 
 - 2026-10-08: Change a medicine's page into its editor: drag dose times along the day, tap a dose to set its pills and how early to remind you, and tap days and course length; changes save at once. Tap a dose to record it as taken, with Undo. Adding a medicine now asks only for the name, notes and schedule; count pills on its page.

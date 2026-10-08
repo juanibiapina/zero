@@ -188,7 +188,7 @@ function KeyboardGapFill({ height }: { height: number }) {
 export function TaskEditorSheet({
   open, onClose, onBack, dismissLabel, draft, onChangeDraft, onSubmit,
   placeholder = 'Task', autoFocus = false, inline = false, inputRef, inputAccessibilityLabel,
-  leading, modeSelector, context, editorContent, secondaryContent, trailing, inputEditable = true,
+  leading, modeSelector, context, editorContent, secondaryContent, trailing, inputEditable = true, selectTextOnFocus = false,
   scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
   onOpen, onKeyboardWillHide, collapsedFabLabel,
 }: {
@@ -210,6 +210,7 @@ export function TaskEditorSheet({
   editorContent?: ReactNode;
   secondaryContent?: ReactNode;
   inputEditable?: boolean;
+  selectTextOnFocus?: boolean;
   trailing?: ReactNode;
   scheduleAction?: EditorAction;
   projectAction?: EditorAction;
@@ -337,6 +338,7 @@ export function TaskEditorSheet({
             <Input
               ref={field}
               editable={inputEditable}
+              selectTextOnFocus={selectTextOnFocus}
               value={draft}
               onChangeText={onChangeDraft}
               onSubmitEditing={onSubmit}

@@ -2,10 +2,11 @@ import { Host, Icon } from '@expo/ui';
 import { safeRandomUUID } from '@tanstack/db';
 import { DEFAULT_LEAD_DAYS, doseId, MedicineDraft, medicineDay, medicineNextDay, medicineOccurrences, medicineState, medicineToday, parseLocalDay, pillCount, restockWithUndo, supplyLabel, toast, type Dose, type Medicine, type MedicineSlot } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, View } from 'react-native';
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Alert, BackHandler, FlatList, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BackRow } from '@/components/back-row';
 import { Chip, MedicineSaveButton, MedicineSchedule, type MedicineScheduleHandle } from '@/components/medicine-editor';
 import { PillCountSheet } from '@/components/pill-count-sheet';
 import { ScreenHeader } from '@/components/screen-header';
@@ -50,9 +51,9 @@ function useMedicines() {
 }
 const BACK_TO_BROWSE = { label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: () => router.dismissTo('/browse') };
 const BACK_TO_MEDICINES = { label: 'Medicines', accessibilityLabel: 'Back to medicines', onPress: () => router.dismissTo('/browse/medicines') };
-function Page({ title, children }: { title: string; children: ReactNode }) {
+function Page({ title, header, children }: { title: string; header?: ReactNode; children: ReactNode }) {
   const insets = useSafeAreaInsets();
-  return <View className="flex-1 bg-background"><ScreenHeader title={title} back={BACK_TO_MEDICINES} /><ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}><View className="px-screen-x">{children}</View></ScrollView></View>;
+  return <View className="flex-1 bg-background">{header ? <><BackRow {...BACK_TO_MEDICINES} />{header}</> : <ScreenHeader title={title} back={BACK_TO_MEDICINES} />}<ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}><View className="px-screen-x">{children}</View></ScrollView></View>;
 }
 function DoseTimes({ medicine }: { medicine: Medicine }) {
   return <View className="flex-row flex-wrap gap-x-4">
@@ -147,11 +148,12 @@ export function MedicineDetail() {
   const [busy, setBusy] = useState(false);
   const [options, setOptions] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [copying, setCopying] = useState(false);
   const [undoing, setUndoing] = useState<Dose | null>(null);
   const [counting, setCounting] = useState<'restock' | 'count' | null>(null);
   const actionPending = useRef(false);
+  const latestMedicine = useRef(medicine);
+  useLayoutEffect(() => { latestMedicine.current = medicine; });
   const run = async (operation: () => Promise<void>) => {
     if (actionPending.current) return;
     actionPending.current = true; setBusy(true); setError(null);
@@ -179,15 +181,16 @@ export function MedicineDetail() {
     toast(`${time(dose.scheduledAt)} dose taken`, { id: 'undo', action: { label: 'Undo', onPress: () => { replica.medicines.undo(dose.id).catch((cause) => setError(errorText(cause))); } } });
   });
   const remove = () => Alert.alert('Delete medicine?', 'Its dose history will also be removed.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void run(async () => { await replica.medicines.remove(medicine.id); router.dismissTo('/browse/medicines'); }) }]);
+  const saveText = (fields: { name: string; instructions: string | null }) => (async () => {
+    setError(null);
+    await replica.medicines.edit(medicine.id, MedicineDraft.create(today, latestMedicine.current ?? medicine).change(fields).commit());
+  })().catch((cause) => setError(errorText(cause)));
   const supply = medicine.supply;
   const buyLeads = !supply || BUY_LEADS.some((lead) => lead.days === supply.leadDays) ? BUY_LEADS : [...BUY_LEADS, { days: supply.leadDays, label: `${supply.leadDays} days` }].sort((a, b) => a.days - b.days);
   return <View className="flex-1 bg-background">
-    <Page title={medicine.name}>
-      <View className="flex-row items-start justify-between gap-3">
-        <Text className="min-w-0 flex-1 py-3">{medicine.instructions ?? ''}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable>
-      </View>
-      {options ? <View className="border-y border-divider py-2"><Action label="Edit name and notes" disabled={busy} onPress={() => { setOptions(false); setEditing(true); }} />{state === 'ended' ? <Action label="Add again" disabled={busy} onPress={() => setCopying(true)} /> : <Action label={medicine.paused ? 'Resume reminders' : 'Pause reminders'} disabled={busy} onPress={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))} />}<Action label="Delete medicine" danger disabled={busy} onPress={remove} /></View> : null}
+    <Page title={medicine.name} header={<MedicineIdentity key={medicine.id} medicine={medicine} onSave={saveText}
+      options={<Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable>} />}>
+      {options ? <View className="border-y border-divider py-2">{state === 'ended' ? <Action label="Add again" disabled={busy} onPress={() => setCopying(true)} /> : <Action label={medicine.paused ? 'Resume reminders' : 'Pause reminders'} disabled={busy} onPress={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))} />}<Action label="Delete medicine" danger disabled={busy} onPress={remove} /></View> : null}
       {error ? <Text variant="error" selectable className="pt-2">{error}</Text> : null}
       <Text accessibilityRole="header" variant="section" className="pb-3 pt-2">{heading}</Text>
       {tiles.length ? <View className="flex-row flex-wrap gap-3">
@@ -222,12 +225,42 @@ export function MedicineDetail() {
     {undoing ? <ConfirmDialog title={`Mark ${time(undoing.scheduledAt)} dose as not taken?`} message="It will show as pending again." cancelLabel="Cancel" confirmLabel="Undo" onCancel={() => setUndoing(null)} onConfirm={() => { const dose = undoing; setUndoing(null); void run(() => replica.medicines.undo(dose.id)); }} /> : null}
     {counting === 'restock' ? <PillCountSheet title="How many pills did you get?" initial={supply?.refill ?? null} onClose={() => setCounting(null)} onSave={(amount) => { setCounting(null); void restockWithUndo({ replica, medicineId: medicine.id, amount, onError: setError }); }} /> : null}
     {counting === 'count' ? <PillCountSheet title="How many pills do you have now?" initial={supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} /> : null}
-    {editing || copying ? <MedicineDrawer key={copying ? 'copy' : medicine.id} source={medicine} mode={copying ? 'copy' : 'details'} onClose={() => { setEditing(false); setCopying(false); }} onSaved={(id) => { setEditing(false); setCopying(false); if (copying) router.replace(`/browse/medicines/${id}`); }} /> : null}
+    {copying ? <MedicineDrawer source={medicine} onClose={() => setCopying(false)} onSaved={(id) => { setCopying(false); router.replace(`/browse/medicines/${id}`); }} /> : null}
   </View>;
 }
-function MedicineDrawer({ source, mode = 'add', onClose, onSaved }: { source?: Medicine; mode?: 'add' | 'copy' | 'details'; onClose: () => void; onSaved: (id: string) => void }) {
+function MedicineIdentity({ medicine, onSave, options }: {
+  medicine: Medicine;
+  onSave: (fields: { name: string; instructions: string | null }) => Promise<void>;
+  options: ReactNode;
+}) {
+  const [name, setName] = useState<string | null>(null);
+  const [notes, setNotes] = useState<string | null>(null);
+  const latest = useRef({ medicine, name, notes, onSave });
+  useLayoutEffect(() => { latest.current = { medicine, name, notes, onSave }; });
+  const commit = useCallback(() => {
+    const { medicine: stored, name: editedName, notes: editedNotes, onSave: save } = latest.current;
+    const fields = { name: editedName?.trim() || stored.name, instructions: editedNotes === null ? stored.instructions : editedNotes.trim() || null };
+    const settle = () => {
+      setName((current) => current === editedName ? null : current);
+      setNotes((current) => current === editedNotes ? null : current);
+    };
+    if (fields.name === stored.name && fields.instructions === stored.instructions) settle();
+    else void save(fields).finally(settle);
+  }, []);
+  useEffect(() => commit, [commit]);
+  return <View className="px-screen-x pb-1">
+    <View className="min-h-12 flex-row items-center gap-2">
+      <Input value={name ?? medicine.name} onChangeText={setName} onBlur={commit} onSubmitEditing={commit} returnKeyType="done" blurOnSubmit
+        accessibilityLabel="Medicine name" className="min-w-0 flex-1 text-title" />
+      {options}
+    </View>
+    <Input value={notes ?? medicine.instructions ?? ''} onChangeText={setNotes} onBlur={commit} multiline
+      placeholder="Notes, like “after food”" accessibilityLabel="Medicine description" className="text-subtitle" />
+  </View>;
+}
+function MedicineDrawer({ source, onClose, onSaved }: { source?: Medicine; onClose: () => void; onSaved: (id: string) => void }) {
   const replica = useTodoReplica();
-  const [draft, setDraft] = useState(() => MedicineDraft.create(medicineToday(), source, mode === 'copy'));
+  const [draft, setDraft] = useState(() => MedicineDraft.create(medicineToday(), source, !!source));
   const [description, setDescription] = useState(!!draft.input.instructions);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -235,8 +268,13 @@ function MedicineDrawer({ source, mode = 'add', onClose, onSaved }: { source?: M
   const pending = useRef(false);
   const creationId = useRef(safeRandomUUID());
   const schedule = useRef<MedicineScheduleHandle>(null);
-  const editing = mode === 'details' && !!source;
   const close = () => { if (pending.current) return; if (discard) setDiscard(false); else if (draft.changed) setDiscard(true); else onClose(); };
+  const back = () => { if (pending.current) return; if (discard) setDiscard(false); else if (!schedule.current?.handleBack()) close(); };
+  const onHardwareBack = useEffectEvent(back);
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onHardwareBack(); return true; });
+    return () => sub.remove();
+  }, []);
   const save = async () => {
     if (!replica || pending.current) return;
     let input;
@@ -244,22 +282,21 @@ function MedicineDrawer({ source, mode = 'add', onClose, onSaved }: { source?: M
     try { input = draft.commit(); } catch (cause) { setError(errorText(cause)); return; }
     pending.current = true; setBusy(true);
     try {
-      const id = editing ? (await replica.medicines.edit(source.id, input), source.id) : (await replica.medicines.add(input, creationId.current)).id;
-      onSaved(id);
+      onSaved((await replica.medicines.add(input, creationId.current)).id);
     } catch (cause) { setError(errorText(cause)); }
     finally { pending.current = false; setBusy(false); }
   };
   const change = (next: MedicineDraft) => { setDraft(next); setError(null); };
-  return <TaskEditorSheet open onClose={close} onBack={() => { if (pending.current) return; if (discard) setDiscard(false); else if (!schedule.current?.handleBack()) close(); }} dismissLabel="Dismiss medicine editor" draft={draft.input.name} onChangeDraft={(name) => setDraft((current) => current.change({ name }))} onSubmit={() => void save()} placeholder="Name a medicine" inputAccessibilityLabel="Medicine name" inputEditable={!busy}
-    context={<View className="px-screen-x pt-3"><Text variant="section">{editing ? 'Edit medicine' : 'Add medicine'}</Text></View>}
-    trailing={<MedicineSaveButton busy={busy} editing={editing} disabled={!draft.input.name.trim() || !replica} onPress={() => void save()} />}
+  return <TaskEditorSheet open inline autoFocus selectTextOnFocus={!!source} onClose={close} dismissLabel="Dismiss medicine editor" draft={draft.input.name} onChangeDraft={(name) => setDraft((current) => current.change({ name }))} onSubmit={() => void save()} placeholder="Name a medicine" inputAccessibilityLabel="Medicine name" inputEditable={!busy}
+    context={<View className="px-screen-x pt-3"><Text variant="section">Add medicine</Text></View>}
+    trailing={<MedicineSaveButton busy={busy} disabled={!draft.input.name.trim() || !replica} onPress={() => void save()} />}
     secondaryContent={<View className="border-t border-divider">
       {description ? <Input
         accessibilityLabel="Medicine description" placeholder="Notes, like “after food”" multiline editable={!busy}
         value={draft.input.instructions ?? ''} onChangeText={(instructions) => change(draft.change({ instructions }))}
         className="min-h-12 px-screen-x py-3"
       /> : <Pressable accessibilityRole="button" accessibilityLabel="Add description" disabled={busy} onPress={() => setDescription(true)} className="min-h-12 justify-center px-screen-x"><Text variant="subtitle">Add notes</Text></Pressable>}
-      {editing ? null : <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets scheduleRef={schedule} /></View>}
+      <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets scheduleRef={schedule} /></View>
       {error ? <Text variant="error" selectable className="px-screen-x pb-3">{error}</Text> : null}
     </View>}
     overlay={discard ? <ConfirmDialog title="Discard changes?" message="The changes you've made will not be saved." cancelLabel="Cancel" confirmLabel="Discard" destructive onCancel={() => setDiscard(false)} onConfirm={onClose} /> : null}
