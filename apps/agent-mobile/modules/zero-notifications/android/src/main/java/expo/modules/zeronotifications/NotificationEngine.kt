@@ -108,7 +108,7 @@ internal object NotificationEngine {
   private fun load(c: Context): State = try {
     State.fromJson(JSONObject(String(stateFile(c).readFully(), Charsets.UTF_8)))
   } catch (_: FileNotFoundException) {
-    LegacyMedicineMigration.migrate(c, clock().millis())?.also { save(c, it) } ?: State()
+    State()
   }
   private fun save(c: Context, state: State) {
     val file = stateFile(c)

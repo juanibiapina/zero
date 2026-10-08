@@ -148,7 +148,6 @@ export {
   type TodoTasks,
   type TodoWaits,
 } from "./taskdo/replica";
-export { keepTaskParentsMigrated } from "./taskdo/task-parent-cell";
 export {
   TASK_SYNC_SCHEMA,
   taskSyncPath,

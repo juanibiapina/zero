@@ -5,7 +5,6 @@ import {
   type ProjectDefaults,
   type ProjectState,
   type Project,
-  keepTaskParentsMigrated,
   type Task,
   type TaskParent,
   type TodoIssue,
@@ -51,7 +50,6 @@ export class TaskDomain {
   private readonly isErased: () => Promise<boolean>;
 
   constructor({ store, save, isErased = async () => false, now = () => new Date() }: TaskDomainOptions) {
-    keepTaskParentsMigrated(store);
     this.model = new TodoModel({ store, now });
     this.store = store;
     this.now = now;

@@ -140,7 +140,7 @@ describe("TaskDO replica adapter", () => {
   it("maps canonical issues to existing local text and safe repair actions", async () => {
     const { replica, store, saves } = setup();
     store.setRow("projects", "deleted", { title: "Old", icon: "📁", state: "in-play", createdAt: NOW, deletedAt: NOW });
-    store.setRow("tasks", "late", { text: "Keep", createdAt: NOW, projectId: "deleted", recurrence: "bad" });
+    store.setRow("tasks", "late", { text: "Keep", createdAt: NOW, parent: JSON.stringify({ kind: "project", projectId: "deleted" }), recurrence: "bad" });
     const snapshot = projectTodoData(store);
     expect(snapshot.tasks).toMatchObject([{ id: "late", parent: null, recurrence: null }]);
     expect(snapshot.recoveries).toEqual([
@@ -148,7 +148,7 @@ describe("TaskDO replica adapter", () => {
       { table: "tasks", id: "late", text: "Keep", reason: "Deleted Project", repair: "make-task-loose" },
     ]);
     expect(await replica.repair(snapshot.recoveries[1])).toBe(true);
-    expect(store.hasCell("tasks", "late", "projectId")).toBe(false);
+    expect(store.hasCell("tasks", "late", "parent")).toBe(false);
     expect(saves()).toBe(1);
     await replica.close();
   });

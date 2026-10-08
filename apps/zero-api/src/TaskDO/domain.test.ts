@@ -35,18 +35,6 @@ describe("TaskDomain adapter", () => {
     expect(saves()).toBe(5);
   });
 
-  it("migrates legacy Task parents when the store loads", () => {
-    const legacy = createMergeableStore();
-    legacy.setRow("projects", "p", { title: "P", icon: "📁", state: "in-play", createdAt: NOW });
-    legacy.setRow("tasks", "t", { text: "Task", createdAt: NOW, projectId: "p" });
-    const { domain, store } = setup();
-
-    store.setMergeableContent(legacy.getMergeableContent());
-
-    expect(domain.listTasks().map((task) => task.parent)).toEqual([{ kind: "project", projectId: "p" }]);
-    expect(store.getCellIds("tasks", "t")).not.toContain("projectId");
-  });
-
   it("lists only Projects that are not done", async () => {
     const { domain } = setup();
     await domain.addProject("open", "Open");
@@ -70,8 +58,8 @@ describe("TaskDomain adapter", () => {
     await domain.addProject("deleted", "Deleted");
     await domain.deleteProject("deleted");
     store.setRow("projects", "bad-project", { title: "Bad" });
-    store.setRow("tasks", "late", { text: "Late", createdAt: NOW, projectId: "deleted" });
-    store.setRow("tasks", "bad-task", { projectId: "missing", recurrence: "bad" });
+    store.setRow("tasks", "late", { text: "Late", createdAt: NOW, parent: JSON.stringify({ kind: "project", projectId: "deleted" }) });
+    store.setRow("tasks", "bad-task", { parent: JSON.stringify({ kind: "project", projectId: "missing" }), recurrence: "bad" });
     store.setRow("conditions", "bad-condition", { projectId: "missing", kind: "free-text", text: "Wait", createdAt: NOW });
 
     expect(domain.listProjectRecoveries()).toEqual([{ projectId: "bad-project", reason: "invalid-project" }]);

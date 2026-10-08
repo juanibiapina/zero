@@ -9,7 +9,6 @@ import { projectParent } from "../tasks/parent";
 import { localToday } from "../tasks/today";
 import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
-import { keepTaskParentsMigrated } from "./task-parent-cell";
 import { MedicineModel, type MedicineInput, type Medicine, type Dose, type MedicineReceipt, type MedicineRestock } from "../medicines/model";
 
 export type TodoRecoveryRepair =
@@ -206,7 +205,6 @@ export function createTaskdoReplica({
   today = localToday,
   randomId = safeRandomUUID,
 }: CreateTaskdoReplicaOptions): TaskdoReplica {
-  const stopMigratingParents = keepTaskParentsMigrated(store);
   const model = new TodoModel({ store, now });
   const medicineModel = new MedicineModel(store, now, randomId);
   const keys = {
@@ -448,7 +446,6 @@ export function createTaskdoReplica({
       if (closed) return;
       closed = true;
       for (const listenerId of storeListeners) store.delListener(listenerId);
-      stopMigratingParents();
       listeners.clear();
       await Promise.all([tasks.cleanup(), projects.cleanup(), waits.cleanup()]);
     },
