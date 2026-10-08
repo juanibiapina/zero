@@ -26,7 +26,8 @@ only what comes next.
 
 - Each Dose is independent. Taking the morning dose leaves the evening dose
   pending.
-- Each dose time has an early reminder before it, on the same day.
+- Each dose time has an early reminder 15 minutes, 30 minutes or an hour
+  before it, on the same day.
 - Dates and times follow the phone's local clock. At midnight a new day starts
   with new Doses.
 - Taken records the moment you confirmed. It works from the notification,
@@ -47,21 +48,33 @@ only what comes next.
 - When a Taken, a new count, or a schedule change makes the supply low, Zero
   adds one restock Task "Buy <name>" to Home. A recount while already low adds
   nothing. Time alone never makes the supply low.
-- Restock adds the pills you got and remembers the amount for next time. Set
-  count replaces the count.
+- Restock adds the pills you got and remembers the amount for next time.
+  Recount replaces the count.
 
 ## How it looks
 
 Medicines has its own list under Browse on mobile and in the web sidebar. The
-list shows names and times. A Medicine's page shows today's doses and when you
-took them, with history on request. On a day that is not chosen, the list and
-the page show the day of the next dose instead. A counted Medicine shows
-"24 pills left · about 12 days" with Restock and Set count. The editor has the
-pills per dose time under Adjust, and optional "Pills you have" and days before
-running out.
+list shows names and each dose time with its pills ("08:00 · 2 pills"). A
+Medicine's page shows today's doses and when you took them, with history on
+request. On a day that is not chosen, the list and the page show the next dose
+day as "tomorrow", a weekday within the coming week, or a date. A counted
+Medicine shows "24 pills left · about 12 days" with Restock and Recount; an
+uncounted one offers Count pills.
+
+On mobile, the Medicine's page is also its editor, and every change saves at
+once. Today's doses are tiles: tap one to record it as taken, with Undo in the
+toast, and long-press a taken one to undo it later. The schedule is a 24-hour
+line with a handle per dose: drag a handle to move the dose in 15-minute steps,
+or tap the line to add a dose there. A chip per dose opens its exact time, its
+pills, how early to remind, and Remove. Weekdays, start day, Ongoing or a last
+day, and when to remind you to buy more (1 week, 2 weeks, 1 month) are chips on
+the same page. The add sheet asks for the name, optional notes, and the same
+schedule, with 1× to 4× a day presets; the options menu edits the name and
+notes.
 
 On Android, a normal notification arrives at the early reminder and again at
-the dose time, with Taken and Postpone 1 hour. At the dose time a locked phone
+the dose time, with Taken and Postpone 1 hour. Both say how many pills to take
+("Take 2 pills at 20:00", then "Time to take 2 pills"). At the dose time a locked phone
 also opens a full-screen alarm with the same buttons. A paired watch can show
 the same notification. When reminders cannot reach you, the top of the list shows one
 notice with one button to fix it.
@@ -120,10 +133,10 @@ restriction.
 
 - A full record of missed doses or of old schedules.
 - A refill history, and lowering the supply for doses taken without pressing
-  Taken. Set count fixes the count.
+  Taken. Recount fixes the count.
 - Notifications for running low, and a "Needs prescription" option.
 - Two different doses taken on two phones before they sync each subtract from
-  the same count, so one subtraction is lost. Set count fixes it.
+  the same count, so one subtraction is lost. Recount fixes it.
 - Medicine in global quick add, which offers only Task and Project.
 
 ## Ideas

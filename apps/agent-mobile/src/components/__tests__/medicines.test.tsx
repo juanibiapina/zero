@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { createTaskdoReplica, defaultToastController, MedicineDraft, medicineOccurrences, medicineToday } from '@zero/agent-core';
+import { createTaskdoReplica, defaultToastController, MedicineDraft, medicineEndDate, medicineOccurrences, medicineToday, type MedicineInput, type Weekday } from '@zero/agent-core';
 import { createMergeableStore } from 'tinybase';
 import type { ReactNode } from 'react';
 
@@ -26,8 +26,18 @@ async function openScreen(children: ReactNode, data = createInMemoryTodoData()) 
 
 beforeEach(() => { mockNavigate.mockReset(); mockPush.mockReset(); mockParams = {}; defaultToastController.dismiss(); });
 
-describe('Medicine creation and management', () => {
-  it('keeps Medicine out of Home quick-add and creates three doses from its own list without Task rows', async () => {
+const takenToast = () => defaultToastController.getSnapshot()[0];
+
+async function openMedicine(over: Partial<MedicineInput> = {}) {
+  const data = createInMemoryTodoData();
+  const medicine = await data.replica!.medicines.add({ ...MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit(), ...over });
+  mockParams = { id: medicine.id };
+  const screen = await openScreen(<MedicineDetail />, data);
+  return { screen, data, medicine };
+}
+
+describe('Adding a medicine', () => {
+  it('keeps Medicine out of Home quick-add and adds three doses from its list, then opens it', async () => {
     const data = createInMemoryTodoData();
     const home = await openScreen(<HomeScreen />, data);
     await fireEvent.press(home.getByLabelText('Add'));
@@ -36,35 +46,34 @@ describe('Medicine creation and management', () => {
     const screen = await openScreen(<MedicinesList />, data);
     await fireEvent.press(screen.getByLabelText('Add medicine'));
     await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Vitamin D');
-    await fireEvent.press(screen.getByText('Once a day'));
-    await fireEvent.press(screen.getByText('Three times a day'));
-    expect(screen.getByText('08:00   ·   14:00   ·   20:00')).toBeTruthy();
-    expect(mockPush).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByLabelText('3 times a day'));
+    expect(screen.getByText('14:00 · 1 pill')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Add medicine'));
-    await waitFor(() => expect(screen.data.replica!.snapshot().medicines).toHaveLength(1));
-    expect(screen.data.replica!.snapshot().medicines[0].doses.map((dose) => dose.alarmAt)).toEqual(['08:00', '14:00', '20:00']);
-    expect(screen.data.replica!.snapshot().medicines[0].doses.map((dose) => dose.remindAt)).toEqual(['07:30', '13:30', '19:30']);
-    expect(screen.data.replica!.snapshot().tasks).toHaveLength(0);
-    expect(screen.queryByLabelText('Medicine name')).toBeNull();
-    expect(screen.getByText('Vitamin D')).toBeTruthy();
+    await waitFor(() => expect(data.replica!.snapshot().medicines).toHaveLength(1));
+    const [medicine] = data.replica!.snapshot().medicines;
+    expect(medicine.doses.map((dose) => [dose.alarmAt, dose.remindAt])).toEqual([['08:00', '07:30'], ['14:00', '13:30'], ['20:00', '19:30']]);
+    expect(data.replica!.snapshot().tasks).toHaveLength(0);
+    expect(mockPush).toHaveBeenCalledWith(`/browse/medicines/${medicine.id}`);
+    expect(screen.getByText('08:00 · 1 pill')).toBeTruthy();
   });
-  it('opens Medicine directly from its list and accepts an optional description and finite course', async () => {
+  it('saves notes, chosen weekdays, pills per dose and a ten-day course', async () => {
     const screen = await openScreen(<MedicinesList />);
     await fireEvent.press(screen.getByLabelText('Add medicine'));
-    expect(screen.getByLabelText('Medicine name')).toBeTruthy();
-    expect(screen.queryByText('Task')).toBeNull();
-    await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Daily course');
+    await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Antibiotic');
     await fireEvent.press(screen.getByLabelText('Add description'));
     await fireEvent.changeText(screen.getByLabelText('Medicine description'), 'After food');
-    await fireEvent.press(screen.getByLabelText('Customize medicine schedule'));
-    await fireEvent.press(screen.getByText('Ongoing'));
-    await fireEvent.press(screen.getByText('For a number of days'));
-    await fireEvent.changeText(screen.getByLabelText('Number of days'), '10');
+    for (const name of ['Tuesday', 'Thursday', 'Saturday', 'Sunday']) await fireEvent.press(screen.getByLabelText(name));
+    await fireEvent.press(screen.getByLabelText('Dose at 20:00, 1 pill. Change'));
+    await fireEvent.press(screen.getByLabelText('More pills'));
+    await fireEvent.press(screen.getByLabelText('Done'));
+    await fireEvent.press(screen.getByLabelText('Set a last day'));
+    expect(screen.getByText('10 days')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Add medicine'));
-    await waitFor(() => expect(screen.queryByLabelText('Medicine name')).toBeNull());
-    expect(screen.getByLabelText('Open Daily course')).toBeTruthy();
-    expect(screen.data.replica!.snapshot().medicines[0]).toMatchObject({ instructions: 'After food', startsOn: medicineToday() });
-    expect(screen.data.replica!.snapshot().medicines[0].endsOn).not.toBeNull();
+    await waitFor(() => expect(screen.data.replica!.snapshot().medicines).toHaveLength(1));
+    expect(screen.data.replica!.snapshot().medicines[0]).toMatchObject({
+      instructions: 'After food', weekdays: [1, 3, 5], startsOn: medicineToday(), endsOn: medicineEndDate(medicineToday(), 10),
+      doses: [expect.objectContaining({ alarmAt: '20:00', amount: 2 })],
+    });
   });
   it('keeps the draft visible until persistence succeeds and retries the same Medicine after failure', async () => {
     let fail = true;
@@ -87,131 +96,27 @@ describe('Medicine creation and management', () => {
     expect(data.replica.snapshot().medicines).toHaveLength(1);
     await data.replica.close();
   });
-  it.each([false, true])('preserves a taken dose without Undo when editing its description (dose-focused: %s)', async (doseFocused) => {
-    const data = createInMemoryTodoData();
-    const input = MedicineDraft.create(medicineToday()).change({ name: 'Custom routine' }).commit();
-    input.doses[0] = { id: 'evening', remindAt: '20:00', alarmAt: '22:00', amount: 1 };
-    const medicine = await data.replica!.medicines.add(input);
-    const dose = medicineOccurrences(medicine, medicineToday())[0];
-    await data.replica!.medicines.take(dose);
-    mockParams = { id: medicine.id, ...(doseFocused ? { dose: dose.id } : {}) };
-    const screen = await openScreen(<MedicineDetail />, data);
-    expect(screen.queryByText('Edit medicine')).toBeNull();
-    expect(screen.queryByText('Taken at is the time you pressed Taken.')).toBeNull();
-    expect(screen.getByText('22:00')).toBeTruthy();
-    expect(screen.getByText(/Taken at /)).toBeTruthy();
-    expect(screen.queryByLabelText(/Undo/)).toBeNull();
-    const confirmation = data.replica!.snapshot().doses[0];
-    await fireEvent.press(screen.getByLabelText('Medicine options'));
-    await fireEvent.press(screen.getByLabelText('Edit medicine'));
-    await fireEvent.press(screen.getByLabelText('Add description'));
-    await fireEvent.changeText(screen.getByLabelText('Medicine description'), 'With dinner');
-    await fireEvent.press(screen.getByLabelText('Save medicine'));
-    await waitFor(() => expect(screen.queryByLabelText('Medicine name')).toBeNull());
-    expect(data.replica!.snapshot().medicines[0].doses).toEqual(input.doses);
-    expect(data.replica!.snapshot().doses[0]).toEqual(confirmation);
-    await fireEvent.press(screen.getByLabelText('Dose history'));
-    expect(screen.queryByText('Taken at is the time you pressed Taken.')).toBeNull();
-    expect(screen.getAllByText(/Taken at /)).toHaveLength(2);
-  });
-  it('pauses and resumes reminders from Medicine options', async () => {
-    const data = createInMemoryTodoData();
-    const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
-    mockParams = { id: medicine.id };
-    const screen = await openScreen(<MedicineDetail />, data);
-    await fireEvent.press(screen.getByLabelText('Medicine options'));
-    await fireEvent.press(screen.getByText('Pause reminders'));
-    await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(true));
-    expect(screen.getByText('Resume reminders')).toBeTruthy();
-    await fireEvent.press(screen.getByText('Resume reminders'));
-    await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(false));
-  });
-  it('records a pending dose as Taken from its row as a fallback', async () => {
-    const data = createInMemoryTodoData();
-    const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
-    mockParams = { id: medicine.id };
-    const screen = await openScreen(<MedicineDetail />, data);
-    expect(screen.getByText('Today')).toBeTruthy();
-    expect(data.replica!.snapshot().doses).toHaveLength(0);
-    await fireEvent.press(screen.getByLabelText('Taken 20:00 dose'));
-    await waitFor(() => expect(data.replica!.snapshot().doses.filter((dose) => dose.takenAt)).toHaveLength(1));
-    expect(screen.getByText(/Taken at /)).toBeTruthy();
-    expect(screen.queryByLabelText('Taken 20:00 dose')).toBeNull();
-  });
-  it('saves the chosen weekdays from the editor', async () => {
-    const screen = await openScreen(<MedicinesList />);
-    await fireEvent.press(screen.getByLabelText('Add medicine'));
-    await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Morning pill');
-    for (const name of ['Tuesday', 'Thursday', 'Saturday', 'Sunday']) await fireEvent.press(screen.getByLabelText(name));
-    expect(screen.getByLabelText('Tuesday').props.accessibilityState.checked).toBe(false);
-    await fireEvent.press(screen.getByLabelText('Add medicine'));
-    await waitFor(() => expect(screen.data.replica!.snapshot().medicines).toHaveLength(1));
-    expect(screen.data.replica!.snapshot().medicines[0].weekdays).toEqual([1, 3, 5]);
-  });
-  it('shows the next dose and no Taken on a day off', async () => {
-    const data = createInMemoryTodoData();
-    const today = medicineToday();
-    const weekday = ((new Date(`${today}T12:00:00`).getDay() + 6) % 7) + 1;
-    const tomorrow = ((weekday % 7) + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
-    await data.replica!.medicines.add({ ...MedicineDraft.create(today).change({ name: 'Morning pill' }).commit(), weekdays: [tomorrow] });
-    const list = await openScreen(<MedicinesList />, data);
-    expect(list.getByText(/^Next /)).toBeTruthy();
-    await list.unmount();
-    mockParams = { id: data.replica!.snapshot().medicines[0].id };
-    const screen = await openScreen(<MedicineDetail />, data);
-    expect(screen.getByText(/^Next dose /)).toBeTruthy();
-    expect(screen.queryByText('Taken')).toBeNull();
-  });
-  it('offers no Taken while a medicine is paused', async () => {
-    const data = createInMemoryTodoData();
-    const medicine = await data.replica!.medicines.add({ ...MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit(), paused: true });
-    mockParams = { id: medicine.id };
-    const screen = await openScreen(<MedicineDetail />, data);
-    expect(screen.getByText('Paused')).toBeTruthy();
-    expect(screen.queryByText('Taken')).toBeNull();
-  });
-  it('undoes a taken dose only through a long press and a confirmation', async () => {
-    const data = createInMemoryTodoData();
-    const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
-    await data.replica!.medicines.take(medicineOccurrences(medicine, medicineToday())[0]);
-    mockParams = { id: medicine.id };
-    const screen = await openScreen(<MedicineDetail />, data);
-    const taken = screen.getByLabelText(/^20:00 dose, taken at /);
-    await fireEvent.press(taken);
-    expect(screen.queryByText('Mark 20:00 dose as not taken?')).toBeNull();
-    await fireEvent(taken, 'longPress');
-    await fireEvent.press(screen.getByLabelText('Cancel'));
-    expect(screen.queryByText('Mark 20:00 dose as not taken?')).toBeNull();
-    expect(data.replica!.snapshot().doses[0].takenAt).not.toBeNull();
-    await fireEvent(screen.getByLabelText(/^20:00 dose, taken at /), 'longPress');
-    expect(screen.getByText('Mark 20:00 dose as not taken?')).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText('Undo'));
-    await waitFor(() => expect(data.replica!.snapshot().doses[0].takenAt).toBeNull());
-    expect(screen.getByLabelText('Taken 20:00 dose')).toBeTruthy();
-  });
-  it('keeps creation open through native time selection and closes customization before discard on Back', async () => {
+  it('closes the time picker, then the dose, before asking to discard on Back', async () => {
     const screen = await openScreen(<MedicinesList />);
     await fireEvent.press(screen.getByLabelText('Add medicine'));
     await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Evening routine');
-    await fireEvent.press(screen.getByLabelText('Customize medicine schedule'));
-    await fireEvent.press(screen.getByLabelText('Change dose 1 time, 20:00'));
-    await act(async () => { (global as typeof globalThis & { __emitKeyboardEvent: (name: string) => void }).__emitKeyboardEvent('keyboardWillHide'); });
-    expect(screen.queryByText('Discard changes?')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Dose at 20:00, 1 pill. Change'));
+    await fireEvent.press(screen.getByLabelText('Change time, 20:00'));
     await fireEvent(screen.getByTestId('native-date-time-picker'), 'change', { type: 'set' }, new Date('2000-01-01T21:00:00'));
-    expect(screen.getByLabelText('Change dose 1 time, 21:00')).toBeTruthy();
-    expect(screen.getByLabelText('Change reminder 1, 20:00')).toBeTruthy();
+    expect(screen.getByLabelText('Change time, 21:00')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Change time, 21:00'));
     await fireEvent(screen.getByLabelText('Medicine name'), 'requestClose');
-    expect(screen.queryByLabelText('Change dose 1 time, 21:00')).toBeNull();
+    expect(screen.queryByTestId('native-date-time-picker')).toBeNull();
+    await fireEvent(screen.getByLabelText('Medicine name'), 'requestClose');
+    expect(screen.queryByLabelText('Change time, 21:00')).toBeNull();
     expect(screen.queryByText('Discard changes?')).toBeNull();
     await fireEvent(screen.getByLabelText('Medicine name'), 'requestClose');
     expect(screen.getByText('Discard changes?')).toBeTruthy();
   });
-
   it('retains a Medicine draft when discard is canceled and creates nothing on discard', async () => {
     const screen = await openScreen(<MedicinesList />);
     await fireEvent.press(screen.getByLabelText('Add medicine'));
     await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Draft routine');
-    expect(screen.getByLabelText('Medicine name').props.value).toBe('Draft routine');
     await fireEvent.press(screen.getByLabelText('Dismiss medicine editor'));
     expect(screen.getByText('Discard changes?')).toBeTruthy();
     await fireEvent.press(screen.getByText('Cancel'));
@@ -220,7 +125,116 @@ describe('Medicine creation and management', () => {
     await fireEvent.press(screen.getByText('Discard'));
     expect(screen.data.replica!.snapshot().medicines).toHaveLength(0);
   });
+});
 
+describe('A medicine page', () => {
+  it('shows the pills of each dose in the list', async () => {
+    const data = createInMemoryTodoData();
+    const input = MedicineDraft.create(medicineToday()).change({ name: 'Ibuprofen' }).commit();
+    await data.replica!.medicines.add({ ...input, doses: [{ ...input.doses[0], amount: 2 }] });
+    const screen = await openScreen(<MedicinesList />, data);
+    expect(screen.getByText('20:00 · 2 pills')).toBeTruthy();
+  });
+  it('takes a dose with a tap on its tile and undoes it from the toast', async () => {
+    const { screen, data } = await openMedicine();
+    expect(screen.getByText('Today')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Take 20:00 dose, 1 pill'));
+    await waitFor(() => expect(data.replica!.snapshot().doses.filter((dose) => dose.takenAt)).toHaveLength(1));
+    expect(screen.getByText(/Taken at /)).toBeTruthy();
+    expect(takenToast()?.message).toBe('20:00 dose taken');
+    await act(async () => { takenToast()!.action!.onPress(); });
+    await waitFor(() => expect(data.replica!.snapshot().doses[0].takenAt).toBeNull());
+    expect(screen.getByLabelText('Take 20:00 dose, 1 pill')).toBeTruthy();
+  });
+  it('undoes a taken dose through a long press and a confirmation', async () => {
+    const data = createInMemoryTodoData();
+    const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
+    await data.replica!.medicines.take(medicineOccurrences(medicine, medicineToday())[0]);
+    mockParams = { id: medicine.id };
+    const screen = await openScreen(<MedicineDetail />, data);
+    await fireEvent(screen.getByLabelText(/^20:00 dose, taken at /), 'longPress');
+    await fireEvent.press(screen.getByLabelText('Cancel'));
+    expect(data.replica!.snapshot().doses[0].takenAt).not.toBeNull();
+    await fireEvent(screen.getByLabelText(/^20:00 dose, taken at /), 'longPress');
+    expect(screen.getByText('Mark 20:00 dose as not taken?')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Undo'));
+    await waitFor(() => expect(data.replica!.snapshot().doses[0].takenAt).toBeNull());
+  });
+  it('moves a dose time in place by 15 minutes and keeps its reminder lead', async () => {
+    const { screen, data } = await openMedicine();
+    await fireEvent(screen.getByTestId('dose-track'), 'layout', { nativeEvent: { layout: { width: 240, height: 48, x: 0, y: 0 } } });
+    await fireEvent(screen.getByLabelText('Dose at 20:00'), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].doses[0]).toMatchObject({ alarmAt: '20:15', remindAt: '19:15' }));
+    expect(screen.getByLabelText('Dose at 20:15')).toBeTruthy();
+  });
+  it('adds a dose where the day track is tapped', async () => {
+    const { screen, data } = await openMedicine();
+    const track = screen.getByTestId('dose-track');
+    await fireEvent(track, 'layout', { nativeEvent: { layout: { width: 240, height: 48, x: 0, y: 0 } } });
+    await fireEvent.press(track, { nativeEvent: { locationX: 120 } });
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].doses.map((dose) => dose.alarmAt).sort()).toEqual(['12:00', '20:00']));
+  });
+  it('changes pills and the reminder of a dose in place, and removes all but the last dose', async () => {
+    const { screen, data } = await openMedicine();
+    await fireEvent.press(screen.getByLabelText('Dose at 20:00, 1 pill. Change'));
+    expect(screen.queryByLabelText('Remove 20:00 dose')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('More pills'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].doses[0].amount).toBe(2));
+    await fireEvent.press(screen.getByLabelText('Remind 30 min before'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].doses[0].remindAt).toBe('19:30'));
+    await fireEvent.press(screen.getByLabelText('Done'));
+    await fireEvent.press(screen.getByLabelText('Add dose time'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].doses).toHaveLength(2));
+    await fireEvent.press(screen.getByLabelText('Dose at 20:00, 2 pills. Change'));
+    await fireEvent.press(screen.getByLabelText('Remove 20:00 dose'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].doses.map((dose) => dose.alarmAt)).toEqual(['08:00']));
+  });
+  it('toggles weekdays in place', async () => {
+    const { screen, data } = await openMedicine();
+    await fireEvent.press(screen.getByLabelText('Sunday'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].weekdays).toEqual([1, 2, 3, 4, 5, 6]));
+  });
+  it.each([false, true])('keeps a taken dose when editing the notes (dose-focused: %s)', async (doseFocused) => {
+    const data = createInMemoryTodoData();
+    const input = MedicineDraft.create(medicineToday()).change({ name: 'Custom routine' }).commit();
+    input.doses[0] = { id: 'evening', remindAt: '20:00', alarmAt: '22:00', amount: 1 };
+    const medicine = await data.replica!.medicines.add(input);
+    const dose = medicineOccurrences(medicine, medicineToday())[0];
+    await data.replica!.medicines.take(dose);
+    mockParams = { id: medicine.id, ...(doseFocused ? { dose: dose.id } : {}) };
+    const screen = await openScreen(<MedicineDetail />, data);
+    expect(screen.getByText(/Taken at /)).toBeTruthy();
+    const confirmation = data.replica!.snapshot().doses[0];
+    await fireEvent.press(screen.getByLabelText('Medicine options'));
+    await fireEvent.press(screen.getByLabelText('Edit name and notes'));
+    await fireEvent.press(screen.getByLabelText('Add description'));
+    await fireEvent.changeText(screen.getByLabelText('Medicine description'), 'With dinner');
+    await fireEvent.press(screen.getByLabelText('Save medicine'));
+    await waitFor(() => expect(screen.queryByLabelText('Medicine name')).toBeNull());
+    expect(data.replica!.snapshot().medicines[0]).toMatchObject({ instructions: 'With dinner', doses: input.doses });
+    expect(data.replica!.snapshot().doses[0]).toEqual(confirmation);
+  });
+  it('pauses and resumes reminders from Medicine options', async () => {
+    const { screen, data } = await openMedicine();
+    await fireEvent.press(screen.getByLabelText('Medicine options'));
+    await fireEvent.press(screen.getByText('Pause reminders'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(true));
+    expect(screen.getByText('Paused')).toBeTruthy();
+    expect(screen.queryByLabelText(/^Take /)).toBeNull();
+    await fireEvent.press(screen.getByText('Resume reminders'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(false));
+  });
+  it('says tomorrow for a next dose on the following day, with nothing to take today', async () => {
+    const today = medicineToday();
+    const weekday = ((new Date(`${today}T12:00:00`).getDay() + 6) % 7) + 1;
+    const tomorrow = ((weekday % 7) + 1) as Weekday;
+    const { screen, data } = await openMedicine({ weekdays: [tomorrow] });
+    expect(screen.getByText('Next dose tomorrow')).toBeTruthy();
+    expect(screen.queryByLabelText(/^Take /)).toBeNull();
+    await screen.unmount();
+    const list = await openScreen(<MedicinesList />, data);
+    expect(list.getByText('Next dose tomorrow')).toBeTruthy();
+  });
 });
 
 describe('Medicine supply', () => {
@@ -267,31 +281,21 @@ describe('Medicine supply', () => {
     expect(data.replica!.snapshot().medicines[0].supply?.pillsLeft).toBe(4);
   });
 
-  it('shows the pills left and sets the count from the Medicine page', async () => {
+  it('counts pills and chooses when to buy more from the Medicine page', async () => {
     const data = createInMemoryTodoData();
     const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
     mockParams = { id: medicine.id };
     const screen = await openScreen(<MedicineDetail />, data);
-    expect(screen.getByText('Pills not counted')).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText('Set count'));
-    await fireEvent.changeText(screen.getByLabelText('How many pills do you have?'), '60');
+    expect(screen.getByText('Not counted yet')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Count pills'));
+    await fireEvent.changeText(screen.getByLabelText('How many pills do you have now?'), '60');
     await fireEvent.press(screen.getByLabelText('Save'));
     await waitFor(() => expect(screen.getByText('60 pills left · about 60 days')).toBeTruthy());
-    expect(restockTask(data)).toBeUndefined();
-  });
-
-  it('saves pills per dose and the count from the editor', async () => {
-    const screen = await openScreen(<MedicinesList />);
-    await fireEvent.press(screen.getByLabelText('Add medicine'));
-    await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Ibuprofen');
-    await fireEvent.press(screen.getByLabelText('Customize medicine schedule'));
-    await fireEvent.press(screen.getByLabelText('More pills for dose 1'));
-    await fireEvent.changeText(screen.getByLabelText('Pills you have'), '20');
-    await fireEvent.press(screen.getByLabelText('Add medicine'));
-    await waitFor(() => expect(screen.data.replica!.snapshot().medicines).toHaveLength(1));
-    const [medicine] = screen.data.replica!.snapshot().medicines;
-    expect(medicine.doses[0].amount).toBe(2);
-    expect(medicine.supply).toMatchObject({ pillsLeft: 20, leadDays: 14 });
-    expect(restockTask(screen.data)).toMatchObject({ text: 'Buy Ibuprofen' });
+    await fireEvent.press(screen.getByLabelText('Remind me to buy 1 week before they run out'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].supply).toMatchObject({ pillsLeft: 60, leadDays: 7 }));
+    await fireEvent.press(screen.getByLabelText('Recount'));
+    await fireEvent.changeText(screen.getByLabelText('How many pills do you have now?'), '3');
+    await fireEvent.press(screen.getByLabelText('Save'));
+    await waitFor(() => expect(restockTask(data)).toMatchObject({ text: 'Buy Vitamin D' }));
   });
 });

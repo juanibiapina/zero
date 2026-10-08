@@ -28,8 +28,10 @@ describe("Medicine drafts", () => {
     expect(input.startsOn).toBe(today);
     expect(input.endsOn).toBeNull();
   });
-  it.each([1, 3])("recognizes the %i-dose preset with its longer reminder lead as suggested", (count) => {
-    expect(MedicineDraft.create(today).frequency(count).suggested).toBe(true);
+  it("sets a dose's heads-up lead and keeps it when the dose moves, never before midnight", () => {
+    const draft = MedicineDraft.create(today, custom).heads("morning", 15).time("morning", "alarmAt", "10:00");
+    expect(draft.commit().doses[0]).toMatchObject({ alarmAt: "10:00", remindAt: "09:45" });
+    expect(draft.time("morning", "alarmAt", "00:30").heads("morning", 60).commit().doses[0].remindAt).toBe("00:00");
   });
   it("adds a third custom dose with a thirty-minute reminder while preserving existing slots", () => {
     const input = MedicineDraft.create(today, custom).addTime().commit();
@@ -38,7 +40,6 @@ describe("Medicine drafts", () => {
   });
   it("keeps custom slots, leads, dates, and pause when only the name changes", () => {
     const draft = MedicineDraft.create(today, custom).change({ name: "Renamed" });
-    expect(draft.suggested).toBe(false);
     expect(draft.commit()).toEqual({ ...custom, name: "Renamed" });
   });
   it("retains the existing evening dose when more suggested times are added", () => {

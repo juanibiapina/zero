@@ -1,108 +1,144 @@
-import { Host, Picker } from '@expo/ui';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
-import { MedicineDraft, medicineToday, pillCount, type Weekday } from '@zero/agent-core';
+import { MedicineDraft, medicineDay, medicineEndDate, medicineToday, pillCount, type MedicineSlot, type Weekday } from '@zero/agent-core';
 import { useImperativeHandle, useState, type Ref } from 'react';
-import { Pressable, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Input } from '@/components/ui/input';
+import { DoseTrack } from '@/components/dose-track';
 import { Text } from '@/components/ui/text';
 
-const FREQUENCIES = ['Once a day', 'Twice a day', 'Three times a day', 'Four times a day'];
 const WEEKDAYS: { day: Weekday; short: string; name: string }[] = [
   { day: 1, short: 'M', name: 'Monday' }, { day: 2, short: 'T', name: 'Tuesday' }, { day: 3, short: 'W', name: 'Wednesday' },
   { day: 4, short: 'T', name: 'Thursday' }, { day: 5, short: 'F', name: 'Friday' }, { day: 6, short: 'S', name: 'Saturday' }, { day: 7, short: 'S', name: 'Sunday' },
 ];
-export type MedicineEditorHandle = { handleBack: () => boolean };
-export type SupplyFields = { pills: string; lead: string };
-export function MedicineEditorFields({ draft, onChange, supply, onChangeSupply, disabled = false, error, editorRef }: {
-  draft: MedicineDraft; onChange: (draft: MedicineDraft) => void; supply: SupplyFields; onChangeSupply: (supply: SupplyFields) => void;
-  disabled?: boolean; error?: string | null; editorRef?: Ref<MedicineEditorHandle>;
+const HEADS_UP = [{ minutes: 15, label: '15 min' }, { minutes: 30, label: '30 min' }, { minutes: 60, label: '1 hour' }];
+const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+const clockOf = (date: Date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+const leadLabel = (minutes: number) => minutes % 60 === 0 ? `${minutes / 60} ${minutes === 60 ? 'hour' : 'hours'}` : minutes > 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
+const courseDays = (start: string, end: string) => Math.round((Date.parse(`${end}T12:00:00`) - Date.parse(`${start}T12:00:00`)) / 86_400_000) + 1;
+const sorted = (doses: MedicineSlot[]) => [...doses].sort((a, b) => a.alarmAt.localeCompare(b.alarmAt));
+
+export function Chip({ label, accessibilityLabel = label, selected = false, disabled = false, onPress }: { label: string; accessibilityLabel?: string; selected?: boolean; disabled?: boolean; onPress: () => void }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ selected, disabled }} disabled={disabled} onPress={onPress} className="min-h-12 justify-center">
+    <View className={`min-h-9 justify-center rounded-full px-3.5 ${selected ? 'bg-accent' : 'bg-surface-muted'} ${disabled ? 'opacity-50' : ''}`}>
+      <Text className={selected ? 'font-semibold text-on-accent' : 'text-foreground'} style={{ fontVariant: ['tabular-nums'] }}>{label}</Text>
+    </View>
+  </Pressable>;
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return <View className="gap-1 pt-3"><Text variant="caption" className="font-semibold uppercase tracking-wide">{title}</Text>{children}</View>;
+}
+
+export type MedicineScheduleHandle = { handleBack: () => boolean };
+
+export function MedicineSchedule({ draft, onChange, disabled = false, presets = false, scheduleRef }: {
+  draft: MedicineDraft;
+  onChange: (draft: MedicineDraft) => Promise<void> | void;
+  disabled?: boolean;
+  presets?: boolean;
+  scheduleRef?: Ref<MedicineScheduleHandle>;
 }) {
-  const [description, setDescription] = useState(!!draft.input.instructions);
-  const [customizing, setCustomizing] = useState(false);
+  const [openSlot, setOpenSlot] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ mode: 'date' | 'time'; value: Date; save: (date: Date) => void } | null>(null);
-  useImperativeHandle(editorRef, () => ({ handleBack: () => {
+  useImperativeHandle(scheduleRef, () => ({ handleBack: () => {
     if (picker) { setPicker(null); return true; }
-    if (customizing) { setCustomizing(false); return true; }
+    if (openSlot) { setOpenSlot(null); return true; }
     return false;
-  } }), [picker, customizing]);
-  const count = draft.input.doses.length;
-  const course = draft.course;
+  } }), [picker, openSlot]);
+  const today = medicineToday();
+  const { doses, weekdays, startsOn } = draft.input;
   const endsOn = (() => { try { return draft.endsOn; } catch { return null; } })();
-  const pickTime = (slotId: string, key: 'alarmAt' | 'remindAt', time: string) => setPicker({
-    mode: 'time', value: new Date(`2000-01-01T${time}:00`),
-    save: (date) => onChange(draft.time(slotId, key, `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`)),
-  });
-  const pickDate = (lastDay: boolean) => setPicker({
-    mode: 'date', value: new Date(`${lastDay ? endsOn ?? draft.input.startsOn : draft.input.startsOn}T12:00:00`),
-    save: (date) => onChange(lastDay ? draft.withCourse({ kind: 'last-day', on: medicineToday(date) }) : draft.change({ startsOn: medicineToday(date) })),
-  });
-  return <View className="border-t border-divider">
-    {description ? <Input
-      accessibilityLabel="Medicine description" placeholder="Description (optional)" multiline editable={!disabled}
-      value={draft.input.instructions ?? ''} onChangeText={(instructions) => onChange(draft.change({ instructions }))}
-      className="min-h-12 px-screen-x py-3"
-    /> : <Pressable accessibilityRole="button" accessibilityLabel="Add description" disabled={disabled} onPress={() => setDescription(true)} className="min-h-12 justify-center px-screen-x"><Text variant="subtitle">Add description</Text></Pressable>}
-    <View className="px-screen-x pb-2">
-      <Host matchContents><Picker selectedValue={String(count)} enabled={!disabled} onValueChange={(value) => { if (Number(value) <= 4) onChange(draft.frequency(Number(value))); }}>
-        {FREQUENCIES.map((label, index) => <Picker.Item key={label} label={label} value={String(index + 1)} />)}
-        {count > 4 ? <Picker.Item label={`${count} times a day`} value={String(count)} /> : null}
-      </Picker></Host>
+  const slot = doses.find((item) => item.id === openSlot) ?? null;
+  const pickDate = (value: string, save: (day: string) => void) => setPicker({ mode: 'date', value: new Date(`${value}T12:00:00`), save: (date) => save(medicineToday(date)) });
+  const days = endsOn ? courseDays(startsOn, endsOn) : 0;
+  const setDays = (count: number) => { if (count >= 1) void onChange(draft.withCourse({ kind: 'last-day', on: medicineEndDate(startsOn, count) })); };
+  return <View>
+    {presets ? <View className="flex-row flex-wrap gap-x-2">
+      {[1, 2, 3, 4].map((count) => <Chip key={count} label={`${count}× a day`} accessibilityLabel={count === 1 ? 'Once a day' : `${count} times a day`} selected={doses.length === count} disabled={disabled} onPress={() => void onChange(draft.frequency(count))} />)}
+    </View> : null}
+    <DoseTrack doses={doses} disabled={disabled} onMove={(id, time) => onChange(draft.time(id, 'alarmAt', time))} onAdd={(time) => { const next = draft.addTime(); const added = next.input.doses.at(-1)!; void onChange(next.time(added.id, 'alarmAt', time)); }} />
+    <View className="flex-row flex-wrap gap-x-2">
+      {sorted(doses).map((item) => <Chip key={item.id} label={`${item.alarmAt} · ${pillCount(item.amount)}`} accessibilityLabel={`Dose at ${item.alarmAt}, ${pillCount(item.amount)}. Change`} disabled={disabled} onPress={() => setOpenSlot(item.id)} />)}
+      {doses.length < 24 ? <Chip label="+ Time" accessibilityLabel="Add dose time" disabled={disabled} onPress={() => void onChange(draft.addTime())} /> : null}
     </View>
-    <View className="flex-row justify-between px-screen-x pb-2">
-      {WEEKDAYS.map(({ day, short, name }) => {
-        const checked = draft.input.weekdays.includes(day);
-        return <Pressable key={day} accessibilityRole="checkbox" accessibilityLabel={name} accessibilityState={{ checked, disabled }} disabled={disabled} onPress={() => onChange(draft.toggleWeekday(day))} className="min-h-12 min-w-12 items-center justify-center">
-          <View className={`h-9 w-9 items-center justify-center rounded-full ${checked ? 'bg-accent' : 'border border-divider'}`}><Text className={checked ? 'font-semibold text-on-accent' : 'text-foreground-secondary'}>{short}</Text></View>
-        </Pressable>;
-      })}
-    </View>
-    <Pressable accessibilityRole="button" accessibilityLabel="Customize medicine schedule" accessibilityState={{ expanded: customizing }} disabled={disabled} onPress={() => setCustomizing((current) => !current)} className="min-h-14 gap-1 px-screen-x pb-4 pt-1">
-      <View className="flex-row flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <Text className="font-medium" style={{ fontVariant: ['tabular-nums'] }}>{draft.input.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text>
-        <Text variant="caption" className="text-accent">{customizing ? 'Done' : 'Adjust'}</Text>
+    <Section title="Days">
+      <View className="flex-row justify-between">
+        {WEEKDAYS.map(({ day, short, name }) => {
+          const checked = weekdays.includes(day);
+          return <Pressable key={day} accessibilityRole="checkbox" accessibilityLabel={name} accessibilityState={{ checked, disabled }} disabled={disabled} onPress={() => void onChange(draft.toggleWeekday(day))} className="min-h-12 min-w-12 items-center justify-center">
+            <View className={`h-9 w-9 items-center justify-center rounded-full ${checked ? 'bg-accent' : 'bg-surface-muted'}`}><Text className={checked ? 'font-semibold text-on-accent' : 'text-foreground-secondary'}>{short}</Text></View>
+          </Pressable>;
+        })}
       </View>
-    </Pressable>
-    {customizing ? <View className="border-t border-divider px-screen-x py-3">
-      <Text variant="caption">Notification before each dose</Text>
-      {draft.input.doses.map((slot, index) => <View key={slot.id} className="border-b border-divider py-1">
-        <View className="flex-row items-center justify-between gap-2">
-          <Pressable accessibilityRole="button" accessibilityLabel={`Change dose ${index + 1} time, ${slot.alarmAt}`} disabled={disabled} onPress={() => pickTime(slot.id, 'alarmAt', slot.alarmAt)} className="min-h-12 flex-1 flex-row items-center justify-between gap-2">
-            <Text>Dose {index + 1}</Text><Text className="font-medium text-accent" style={{ fontVariant: ['tabular-nums'] }}>{slot.alarmAt}</Text>
-          </Pressable>
-          {count > 1 ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove dose ${index + 1}`} disabled={disabled} onPress={() => onChange(draft.removeTime(slot.id))} className="min-h-12 justify-center px-3"><Text variant="caption">Remove</Text></Pressable> : null}
-        </View>
-        <View className="min-h-12 flex-row items-center justify-between gap-2">
-          <Text variant="subtitle">Pills</Text>
-          <View className="flex-row items-center">
-            <Pressable accessibilityRole="button" accessibilityLabel={`Fewer pills for dose ${index + 1}`} accessibilityState={{ disabled: disabled || slot.amount <= 1 }} disabled={disabled || slot.amount <= 1} onPress={() => onChange(draft.amount(slot.id, slot.amount - 1))} className="min-h-12 min-w-12 items-center justify-center"><Text className={slot.amount <= 1 ? 'text-accent opacity-40' : 'text-accent'}>−</Text></Pressable>
-            <Text variant="subtitle" accessibilityLabel={`Dose ${index + 1} takes ${pillCount(slot.amount)}`} style={{ fontVariant: ['tabular-nums'] }}>{pillCount(slot.amount)}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={`More pills for dose ${index + 1}`} disabled={disabled} onPress={() => onChange(draft.amount(slot.id, slot.amount + 1))} className="min-h-12 min-w-12 items-center justify-center"><Text className="text-accent">+</Text></Pressable>
-          </View>
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Change reminder ${index + 1}, ${slot.remindAt}`} disabled={disabled} onPress={() => pickTime(slot.id, 'remindAt', slot.remindAt)} className="min-h-12 flex-row items-center justify-between gap-2"><Text variant="subtitle">Early reminder</Text><Text variant="subtitle" style={{ fontVariant: ['tabular-nums'] }}>{slot.remindAt}</Text></Pressable>
-      </View>)}
-      {count < 24 ? <Pressable accessibilityRole="button" accessibilityLabel="Add dose time" disabled={disabled} onPress={() => onChange(draft.addTime())} className="min-h-12 justify-center"><Text className="text-accent">Add another time</Text></Pressable> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel="Change medicine start day" disabled={disabled} onPress={() => pickDate(false)} className="min-h-12 flex-row items-center justify-between gap-3"><Text>Starts</Text><Text variant="subtitle">{draft.input.startsOn === medicineToday() ? 'Today' : draft.input.startsOn}</Text></Pressable>
-      <Host matchContents><Picker selectedValue={course.kind} enabled={!disabled} onValueChange={(kind) => onChange(draft.withCourse(kind === 'days' ? { kind: 'days', days: '10' } : kind === 'last-day' ? { kind: 'last-day', on: endsOn ?? draft.input.startsOn } : { kind: 'ongoing' }))}>
-        <Picker.Item label="Ongoing" value="ongoing" /><Picker.Item label="For a number of days" value="days" /><Picker.Item label="Until a date" value="last-day" />
-      </Picker></Host>
-      {course.kind === 'days' ? <View className="gap-1"><Input accessibilityLabel="Number of days" placeholder="Days" keyboardType="number-pad" editable={!disabled} value={course.days} onChangeText={(days) => onChange(draft.withCourse({ kind: 'days', days }))} className="min-h-12" />{endsOn ? <Text variant="caption">Last day: {endsOn}, inclusive</Text> : null}</View> : null}
-      {course.kind === 'last-day' ? <Pressable accessibilityRole="button" accessibilityLabel="Change medicine last day" disabled={disabled} onPress={() => pickDate(true)} className="min-h-12 flex-row items-center justify-between"><Text>Last day</Text><Text className="text-accent">{course.on}</Text></Pressable> : null}
-    </View> : <View className="px-screen-x pb-3"><Text variant="caption">{draft.suggested ? 'Notification before each dose and at dose time' : 'Reminders follow your saved times'}</Text></View>}
-    <View className="border-t border-divider px-screen-x py-2">
-      <View className="min-h-12 flex-row items-center justify-between gap-3">
-        <Text>Pills you have</Text>
-        <Input accessibilityLabel="Pills you have" placeholder="Optional" keyboardType="number-pad" editable={!disabled} value={supply.pills} onChangeText={(pills) => onChangeSupply({ ...supply, pills })} className="min-h-12 min-w-20 text-right" />
+    </Section>
+    <Section title="How long">
+      <View className="flex-row flex-wrap items-center gap-x-2">
+        <Chip label={startsOn <= today ? (startsOn === today ? 'From today' : `Since ${medicineDay(startsOn, today)}`) : `From ${medicineDay(startsOn, today)}`} accessibilityLabel="Change start day" disabled={disabled} onPress={() => pickDate(startsOn, (day) => void onChange(draft.change({ startsOn: day })))} />
+        <Chip label="Ongoing" selected={!endsOn} disabled={disabled} onPress={() => void onChange(draft.withCourse({ kind: 'ongoing' }))} />
+        <Chip label={endsOn ? `Until ${medicineDay(endsOn, today)}` : 'Until…'} accessibilityLabel={endsOn ? `Change last day, ${endsOn}` : 'Set a last day'} selected={!!endsOn} disabled={disabled} onPress={() => endsOn ? pickDate(endsOn, (day) => void onChange(draft.withCourse({ kind: 'last-day', on: day }))) : setDays(10)} />
       </View>
-      {supply.pills.trim() ? <View className="min-h-12 flex-row items-center justify-between gap-3">
-        <Text className="flex-1">Remind me to buy, days before they run out</Text>
-        <Input accessibilityLabel="Days before running out" keyboardType="number-pad" editable={!disabled} value={supply.lead} onChangeText={(lead) => onChangeSupply({ ...supply, lead })} className="min-h-12 min-w-12 text-right" />
+      {endsOn ? <View className="flex-row items-center justify-between">
+        <Text variant="subtitle">{days === 1 ? '1 day' : `${days} days`}</Text>
+        <Stepper label="days" value={days} min={1} disabled={disabled} onChange={setDays} />
       </View> : null}
-    </View>
-    {error ? <Text variant="error" selectable className="px-screen-x pb-3">{error}</Text> : null}
+    </Section>
+    {slot ? <DoseSheet slot={slot} canRemove={doses.length > 1} disabled={disabled} onClose={() => setOpenSlot(null)}
+      onChange={(change) => onChange(change(draft))} onPickTime={(save) => setPicker({ mode: 'time', value: new Date(`2000-01-01T${slot.alarmAt}:00`), save: (date) => save(clockOf(date)) })}
+    /> : null}
     {picker ? <DateTimePicker value={picker.value} mode={picker.mode} is24Hour onChange={(event, date) => { if (event.type === 'set' && date) picker.save(date); setPicker(null); }} /> : null}
   </View>;
+}
+
+export function Stepper({ label, value, min = 1, disabled = false, onChange }: { label: string; value: number; min?: number; disabled?: boolean; onChange: (value: number) => void }) {
+  const fewer = disabled || value <= min;
+  return <View className="flex-row items-center">
+    <Pressable accessibilityRole="button" accessibilityLabel={`Fewer ${label}`} accessibilityState={{ disabled: fewer }} disabled={fewer} onPress={() => onChange(value - 1)} className="min-h-12 min-w-12 items-center justify-center">
+      <View className={`h-9 w-9 items-center justify-center rounded-full bg-surface-muted ${fewer ? 'opacity-40' : ''}`}><Text className="text-section text-accent">−</Text></View>
+    </Pressable>
+    <Text className="min-w-8 text-center font-semibold" style={{ fontVariant: ['tabular-nums'] }}>{value}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={`More ${label}`} accessibilityState={{ disabled }} disabled={disabled} onPress={() => onChange(value + 1)} className="min-h-12 min-w-12 items-center justify-center">
+      <View className={`h-9 w-9 items-center justify-center rounded-full bg-surface-muted ${disabled ? 'opacity-40' : ''}`}><Text className="text-section text-accent">+</Text></View>
+    </Pressable>
+  </View>;
+}
+
+function DoseSheet({ slot, canRemove, disabled, onClose, onChange, onPickTime }: {
+  slot: MedicineSlot; canRemove: boolean; disabled: boolean; onClose: () => void;
+  onChange: (change: (draft: MedicineDraft) => MedicineDraft) => Promise<void> | void;
+  onPickTime: (save: (time: string) => void) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const lead = minutesOf(slot.alarmAt) - minutesOf(slot.remindAt);
+  const leads = HEADS_UP.some((option) => option.minutes === lead) ? HEADS_UP : [...HEADS_UP, { minutes: lead, label: leadLabel(lead) }].sort((a, b) => a.minutes - b.minutes);
+  return <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <Pressable accessibilityRole="button" accessibilityLabel="Close dose" className="flex-1 bg-scrim" onPress={onClose} />
+    <View style={{ paddingBottom: insets.bottom + 8 }} className="rounded-t-2xl bg-surface pt-2 shadow-raised">
+      <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
+      <ScrollView className="px-screen-x" keyboardShouldPersistTaps="handled">
+        <View className="min-h-14 flex-row items-center justify-between">
+          <Text variant="section">Dose</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Change time, ${slot.alarmAt}`} disabled={disabled} onPress={() => onPickTime((time) => void onChange((draft) => draft.time(slot.id, 'alarmAt', time)))} className="min-h-12 justify-center rounded-xl bg-surface-muted px-4">
+            <Text className="text-section font-semibold text-accent" style={{ fontVariant: ['tabular-nums'] }}>{slot.alarmAt}</Text>
+          </Pressable>
+        </View>
+        <View className="min-h-14 flex-row items-center justify-between border-t border-divider">
+          <Text accessibilityLabel={`Takes ${pillCount(slot.amount)}`}>{slot.amount === 1 ? 'Pill' : 'Pills'}</Text>
+          <Stepper label="pills" value={slot.amount} disabled={disabled} onChange={(amount) => void onChange((draft) => draft.amount(slot.id, amount))} />
+        </View>
+        <View className="border-t border-divider pt-3">
+          <Text>Remind me before</Text>
+          <View className="flex-row flex-wrap gap-x-2">
+            {leads.map((option) => <Chip key={option.minutes} label={option.label} accessibilityLabel={`Remind ${option.label} before`} selected={option.minutes === lead} disabled={disabled} onPress={() => void onChange((draft) => draft.heads(slot.id, option.minutes))} />)}
+          </View>
+        </View>
+        <View className="flex-row items-center justify-between border-t border-divider py-2">
+          {canRemove ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${slot.alarmAt} dose`} disabled={disabled} onPress={() => { onClose(); void onChange((draft) => draft.removeTime(slot.id)); }} className="min-h-12 justify-center"><Text className="font-medium text-danger">Remove</Text></Pressable> : <View />}
+          <Pressable accessibilityRole="button" accessibilityLabel="Done" onPress={onClose} className="min-h-12 justify-center px-2"><Text className="font-semibold text-accent">Done</Text></Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  </Modal>;
 }
 
 export function MedicineSaveButton({ busy, disabled, onPress, editing = false }: { busy: boolean; disabled: boolean; onPress: () => void; editing?: boolean }) {

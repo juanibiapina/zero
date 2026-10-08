@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 
 // A small keyboard-docked sheet that asks for one whole number of pills: the
-// amount bought for Restock, or the pills on hand for Set count.
+// amount bought for Restock, or the pills on hand for Count pills and Recount.
 export function PillCountSheet({ title, initial, min = 1, saveLabel = 'Save', onSave, onClose }: {
   title: string;
   initial: number | null;

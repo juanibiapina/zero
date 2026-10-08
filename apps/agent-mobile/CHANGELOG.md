@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-08: Change a medicine's page into its editor: drag dose times along the day, tap a dose to set its pills and how early to remind you, and tap days and course length; changes save at once. Tap a dose to record it as taken, with Undo. Adding a medicine now asks only for the name, notes and schedule; count pills on its page.
+
+- 2026-10-08: Change medicine reminders to say how many pills to take, show the pills of each dose in the Medicines list, and say "Next dose tomorrow" or the weekday for upcoming doses. Rename Set count to Recount.
+
 - 2026-10-08: Add pill counts to medicines. Set how many pills each dose takes and how many you have; every Taken counts them down, and when they run low a 💊 Buy task appears on Home. Completing it asks how many pills you got and adds them.
 
 - 2026-10-08: Add a full-screen medicine alarm with sound, Taken and Postpone 1 hour when a dose is due on a locked phone; the sound stops after a minute.

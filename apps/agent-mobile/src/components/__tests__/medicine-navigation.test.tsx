@@ -53,7 +53,7 @@ describe('Medicine return navigation', () => {
 
   it('opens the dose a reminder links to', async () => {
     const { screen } = await openRoutes((id, slot) => `/browse/medicines/${id}?slot=${slot}&date=${medicineToday()}`);
-    expect(screen.getByText(/^Dose · /)).toBeTruthy();
+    expect(screen.getByLabelText('Take 20:00 dose, 1 pill').props.accessibilityState.selected).toBe(true);
     expect(screen.queryByText('This dose is no longer available.')).toBeNull();
   });
 

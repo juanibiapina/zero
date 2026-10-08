@@ -3,6 +3,8 @@ import type { Medicine } from "./model";
 
 export const DEFAULT_LEAD_DAYS = 14;
 
+export const pillCount = (count: number) => `${count} ${count === 1 ? "pill" : "pills"}`;
+
 type Schedule = Pick<Medicine, "weekdays" | "doses">;
 
 export function pillsPerDay(medicine: Pick<Medicine, "doses">): number {

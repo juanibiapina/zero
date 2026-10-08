@@ -60,6 +60,12 @@ export class MedicineDraft {
     return new MedicineDraft({ ...this.input, doses }, this.course, true);
   }
 
+  heads(slotId: string, lead: number): MedicineDraft {
+    if (!Number.isInteger(lead) || lead < 1) return this;
+    const doses = this.input.doses.map((slot) => slot.id === slotId ? { ...slot, remindAt: reminder(slot.alarmAt, lead) } : slot);
+    return new MedicineDraft({ ...this.input, doses }, this.course, true);
+  }
+
   amount(slotId: string, value: number): MedicineDraft {
     if (!Number.isInteger(value) || value < 1) return this;
     const doses = this.input.doses.map((slot) => slot.id === slotId ? { ...slot, amount: value } : slot);
@@ -88,11 +94,6 @@ export class MedicineDraft {
 
   withCourse(course: MedicineCourse): MedicineDraft {
     return new MedicineDraft(this.input, course, true);
-  }
-
-  get suggested(): boolean {
-    const times = DAILY_TIMES[this.input.doses.length];
-    return !!times && this.input.doses.every((slot, index) => slot.alarmAt === times[index] && slot.remindAt === reminder(slot.alarmAt, defaultLead(this.input.doses.length)));
   }
 
   get endsOn(): string | null {

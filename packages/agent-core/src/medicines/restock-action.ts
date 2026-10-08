@@ -1,8 +1,7 @@
 import { messageOf } from "../errors";
 import type { TaskdoReplica } from "../taskdo/replica";
 import { toast } from "../toast/controller";
-
-export const pillCount = (count: number) => `${count} ${count === 1 ? "pill" : "pills"}`;
+import { pillCount } from "./supply";
 
 // Add bought pills (completing the restock Task when there is one) and raise
 // the shared Undo snackbar, which takes them away and reopens the Task.

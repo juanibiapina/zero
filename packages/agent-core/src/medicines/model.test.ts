@@ -1,11 +1,21 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createMergeableStore } from "tinybase";
-import { MedicineModel, medicineCadence, medicineEndDate, medicineNextDay, medicineOccurrences, medicineState, type MedicineInput, type MedicineReceipt } from "./model";
+import { MedicineModel, medicineCadence, medicineDay, medicineEndDate, medicineNextDay, medicineOccurrences, medicineState, type MedicineInput, type MedicineReceipt } from "./model";
 
 const input: MedicineInput = { name: "Daily pill", instructions: "1 pill", startsOn: "2026-10-02", endsOn: "2026-10-11", paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7],
   doses: [{ id: "morning", remindAt: "07:00", alarmAt: "08:00", amount: 1 }, { id: "evening", remindAt: "20:00", alarmAt: "22:00", amount: 1 }] };
 const now = () => new Date("2026-10-02T12:00:00");
 function setup() { const store = createMergeableStore(); const model = new MedicineModel(store, now); model.add("medicine", input); return { model, store }; }
+
+describe("medicine day phrase", () => {
+  it("names today, tomorrow and the coming week's weekdays, then dates", () => {
+    const today = "2026-10-08";
+    expect(medicineDay(today, today)).toBe("today");
+    expect(medicineDay("2026-10-09", today)).toBe("tomorrow");
+    expect(medicineDay("2026-10-14", today)).toBe(new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(new Date("2026-10-14T12:00:00")));
+    expect(medicineDay("2026-10-15", today)).toBe(new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" }).format(new Date("2026-10-15T12:00:00")));
+  });
+});
 
 describe("daily medicines", () => {
   it("records one dose independently and retains its exact confirmation through restart", () => {

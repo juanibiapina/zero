@@ -1,9 +1,9 @@
 // @zero/agent-core — shared, platform-agnostic app code.
 
-export { MedicineModel, medicineToday, medicineEndDate, medicineOccurrences, medicineState, medicineDueOn, medicineNextDay, medicineCadence, medicineRecurrence, doseId, validateMedicine, type Weekday, type Medicine, type MedicineInput, type MedicineSlot, type MedicineSupply, type MedicineRestock, type Dose, type MedicineReceipt, type MedicineSnapshot } from "./medicines/model";
+export { MedicineModel, medicineToday, medicineEndDate, medicineOccurrences, medicineState, medicineDueOn, medicineNextDay, medicineDay, medicineCadence, medicineRecurrence, doseId, validateMedicine, type Weekday, type Medicine, type MedicineInput, type MedicineSlot, type MedicineSupply, type MedicineRestock, type Dose, type MedicineReceipt, type MedicineSnapshot } from "./medicines/model";
 export { MedicineDraft, type MedicineCourse } from "./medicines/draft";
-export { DEFAULT_LEAD_DAYS, daysLeft, restockThreshold, supplyIsLow, supplyLabel } from "./medicines/supply";
-export { pillCount, restockWithUndo } from "./medicines/restock-action";
+export { DEFAULT_LEAD_DAYS, daysLeft, pillCount, restockThreshold, supplyIsLow, supplyLabel } from "./medicines/supply";
+export { restockWithUndo } from "./medicines/restock-action";
 export type { TodoMedicines } from "./taskdo/replica";
 export { createMedicineReminders, type MedicineReminders } from "./medicines/reminders";
 export { MEDICINE_CHANNEL, MEDICINE_SOURCE, medicineOccurrence, medicineReceipt, medicineReminderKey, medicineSchedule } from "./medicines/notifications";

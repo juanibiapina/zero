@@ -61,11 +61,11 @@ describe("restock Tasks", () => {
     expect(screen.queryByRole("button", { name: "Project" })).toBeNull();
   });
 
-  it("sets the count from the Medicine page", async () => {
+  it("counts the pills from the Medicine page", async () => {
     const { replica } = await open("/medicines/:id");
     expect(await screen.findByText("Pills not counted")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Set count" }));
-    fireEvent.change(await screen.findByRole("spinbutton", { name: "How many pills do you have?" }), { target: { value: "60" } });
+    fireEvent.click(screen.getByRole("button", { name: "Count pills" }));
+    fireEvent.change(await screen.findByRole("spinbutton", { name: "How many pills do you have now?" }), { target: { value: "60" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("60 pills left · about 60 days")).toBeVisible();
     expect(restockTask(replica)).toBeUndefined();

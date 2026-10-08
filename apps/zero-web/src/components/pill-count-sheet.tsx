@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 
 // Asks for one whole number of pills: the amount bought for Restock, or the
-// pills on hand for Set count.
+// pills on hand for Count pills and Recount.
 export function PillCountSheet({ title, initial, min = 1, onSave, onClose }: {
   title: string;
   initial: number | null;

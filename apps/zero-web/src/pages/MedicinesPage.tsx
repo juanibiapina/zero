@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { DEFAULT_LEAD_DAYS, MedicineDraft, medicineCadence, restockWithUndo, supplyLabel, medicineEndDate, medicineNextDay, medicineOccurrences, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose, type Weekday } from "@zero/agent-core";
+import { DEFAULT_LEAD_DAYS, MedicineDraft, medicineCadence, restockWithUndo, supplyLabel, medicineEndDate, medicineDay, medicineNextDay, medicineOccurrences, pillCount, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose, type Weekday } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
@@ -87,13 +87,13 @@ export function MedicinesPage() {
       {snapshot.medicines.map((item) => {
         const expected = medicineOccurrences(item, today); const taken = expected.filter((dose) => snapshot.doses.some((row) => row.id === dose.id && row.takenAt)).length;
         const state = medicineState(item, today); const next = state === "active" && !expected.length ? medicineNextDay(item, today) : null;
-        return <Link key={item.id} to={`/medicines/${item.id}`} className="flex min-h-12 flex-col gap-1 border-b py-3"><span className="font-semibold">{item.name}</span><span className="text-sm text-muted-foreground">{item.doses.map((dose) => dose.alarmAt).join(" · ")} · {next ? `Next dose ${next}` : state === "active" && !expected.length ? "No more doses" : state === "active" ? `${taken} of ${expected.length} taken` : state}</span></Link>;
+        return <Link key={item.id} to={`/medicines/${item.id}`} className="flex min-h-12 flex-col gap-1 border-b py-3"><span className="font-semibold">{item.name}</span><span className="text-sm text-muted-foreground">{[...item.doses].sort((a, b) => a.alarmAt.localeCompare(b.alarmAt)).map((dose) => `${dose.alarmAt} (${pillCount(dose.amount)})`).join(" · ")} · {next ? `Next dose ${medicineDay(next, today)}` : state === "active" && !expected.length ? "No more doses" : state === "active" ? `${taken} of ${expected.length} taken` : state}</span></Link>;
       })}
     </> : null}
     {medicine ? <>
       {medicine.instructions ? <p>{medicine.instructions}</p> : null}<p className="text-sm text-muted-foreground">{medicineCadence(medicine)} · {medicine.endsOn ? `Through ${medicine.endsOn}` : "Ongoing"}</p>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><span className="tabular-nums">{supplyLabel(medicine) ?? "Pills not counted"}</span><span className="flex gap-2"><Button variant="outline" disabled={busy} onClick={() => setCounting("restock")}>Restock</Button><Button variant="outline" disabled={busy} onClick={() => setCounting("count")}>Set count</Button></span></div>
-      <h2 className="font-semibold">{medicineState(medicine, today) === "active" ? medicineOccurrences(medicine, today).length ? "Today" : (medicineNextDay(medicine, today) ? `Next dose ${medicineNextDay(medicine, today)}` : "No more doses") : medicineState(medicine, today)}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><span className="tabular-nums">{supplyLabel(medicine) ?? "Pills not counted"}</span><span className="flex gap-2"><Button variant="outline" disabled={busy} onClick={() => setCounting("restock")}>Restock</Button><Button variant="outline" disabled={busy} onClick={() => setCounting("count")}>{medicine.supply ? "Recount" : "Count pills"}</Button></span></div>
+      <h2 className="font-semibold">{medicineState(medicine, today) === "active" ? medicineOccurrences(medicine, today).length ? "Today" : (medicineNextDay(medicine, today) ? `Next dose ${medicineDay(medicineNextDay(medicine, today)!, today)}` : "No more doses") : medicineState(medicine, today)}</h2>
       {medicineOccurrences(medicine, today).map((planned) => {
         const dose = snapshot.doses.find((item) => item.id === planned.id) ?? planned;
         return <div key={dose.id} className="flex min-h-12 items-center justify-between gap-3 border-b py-2"><span>{time(dose.scheduledAt)}</span>{dose.takenAt ? <span className="text-sm">Taken at {time(dose.takenAt)} <Button variant="ghost" disabled={busy} onClick={() => void run(() => replica.medicines.undo(dose.id))}>Undo</Button></span> : <Button disabled={busy} onClick={() => take(dose)}>Taken {time(dose.scheduledAt)} dose</Button>}</div>;
@@ -108,7 +108,7 @@ export function MedicinesPage() {
       {editor ? <MedicineForm key={`${editor}-${id ?? "new"}`} replica={replica} source={editor === "edit" || editor === "copy" ? medicine : undefined} copy={editor === "copy"} onSaved={(medicineId) => { setEditor(null); void navigate(`/medicines/${medicineId}`); }} /> : null}
     </Sheet>
     {medicine && counting === "restock" ? <PillCountSheet title="How many pills did you get?" initial={medicine.supply?.refill ?? null} onClose={() => setCounting(null)} onSave={(amount) => { setCounting(null); void restockWithUndo({ replica, medicineId: medicine.id, amount, onError: setError }); }} /> : null}
-    {medicine && counting === "count" ? <PillCountSheet title="How many pills do you have?" initial={medicine.supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: medicine.supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} /> : null}
+    {medicine && counting === "count" ? <PillCountSheet title="How many pills do you have now?" initial={medicine.supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: medicine.supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} /> : null}
     <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete medicine?">
       <p>Its dose history will also be removed.</p><div className="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setConfirmDelete(false)}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={() => void run(async () => { await replica.medicines.remove(medicine!.id); setConfirmDelete(false); void navigate('/medicines'); })}>Delete</Button></div>
     </Sheet>

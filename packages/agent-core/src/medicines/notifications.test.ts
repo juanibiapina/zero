@@ -19,8 +19,8 @@ describe("medicine notification schedule", () => {
     const [reminder] = schedule.reminders;
     expect(reminder.recurrence).toEqual({ from: "2026-09-01", until: null, weekdays: [1, 3, 5] });
     expect(reminder.stages).toEqual([
-      { at: "07:45", wake: "exact", text: "Dose at 08:00 · After food" },
-      { at: "08:00", wake: "alarmClock", text: "08:00 dose due · After food", fullScreen: true },
+      { at: "07:45", wake: "exact", text: "Take 1 pill at 08:00 · After food" },
+      { at: "08:00", wake: "alarmClock", text: "Time to take 1 pill · After food", fullScreen: true },
     ]);
     expect(reminder.actions.map((action) => action.label)).toEqual(["Taken", "Postpone 1 hour"]);
     expect(reminder.url).toBe("zeroagent:///browse/medicines/vitamin?slot=morning&date={date}");
@@ -37,7 +37,12 @@ describe("medicine notification schedule", () => {
 
   it("omits blank instructions from the text", () => {
     const schedule = medicineSchedule({ medicines: [medicine({ instructions: "  " })], doses: [] });
-    expect(schedule.reminders[0].stages.map((stage) => stage.text)).toEqual(["Dose at 08:00", "08:00 dose due"]);
+    expect(schedule.reminders[0].stages.map((stage) => stage.text)).toEqual(["Take 1 pill at 08:00", "Time to take 1 pill"]);
+  });
+
+  it("says how many pills each dose takes", () => {
+    const schedule = medicineSchedule({ medicines: [medicine({ instructions: null, doses: [{ id: "morning", remindAt: "07:45", alarmAt: "08:00", amount: 2 }] })], doses: [] });
+    expect(schedule.reminders[0].stages.map((stage) => stage.text)).toEqual(["Take 2 pills at 08:00", "Time to take 2 pills"]);
   });
 });
 

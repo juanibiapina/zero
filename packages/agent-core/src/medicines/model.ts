@@ -1,6 +1,6 @@
 import { safeRandomUUID } from "@tanstack/db";
 import type { MergeableStore } from "tinybase";
-import { nextOccurrence, occursOn } from "../notifications/recurrence";
+import { addDays, nextOccurrence, occursOn } from "../notifications/recurrence";
 import type { Recurrence, Weekday } from "../notifications/schedule";
 import { TodoModel } from "../taskdo/model";
 import { DEFAULT_LEAD_DAYS, supplyIsLow } from "./supply";
@@ -44,6 +44,15 @@ export function medicineDueOn(medicine: Medicine, on: string): boolean {
 }
 export function medicineNextDay(medicine: Medicine, from: string): string | null {
   return nextOccurrence(medicineRecurrence(medicine), from);
+}
+// A day as it reads inside a sentence: "today", "tomorrow", a weekday within
+// the coming week ("Monday"), else a short date ("Mon, 19 Oct").
+export function medicineDay(date: string, today: string): string {
+  const local = new Date(`${date}T12:00:00`);
+  if (date === today) return "today";
+  if (date === addDays(today, 1)) return "tomorrow";
+  if (date > today && date <= addDays(today, 6)) return new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(local);
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" }).format(local);
 }
 export function medicineCadence(medicine: Pick<MedicineInput, "weekdays" | "doses">): string {
   const count = medicine.doses.length;

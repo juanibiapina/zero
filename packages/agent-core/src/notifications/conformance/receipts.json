@@ -40,12 +40,12 @@
           {
             "at": "19:45",
             "wake": "exact",
-            "text": "Dose at 20:00"
+            "text": "Take 1 pill at 20:00"
           },
           {
             "at": "20:00",
             "wake": "alarmClock",
-            "text": "20:00 dose due",
+            "text": "Time to take 1 pill",
             "fullScreen": true
           }
         ],

@@ -1,4 +1,5 @@
 import type { Channel, Receipt, Reminder, Schedule } from "../notifications/schedule";
+import { pillCount } from "./supply";
 import { doseId, medicineRecurrence, type Dose, type Medicine, type MedicineReceipt } from "./model";
 
 export const MEDICINE_SOURCE = "medicines";
@@ -33,8 +34,8 @@ export function medicineSchedule(snapshot: { medicines: Medicine[]; doses: Dose[
         url: `zeroagent:///browse/medicines/${encodeURIComponent(medicine.id)}?slot=${encodeURIComponent(slot.id)}&date={date}`,
         recurrence: medicineRecurrence(medicine),
         stages: [
-          { at: slot.remindAt, wake: "exact", text: withInstructions(`Dose at ${slot.alarmAt}`, medicine.instructions) },
-          { at: slot.alarmAt, wake: "alarmClock", text: withInstructions(`${slot.alarmAt} dose due`, medicine.instructions), fullScreen: true },
+          { at: slot.remindAt, wake: "exact", text: withInstructions(`Take ${pillCount(slot.amount)} at ${slot.alarmAt}`, medicine.instructions) },
+          { at: slot.alarmAt, wake: "alarmClock", text: withInstructions(`Time to take ${pillCount(slot.amount)}`, medicine.instructions), fullScreen: true },
         ],
         actions: [
           { id: "taken", label: "Taken", kind: "settle" },
