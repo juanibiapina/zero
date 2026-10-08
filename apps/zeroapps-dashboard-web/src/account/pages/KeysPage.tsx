@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useLayoutEffect, useRef } from "react";
 import { useAuth, useOrganization } from "@clerk/react";
 import { Plus, Trash2, Copy, Check } from "lucide-react";
 import {
@@ -48,7 +48,7 @@ export default function KeysPage() {
   const { reload } = state;
 
   // The key is shown once, so land the keyboard user on the copy button.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (newKey) copyRef.current?.focus();
   }, [newKey]);
 
