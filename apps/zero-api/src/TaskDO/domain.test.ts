@@ -23,8 +23,8 @@ describe("TaskDomain adapter", () => {
     const { domain, saves } = setup();
     await domain.addProject("p", "Project");
     await domain.addProject("p", "Retry");
-    await domain.addTask("task", "Task", null, "p");
-    await domain.addTask("task", "Retry", null, "p");
+    await domain.addTask("task", "Task", null, { kind: "project", projectId: "p" });
+    await domain.addTask("task", "Retry", null, { kind: "project", projectId: "p" });
     await domain.completeTask("task");
     await domain.completeTask("task");
     await domain.reopenTask("task");
@@ -33,6 +33,18 @@ describe("TaskDomain adapter", () => {
     await domain.deleteProject("missing");
 
     expect(saves()).toBe(5);
+  });
+
+  it("migrates legacy Task parents when the store loads", () => {
+    const legacy = createMergeableStore();
+    legacy.setRow("projects", "p", { title: "P", icon: "📁", state: "in-play", createdAt: NOW });
+    legacy.setRow("tasks", "t", { text: "Task", createdAt: NOW, projectId: "p" });
+    const { domain, store } = setup();
+
+    store.setMergeableContent(legacy.getMergeableContent());
+
+    expect(domain.listTasks().map((task) => task.parent)).toEqual([{ kind: "project", projectId: "p" }]);
+    expect(store.getCellIds("tasks", "t")).not.toContain("projectId");
   });
 
   it("lists only Projects that are not done", async () => {
@@ -46,10 +58,10 @@ describe("TaskDomain adapter", () => {
 
   it("maps canonical conflicts to the established RPC values", async () => {
     const { domain } = setup();
-    expect(await domain.addTask("task", "Task", null, "missing")).toBeNull();
+    expect(await domain.addTask("task", "Task", null, { kind: "project", projectId: "missing" })).toBeNull();
     expect(await domain.patchTask("missing", { text: "x" })).toBeNull();
     await domain.addTask("task", "Task", null);
-    expect(await domain.patchTask("task", { projectId: "missing" })).toBe("missing-project");
+    expect(await domain.patchTask("task", { parent: { kind: "project", projectId: "missing" } })).toBe("missing-project");
     expect(await domain.addProjectAfter("after", "missing", "also-missing")).toEqual({ conflict: "missing-source" });
   });
 

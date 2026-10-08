@@ -29,7 +29,10 @@ const TaskSchema = z.object({
   recurrenceDate: PlainDate.nullable(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
-  projectId: z.string().nullable(),
+  parent: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("project"), projectId: z.string() }),
+    z.object({ kind: z.literal("medicine"), medicineId: z.string(), role: z.literal("restock").nullable() }),
+  ]).nullable(),
   // In practice every stored row is keyed; a null (unkeyed) row sorts last and
   // is tolerated rather than rejected so a stray/legacy null degrades
   // gracefully instead of 500ing the whole list response.
@@ -44,6 +47,11 @@ export type SuggestTaskProject = (
 
 const defaultSuggestProject: SuggestTaskProject = (env, _userId, input) =>
   suggestProject(typesafeDecide(env.TYPESAFE_API_KEY), input);
+
+// Only a Project parent can be set over REST; a Medicine adds its own Tasks.
+const ParentInput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("project"), projectId: z.string().uuid() }),
+]);
 
 const ProjectCandidateSchema = z.object({
   id: z.string().min(1).max(100),
@@ -101,7 +109,7 @@ export const createTasksRoutes = (
               recurrence: RecurrenceInput.nullable().optional(),
               // Optional: the Project this task belongs to. Omitted/absent for a
               // loose task.
-              projectId: z.string().uuid().nullable().optional(),
+              parent: ParentInput.nullable().optional(),
             }),
           },
         },
@@ -129,13 +137,13 @@ export const createTasksRoutes = (
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { id, text, showUpDate, recurrence, projectId } =
+    const { id, text, showUpDate, recurrence, parent } =
       c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
     const task = await getTaskDO(c.env, userId).addTask(
-      id, text, showUpDate ?? null, projectId ?? null, recurrence ?? null,
+      id, text, showUpDate ?? null, parent ?? null, recurrence ?? null,
     );
     if (!task) return c.json({ error: "task id is in use or project not found" }, 409);
     log("task_added", { clerk_user_id: userId });
@@ -162,9 +170,9 @@ export const createTasksRoutes = (
               text: z.string().min(1).optional(),
               showUpDate: PlainDate.nullable().optional(),
               sortKey: z.string().min(1).optional(),
-              // The Project to move the task into (uuid), or null to move it back
+              // The Project to move the task into, or null to move it back
               // to loose. Present-not-value: null is a valid clear-to-loose.
-              projectId: z.string().uuid().nullable().optional(),
+              parent: ParentInput.nullable().optional(),
             }),
           },
         },
@@ -199,7 +207,7 @@ export const createTasksRoutes = (
   // PATCH (not a POST …/edit action) because updating a task's fields is a
   // genuine idempotent field update on its stable id. One endpoint carries
   // edit (text), reschedule (showUpDate), reorder (sortKey), and move-to-project
-  // (projectId); each field maps to its own store verb.
+  // (parent); each field maps to its own store verb.
   router.openapi(patchRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
@@ -207,8 +215,8 @@ export const createTasksRoutes = (
     const hasText = body.text !== undefined;
     const hasShowUpDate = "showUpDate" in body;
     const hasSortKey = body.sortKey !== undefined;
-    const hasProjectId = "projectId" in body;
-    if (!hasText && !hasShowUpDate && !hasSortKey && !hasProjectId) {
+    const hasParent = "parent" in body;
+    if (!hasText && !hasShowUpDate && !hasSortKey && !hasParent) {
       return c.json({ error: "no fields to update" }, 400);
     }
 
@@ -218,7 +226,7 @@ export const createTasksRoutes = (
     if (hasSortKey) log("task_reordered", { clerk_user_id: userId });
     if (hasShowUpDate) log("task_rescheduled", { clerk_user_id: userId });
     if (hasText) log("task_edited", { clerk_user_id: userId });
-    if (hasProjectId) log("task_moved", { clerk_user_id: userId });
+    if (hasParent) log("task_moved", { clerk_user_id: userId });
     return c.json({ task }, 200);
   });
 

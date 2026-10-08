@@ -11,7 +11,8 @@ import {
   type Project,
   type ProjectDefaults,
   type ProjectState,
-  type TaskRecord,
+  type Task,
+  type TaskParent,
   type WaitingCondition,
 } from "./domain";
 
@@ -98,7 +99,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
     return this.domain.deleteWaitingCondition(id);
   }
 
-  listTasks(): TaskRecord[] {
+  listTasks(): Task[] {
     return this.purging ? [] : this.domain.listTasks();
   }
 
@@ -106,38 +107,38 @@ export class TaskDO extends WsServerDurableObject<Env> {
     return this.purging ? [] : this.domain.listRecoveries();
   }
 
-  addTask(id: string, text: string, showUpDate: string | null, projectId: string | null = null,
-    recurrence: Recurrence | null = null): Promise<TaskRecord | null> {
-    return this.domain.addTask(id, text, showUpDate, projectId, recurrence);
+  addTask(id: string, text: string, showUpDate: string | null, parent: TaskParent | null = null,
+    recurrence: Recurrence | null = null): Promise<Task | null> {
+    return this.domain.addTask(id, text, showUpDate, parent, recurrence);
   }
 
-  editTask(id: string, text: string): Promise<TaskRecord | null> {
+  editTask(id: string, text: string): Promise<Task | null> {
     return this.domain.editTask(id, text);
   }
 
   patchTask(id: string, fields: { text?: string; showUpDate?: string | null;
-    sortKey?: string; projectId?: string | null }): Promise<TaskRecord | "missing-project" | null> {
+    sortKey?: string; parent?: TaskParent | null }): Promise<Task | "missing-project" | null> {
     return this.domain.patchTask(id, fields);
   }
 
-  completeTask(id: string): Promise<TaskRecord | null> {
+  completeTask(id: string): Promise<Task | null> {
     return this.domain.completeTask(id);
   }
 
-  reopenTask(id: string): Promise<TaskRecord | null> {
+  reopenTask(id: string): Promise<Task | null> {
     return this.domain.reopenTask(id);
   }
 
-  setTaskRecurrence(id: string, recurrence: Recurrence | null): Promise<TaskRecord | null> {
+  setTaskRecurrence(id: string, recurrence: Recurrence | null): Promise<Task | null> {
     return this.domain.setTaskRecurrence(id, recurrence);
   }
 
-  completeTaskOccurrence(id: string, scheduledOn: string, completedOn: string): Promise<TaskRecord | "invalid-recurrence" | null> {
+  completeTaskOccurrence(id: string, scheduledOn: string, completedOn: string): Promise<Task | "invalid-recurrence" | null> {
     return this.domain.completeTaskOccurrence(id, scheduledOn, completedOn);
   }
 
   undoTaskOccurrence(id: string, expectedRecurrenceDate: string,
-    recurrenceDateBefore: string, showUpDateBefore: string | null): Promise<TaskRecord | "invalid-recurrence" | null> {
+    recurrenceDateBefore: string, showUpDateBefore: string | null): Promise<Task | "invalid-recurrence" | null> {
     return this.domain.undoTaskOccurrence(id, expectedRecurrenceDate, recurrenceDateBefore, showUpDateBefore);
   }
 

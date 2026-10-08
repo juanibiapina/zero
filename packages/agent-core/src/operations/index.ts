@@ -5,8 +5,7 @@ import { z } from "zod";
 import { MedicineModel } from "../medicines/model";
 import { projectDisplayStatus } from "../projects/derive";
 import { TodoModel, type TodoModelResult } from "../taskdo/model";
-import type { Project, Task } from "../taskdo/types";
-import { projectParent, taskProjectId, taskRecord } from "../tasks/parent";
+import type { Project, Task, TaskParent } from "../taskdo/types";
 
 export type OperationKind = "read" | "write" | "destructive";
 
@@ -61,6 +60,13 @@ const RecurrenceInput = z.object({
     z.object({ unit: z.literal("year"), interval: Interval, on: z.array(YearSelector).min(1) }),
   ]),
 }).refine((value) => validateRecurrence(value).ok, "invalid recurrence");
+const ProjectParent = z.object({ kind: z.literal("project"), projectId: Id });
+const ParentInput = z.discriminatedUnion("kind", [ProjectParent])
+  .describe("A Task's parent. Agents can set only a Project parent.");
+const ParentFilter = z.discriminatedUnion("kind", [
+  ProjectParent,
+  z.object({ kind: z.literal("medicine"), medicineId: Id }),
+]);
 
 function define<Input extends z.ZodObject>(operation: TodoOperation<Input>): TodoOperation {
   return operation;
@@ -72,15 +78,12 @@ function fromModel<T>(result: TodoModelResult<T, string>): OperationOutcome {
     : { ok: false, error: result.conflict };
 }
 
-function agentTask(task: Task) {
-  const medicine = task.parent?.kind === "medicine" ? task.parent : null;
-  return { ...taskRecord(task), medicineId: medicine?.medicineId ?? null, role: medicine?.role ?? null };
-}
-
-function fromTaskModel(result: TodoModelResult<Task, string>): OperationOutcome {
-  return result.ok
-    ? { ok: true, changed: result.changed, value: agentTask(result.value) }
-    : { ok: false, error: result.conflict };
+function hasParent(task: Task, filter: z.infer<typeof ParentFilter>): boolean {
+  const parent: TaskParent | null = task.parent;
+  if (parent?.kind !== filter.kind) return false;
+  return parent.kind === "project"
+    ? filter.kind === "project" && parent.projectId === filter.projectId
+    : filter.kind === "medicine" && parent.medicineId === filter.medicineId;
 }
 
 const read = (value: unknown): OperationOutcome => ({ ok: true, changed: false, value });
@@ -103,14 +106,15 @@ export const todoOperations: readonly TodoOperation[] = [
       "List open Tasks in the user's manual order. A Task is the only to-do item; it is loose or belongs to a Project. " +
       "showUpDate is the day it becomes current (null means always current); Home shows open Tasks whose showUpDate is " +
       "null or on/before today, Upcoming shows later ones. Recurring Tasks carry recurrence and recurrenceDate (the current occurrence). " +
-      "A Task with medicineId belongs to that Medicine; role restock means Zero added it because the supply ran low. " +
+      "parent is null for a loose Task, { kind: project, projectId } for a Project Task, or { kind: medicine, medicineId, role } " +
+      "for a Medicine Task; role restock means Zero added it because the supply ran low. " +
       "Completing it here does not add pills; the user records the amount in the app.",
     kind: "read",
-    input: z.object({ projectId: Id.optional().describe("Only Tasks in this Project") }),
+    input: z.object({ parent: ParentFilter.optional().describe("Only Tasks with this parent") }),
     run: (ctx, input) => {
       const tasks = todo(ctx).project({ taskOrder: "manual" }).tasks;
-      const listed = input.projectId ? tasks.filter((task) => taskProjectId(task) === input.projectId) : tasks;
-      return read({ today: ctx.today, tasks: listed.map(agentTask) });
+      const { parent } = input;
+      return read({ today: ctx.today, tasks: parent ? tasks.filter((task) => hasParent(task, parent)) : tasks });
     },
   }),
   define({
@@ -124,34 +128,31 @@ export const todoOperations: readonly TodoOperation[] = [
       id: Id.optional(),
       text: z.string().trim().min(1),
       showUpDate: PlainDate.nullable().optional().describe("Day the Task becomes current; omit for always current"),
-      projectId: Id.nullable().optional(),
+      parent: ParentInput.nullable().optional(),
       recurrence: RecurrenceInput.nullable().optional(),
     }),
-    run: (ctx, input) => fromTaskModel(todo(ctx).createTask({
+    run: (ctx, input) => fromModel(todo(ctx).createTask({
       id: input.id ?? ctx.newId(),
       text: input.text,
       showUpDate: input.showUpDate ?? null,
-      parent: projectParent(input.projectId),
+      parent: input.parent ?? null,
       recurrence: (input.recurrence) ?? null,
     })),
   }),
   define({
     name: "tasks_update",
     title: "Update a Task",
-    description: "Change a Task's text, showUpDate, or Project. Pass null to clear showUpDate or move the Task out of its Project.",
+    description: "Change a Task's text, showUpDate, or parent Project. Pass null to clear showUpDate or to make the Task loose.",
     kind: "write",
     input: z.object({
       id: Id,
       text: z.string().trim().min(1).optional(),
       showUpDate: PlainDate.nullable().optional(),
-      projectId: Id.nullable().optional(),
+      parent: ParentInput.nullable().optional(),
     }),
-    run: (ctx, { id, projectId, ...fields }) => {
-      if (Object.keys(fields).length === 0 && projectId === undefined) return { ok: false, error: "nothing to update" };
-      return fromTaskModel(todo(ctx).patchTask(id, {
-        ...fields,
-        ...(projectId !== undefined ? { parent: projectParent(projectId) } : {}),
-      }));
+    run: (ctx, { id, ...fields }) => {
+      if (Object.values(fields).every((value) => value === undefined)) return { ok: false, error: "nothing to update" };
+      return fromModel(todo(ctx).patchTask(id, fields));
     },
   }),
   define({
@@ -166,9 +167,9 @@ export const todoOperations: readonly TodoOperation[] = [
       const model = todo(ctx);
       const task = model.getTask(input.id);
       if (task?.recurrence && task.recurrenceDate && !task.completedAt) {
-        return fromTaskModel(model.completeOccurrence(input.id, task.recurrenceDate, input.completedOn ?? ctx.today));
+        return fromModel(model.completeOccurrence(input.id, task.recurrenceDate, input.completedOn ?? ctx.today));
       }
-      return fromTaskModel(model.completeTask(input.id));
+      return fromModel(model.completeTask(input.id));
     },
   }),
   define({
@@ -177,7 +178,7 @@ export const todoOperations: readonly TodoOperation[] = [
     description: "Reopen a completed Task.",
     kind: "write",
     input: z.object({ id: Id }),
-    run: (ctx, input) => fromTaskModel(todo(ctx).reopenTask(input.id)),
+    run: (ctx, input) => fromModel(todo(ctx).reopenTask(input.id)),
   }),
   define({
     name: "tasks_set_recurrence",
@@ -187,7 +188,7 @@ export const todoOperations: readonly TodoOperation[] = [
       "Setting a recurrence moves the Task's showUpDate to recurrence.origin.",
     kind: "write",
     input: z.object({ id: Id, recurrence: RecurrenceInput.nullable() }),
-    run: (ctx, input) => fromTaskModel(todo(ctx).setTaskRecurrence(input.id, input.recurrence)),
+    run: (ctx, input) => fromModel(todo(ctx).setTaskRecurrence(input.id, input.recurrence)),
   }),
   define({
     name: "projects_list",

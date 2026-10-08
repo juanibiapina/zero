@@ -87,7 +87,7 @@ describe("browser TaskDO replica", () => {
     expect((await indexedDB.databases()).map(({ name }) => name)).toContain(
       `${TASKDO_BROWSER_DB_PREFIX}account-a`,
     );
-    expect(TestSocket.instances[0].url).toMatch(/^ws.*\/api\/task-sync$/);
+    expect(TestSocket.instances[0].url).toMatch(/^ws.*\/api\/task-sync\?schema=2$/);
 
     TestSocket.instances[0].close();
     window.dispatchEvent(new Event("online"));

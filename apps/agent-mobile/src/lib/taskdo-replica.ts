@@ -8,6 +8,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import {
   createSyncedTaskdoReplicaSession,
   createTaskdoReplica,
+  taskSyncPath,
   type TaskdoReplica,
   type TaskdoSyncState,
 } from '@zero/agent-core';
@@ -297,7 +298,7 @@ const openTaskdoPersistence = async (
 const openAuthenticatedSocket = async (_accountId: string, getToken: TokenGetter) => {
   const token = await getToken();
   if (!token) throw new Error('Signed out');
-  const url = `${API_BASE_URL.replace(/^http/, 'ws')}/api/task-sync`;
+  const url = `${API_BASE_URL.replace(/^http/, 'ws')}${taskSyncPath}`;
   // React Native WebSocket's third argument supports authentication headers.
   return new (WebSocket as unknown as new (
     url: string,

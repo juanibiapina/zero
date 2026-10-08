@@ -1,8 +1,9 @@
 import { advance, validateRecurrence, type Recurrence } from "@zeroapps/recurrence";
 import { generateKeyBetween } from "fractional-indexing";
-import type { MergeableStore } from "tinybase";
+import type { MergeableStore, Row } from "tinybase";
 
 import { unreachableParent } from "../tasks/parent";
+import { parentCellValue, readParentCell } from "./task-parent-cell";
 import type {
   Project,
   ProjectAfter,
@@ -70,15 +71,6 @@ function put(store: MergeableStore, table: string, id: string, key: string, valu
   else store.setCell(table, id, key, value);
 }
 
-function parentCells(parent: TaskParent | null): { projectId: string | null; medicineId: string | null; role: string | null } {
-  if (parent == null) return { projectId: null, medicineId: null, role: null };
-  switch (parent.kind) {
-    case "project": return { projectId: parent.projectId, medicineId: null, role: null };
-    case "medicine": return { projectId: null, medicineId: parent.medicineId, role: parent.role };
-    default: return unreachableParent(parent);
-  }
-}
-
 export class TodoModel {
   readonly store: MergeableStore;
   private readonly now: () => Date;
@@ -143,18 +135,9 @@ export class TodoModel {
     return this.store.hasRow("medicines", id) && !this.store.getCell("medicines", id, "deletedAt");
   }
 
-  // An older app can move a Medicine Task into a Project without clearing the
-  // Medicine cells; the Project wins.
-  private readParent(row: Record<string, unknown>): TaskParent | null {
-    if (typeof row.projectId === "string") {
-      return this.getProject(row.projectId) ? { kind: "project", projectId: row.projectId } : null;
-    }
-    if (typeof row.medicineId === "string") {
-      return this.medicineExists(row.medicineId)
-        ? { kind: "medicine", medicineId: row.medicineId, role: row.role === "restock" ? "restock" : null }
-        : null;
-    }
-    return null;
+  private readParent(row: Row): TaskParent | null {
+    const parent = readParentCell(row);
+    return parent && !this.parentMissing(parent) ? parent : null;
   }
 
   private parentMissing(parent: TaskParent | null | undefined): boolean {
@@ -167,7 +150,7 @@ export class TodoModel {
   }
 
   private writeParent(id: string, parent: TaskParent | null) {
-    for (const [key, value] of Object.entries(parentCells(parent))) put(this.store, "tasks", id, key, value);
+    put(this.store, "tasks", id, "parent", parentCellValue(parent));
   }
 
   private getCondition(id: string): ProjectAttention | null {
@@ -255,7 +238,8 @@ export class TodoModel {
     }
     const tasks: Task[] = [];
     for (const [id, row] of Object.entries(this.store.getTable("tasks"))) {
-      const projectId = typeof row.projectId === "string" ? row.projectId : null;
+      const parent = readParentCell(row);
+      const projectId = parent?.kind === "project" ? parent.projectId : null;
       if (typeof row.text !== "string" || typeof row.createdAt !== "string") {
         issues.push({ table: "tasks", id, projectId, reason: "invalid-task" });
       }
@@ -347,7 +331,8 @@ export class TodoModel {
       changed = true;
       this.store.setCell("projects", id, "deletedAt", this.timestamp());
       for (const [taskId, row] of Object.entries(this.store.getTable("tasks"))) {
-        if (row.projectId === id) { this.store.delRow("tasks", taskId); tasks++; }
+        const parent = readParentCell(row);
+        if (parent?.kind === "project" && parent.projectId === id) { this.store.delRow("tasks", taskId); tasks++; }
       }
       for (const [conditionId, row] of Object.entries(this.store.getTable("conditions"))) {
         if (row.projectId === id || row.refId === id) {
@@ -426,7 +411,7 @@ export class TodoModel {
       createdAt: input.createdAt ?? this.timestamp(),
       sortKey: input.sortKey ?? sortKey,
       ...(showUpDate ? { showUpDate } : {}),
-      ...Object.fromEntries(Object.entries(parentCells(input.parent ?? null)).filter(([, value]) => value !== null)),
+      ...(input.parent ? { parent: parentCellValue(input.parent)! } : {}),
       ...(input.recurrence ? { recurrence: JSON.stringify(input.recurrence) } : {}),
       ...(recurrenceDate ? { recurrenceDate } : {}),
       ...(input.completedAt ? { completedAt: input.completedAt } : {}),
@@ -550,7 +535,7 @@ export class TodoModel {
     const current = this.project().issues.some((candidate) => JSON.stringify(candidate) === JSON.stringify(issue));
     if (!current) return false;
     if (issue.table === "tasks" && (issue.reason === "missing-project" || issue.reason === "deleted-project")) {
-      this.store.delCell("tasks", issue.id, "projectId");
+      this.store.delCell("tasks", issue.id, "parent");
       return true;
     }
     if (issue.table === "tasks" && issue.reason === "invalid-recurrence") {

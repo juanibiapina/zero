@@ -36,7 +36,7 @@ export { messageOf } from "./errors";
 
 // The Task data layer (the single list) shared by web + mobile.
 export type { Task, TaskParent } from "./taskdo/types";
-export { projectParent, taskCompletion, taskMedicineId, taskProjectId, taskRecord, type TaskCompletion, type TaskRecord } from "./tasks/parent";
+export { projectParent, taskCompletion, taskMedicineId, taskProjectId, type TaskCompletion } from "./tasks/parent";
 export { localToday } from "./tasks/today";
 export { TaskDraft, type TaskDraftView, type TaskDraftCommit } from "./tasks/draft";
 export {
@@ -148,7 +148,10 @@ export {
   type TodoTasks,
   type TodoWaits,
 } from "./taskdo/replica";
+export { keepTaskParentsMigrated } from "./taskdo/task-parent-cell";
 export {
+  TASK_SYNC_SCHEMA,
+  taskSyncPath,
   createTaskdoSyncLifecycle,
   type CreateTaskdoSyncLifecycleOptions,
   type TaskdoSyncLifecycle,

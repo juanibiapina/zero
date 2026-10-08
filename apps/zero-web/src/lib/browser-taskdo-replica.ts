@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import {
   createSyncedTaskdoReplicaSession,
+  taskSyncPath,
   type TaskdoReplica,
   type TaskdoSyncState,
   type TodoSnapshot,
@@ -27,7 +28,7 @@ type OpenBrowserTaskdoReplicaOptions = {
 };
 
 function taskSyncUrl(): string {
-  const url = new URL("/api/task-sync", window.location.href);
+  const url = new URL(taskSyncPath, window.location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
 }

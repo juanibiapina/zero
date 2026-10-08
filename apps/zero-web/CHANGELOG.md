@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-08: Change how local AI agents see where a task belongs: each task now names its project or medicine in one place, and agents move a task to a project the same way.
+
 - 2026-10-08: Add pill counts to medicines. Set how many pills each dose takes and how many you have; every Taken counts them down, and when they run low a 💊 Buy task appears on Home. Completing it asks how many pills you got and adds them.
 
 - 2026-10-07: Add medicines taken only on chosen days of the week, such as Monday, Wednesday, and Friday. On other days, the medicine shows when the next dose is.

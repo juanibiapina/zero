@@ -1,6 +1,11 @@
 import type { MergeableStore } from "tinybase";
 import { createWsSynchronizer } from "tinybase/synchronizers/synchronizer-ws-client";
 
+// The store format a client syncs. The server refuses any other, so an app
+// that predates a storage migration works offline until it updates.
+export const TASK_SYNC_SCHEMA = 2;
+export const taskSyncPath = `/api/task-sync?schema=${TASK_SYNC_SCHEMA}`;
+
 export type TaskdoSynchronizer = {
   startSync(): Promise<unknown>;
   load(): Promise<unknown>;

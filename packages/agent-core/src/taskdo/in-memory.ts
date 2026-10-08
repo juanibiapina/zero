@@ -6,6 +6,7 @@ import type { Task } from "../taskdo/types";
 import type { ProjectAttention } from "../taskdo/types";
 import type { TaskdoReplicaClientState } from "./account-replica-owner";
 import { createTaskdoReplica, type TaskdoReplica } from "./replica";
+import { parentCellValue } from "./task-parent-cell";
 
 export type InMemoryTodoSeed = {
   tasks?: Task[];
@@ -27,8 +28,7 @@ export function createInMemoryTaskdoReplica(seed: InMemoryTodoSeed = {}): Taskdo
     createdAt: task.createdAt,
     ...(task.completedAt ? { completedAt: task.completedAt } : {}),
     ...(task.showUpDate ? { showUpDate: task.showUpDate } : {}),
-    ...(task.parent?.kind === "project" ? { projectId: task.parent.projectId } : {}),
-    ...(task.parent?.kind === "medicine" ? { medicineId: task.parent.medicineId, ...(task.parent.role ? { role: task.parent.role } : {}) } : {}),
+    ...(task.parent ? { parent: parentCellValue(task.parent)! } : {}),
     ...(task.recurrence ? { recurrence: JSON.stringify(task.recurrence) } : {}),
     ...(task.recurrenceDate ? { recurrenceDate: task.recurrenceDate } : {}),
     ...(task.sortKey ? { sortKey: task.sortKey } : {}),

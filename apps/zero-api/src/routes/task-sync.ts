@@ -1,5 +1,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 
+import { TASK_SYNC_SCHEMA } from "@zero/agent-core";
+
 import { getTaskDO } from "../TaskDO/stub";
 import type { Env } from "../types";
 
@@ -22,8 +24,12 @@ export const createTaskSyncRoutes = () => {
     if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
       return c.text("Upgrade required", 426);
     }
+    if (c.req.query("schema") !== String(TASK_SYNC_SCHEMA)) {
+      return c.text("Update the app to sync", 426);
+    }
     const url = new URL(c.req.url);
     url.pathname = "/sync";
+    url.search = "";
     return taskDO.fetch(new Request(url, c.req.raw));
   });
   return router;

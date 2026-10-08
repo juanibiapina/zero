@@ -59,7 +59,7 @@ describe("todo MCP server", () => {
 
   it("returns a model conflict as a tool error", async () => {
     const client = await connect(buildApp({ runOperation: async () => ({ ok: false, error: "missing-project" }) }));
-    const result = await client.callTool({ name: "tasks_create", arguments: { text: "x", projectId: "gone" } });
+    const result = await client.callTool({ name: "tasks_create", arguments: { text: "x", parent: { kind: "project", projectId: "gone" } } });
     expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: "missing-project" }] });
   });
 

@@ -67,17 +67,20 @@ describe("todo operation catalog", () => {
     new MedicineModel(ctx.store, ctx.now).add("m", { name: "Pill", instructions: null, startsOn: "2026-03-10", endsOn: null, paused: false,
       weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: "a", remindAt: "07:00", alarmAt: "08:00", amount: 1 }] });
     new MedicineModel(ctx.store, ctx.now, () => "restock").setSupply("m", { pillsLeft: 3, leadDays: 14 });
-    value(run("tasks_create", { id: "plain", text: "Plain", medicineId: "m", role: "restock" }));
-    const { tasks } = value<{ tasks: Array<{ id: string; projectId: string | null; medicineId: string | null; role: string | null }> }>(run("tasks_list"));
-    expect(tasks.map(({ id, projectId, medicineId, role }) => ({ id, projectId, medicineId, role }))).toEqual([
-      { id: "restock", projectId: null, medicineId: "m", role: "restock" },
-      { id: "plain", projectId: null, medicineId: null, role: null },
+    expect(run("tasks_create", { id: "plain", text: "Plain", parent: { kind: "medicine", medicineId: "m", role: "restock" } }).ok).toBe(false);
+    value(run("tasks_create", { id: "plain", text: "Plain" }));
+    const { tasks } = value<{ tasks: Array<{ id: string; parent: unknown }> }>(run("tasks_list"));
+    expect(tasks.map(({ id, parent }) => ({ id, parent }))).toEqual([
+      { id: "restock", parent: { kind: "medicine", medicineId: "m", role: "restock" } },
+      { id: "plain", parent: null },
     ]);
+    const restock = value<{ tasks: Array<{ id: string }> }>(run("tasks_list", { parent: { kind: "medicine", medicineId: "m" } }));
+    expect(restock.tasks.map((task) => task.id)).toEqual(["restock"]);
   });
 
   it("reports model conflicts by name", () => {
     const { run } = workspace();
-    expect(run("tasks_create", { text: "Orphan", projectId: "nope" })).toEqual({ ok: false, error: "missing-project" });
+    expect(run("tasks_create", { text: "Orphan", parent: { kind: "project", projectId: "nope" } })).toEqual({ ok: false, error: "missing-project" });
     expect(run("tasks_complete", { id: "nope" })).toEqual({ ok: false, error: "missing-task" });
     expect(run("no_such_tool")).toEqual({ ok: false, error: "unknown operation: no_such_tool" });
   });
@@ -106,7 +109,7 @@ describe("todo operation catalog", () => {
     const { run, value } = workspace();
     value(run("projects_create", { id: "p", title: "Move flat" }));
     value(run("projects_create", { id: "q", title: "Paint walls" }));
-    value(run("tasks_create", { text: "Book van", projectId: "p" }));
+    value(run("tasks_create", { text: "Book van", parent: { kind: "project", projectId: "p" } }));
     value(run("waiting_create", { projectId: "p", text: "Landlord reply" }));
     value(run("after_create", { projectId: "q", afterProjectId: "p" }));
 
@@ -150,7 +153,7 @@ describe("todo operation catalog", () => {
 
   it("reports invalid synchronized rows as recoveries instead of listing them", () => {
     const { ctx, run, value } = workspace();
-    ctx.store.setRow("tasks", "bad", { text: "Lost", createdAt: "2026-03-01T00:00:00Z", projectId: "gone" });
+    ctx.store.setRow("tasks", "bad", { text: "Lost", createdAt: "2026-03-01T00:00:00Z", parent: JSON.stringify({ kind: "project", projectId: "gone" }) });
 
     expect(value(run("recoveries_list"))).toEqual({
       todo: [{ table: "tasks", id: "bad", projectId: "gone", reason: "missing-project" }],

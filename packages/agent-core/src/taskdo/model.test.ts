@@ -60,7 +60,7 @@ describe("canonical TinyBase todo model", () => {
     expect(model.createTask({ id: "missing", text: "x", parent: projectParent("p") })).toEqual({ ok: false, conflict: "missing-project" });
     model.createProject({ id: "p", title: "P" });
     model.deleteProject("p");
-    store.setRow("tasks", "late", { text: "Keep", createdAt: NOW, projectId: "p" });
+    store.setRow("tasks", "late", { text: "Keep", createdAt: NOW, parent: JSON.stringify({ kind: "project", projectId: "p" }) });
 
     expect(model.project().tasks).toMatchObject([{ id: "late", parent: null }]);
     expect(model.project().issues).toContainEqual({ table: "tasks", id: "late", projectId: "p", reason: "deleted-project" });
@@ -150,7 +150,7 @@ describe("canonical TinyBase todo model", () => {
     model.createAfter("after", "p", "p2");
     expect(store.getRow("projects", "p")).toEqual({ title: "P", icon: "📁", state: "in-play", createdAt: NOW });
     expect(store.getRow("tasks", "task")).toMatchObject({
-      text: "Task", createdAt: NOW, projectId: "p", recurrence: JSON.stringify(daily),
+      text: "Task", createdAt: NOW, parent: JSON.stringify({ kind: "project", projectId: "p" }), recurrence: JSON.stringify(daily),
       recurrenceDate: daily.origin, showUpDate: daily.origin,
     });
   });
@@ -208,7 +208,7 @@ describe("canonical TinyBase todo model", () => {
   it("classifies malformed entities independently while retaining valid rows", () => {
     const { model, store } = setup();
     store.setRow("projects", "bad-project", { title: "Bad" });
-    store.setRow("tasks", "bad-task", { projectId: "bad-project", recurrence: "{}" });
+    store.setRow("tasks", "bad-task", { parent: JSON.stringify({ kind: "project", projectId: "bad-project" }), recurrence: "{}" });
     store.setRow("tasks", "valid", { text: "Valid", createdAt: NOW });
 
     expect(model.project().tasks.map((task) => task.id)).toEqual(["valid"]);
@@ -228,15 +228,11 @@ describe("canonical TinyBase todo model", () => {
     expect(model.getTask("t")?.parent).toEqual({ kind: "medicine", medicineId: "m", role: "restock" });
     model.patchTask("t", { parent: projectParent("p") });
     expect(model.getTask("t")?.parent).toEqual({ kind: "project", projectId: "p" });
-    expect(store.getRow("tasks", "t")).not.toHaveProperty("medicineId");
-    expect(store.getRow("tasks", "t")).not.toHaveProperty("role");
   });
 
-  it("reads a Task an older app moved into a Project as that Project's Task", () => {
+  it("reads an unreadable parent as a loose Task", () => {
     const { model, store } = setup();
-    addProjects(model, "p");
-    store.setRow("medicines", "m", { details: "{}", createdAt: NOW });
-    store.setRow("tasks", "t", { text: "Buy pills", createdAt: NOW, medicineId: "m", role: "restock", projectId: "p" });
-    expect(model.getTask("t")?.parent).toEqual({ kind: "project", projectId: "p" });
+    store.setRow("tasks", "t", { text: "Task", createdAt: NOW, parent: "{not json" });
+    expect(model.getTask("t")?.parent).toBeNull();
   });
 });

@@ -5,9 +5,9 @@ import {
   type ProjectDefaults,
   type ProjectState,
   type Project,
-  projectParent,
-  taskRecord,
-  type TaskRecord,
+  keepTaskParentsMigrated,
+  type Task,
+  type TaskParent,
   type TodoIssue,
   type WaitingCondition,
 } from "@zero/agent-core";
@@ -51,6 +51,7 @@ export class TaskDomain {
   private readonly isErased: () => Promise<boolean>;
 
   constructor({ store, save, isErased = async () => false, now = () => new Date() }: TaskDomainOptions) {
+    keepTaskParentsMigrated(store);
     this.model = new TodoModel({ store, now });
     this.store = store;
     this.now = now;
@@ -161,8 +162,8 @@ export class TaskDomain {
     if (result.changed) await this.save();
   }
 
-  listTasks(): TaskRecord[] {
-    return this.model.project({ taskOrder: "manual" }).tasks.map(taskRecord);
+  listTasks(): Task[] {
+    return this.model.project({ taskOrder: "manual" }).tasks;
   }
 
   listRecoveries(): TaskRecovery[] {
@@ -172,75 +173,71 @@ export class TaskDomain {
         : []);
   }
 
-  async addTask(id: string, text: string, showUpDate: string | null, projectId: string | null = null,
-    recurrence: Recurrence | null = null): Promise<TaskRecord | null> {
+  async addTask(id: string, text: string, showUpDate: string | null, parent: TaskParent | null = null,
+    recurrence: Recurrence | null = null): Promise<Task | null> {
     await this.assertActive();
-    const result = this.model.createTask({ id, text, showUpDate, parent: projectParent(projectId), recurrence });
+    const result = this.model.createTask({ id, text, showUpDate, parent, recurrence });
     if (!result.ok) return null;
     if (result.changed) await this.save();
-    return taskRecord(result.value);
+    return result.value;
   }
 
-  async editTask(id: string, text: string): Promise<TaskRecord | null> {
+  async editTask(id: string, text: string): Promise<Task | null> {
     await this.assertActive();
     const result = this.model.patchTask(id, { text });
     if (!result.ok) return null;
     await this.save();
-    return taskRecord(result.value);
+    return result.value;
   }
 
   async patchTask(id: string, fields: { text?: string; showUpDate?: string | null;
-    sortKey?: string; projectId?: string | null }): Promise<TaskRecord | "missing-project" | null> {
+    sortKey?: string; parent?: TaskParent | null }): Promise<Task | "missing-project" | null> {
     await this.assertActive();
-    const { projectId, ...rest } = fields;
-    const result = this.model.patchTask(id, {
-      ...rest,
-      ...(projectId !== undefined ? { parent: projectParent(projectId) } : {}),
-    });
+    const result = this.model.patchTask(id, fields);
     if (!result.ok) return result.conflict === "missing-project" ? "missing-project" : null;
     await this.save();
-    return taskRecord(result.value);
+    return result.value;
   }
 
-  async completeTask(id: string): Promise<TaskRecord | null> {
+  async completeTask(id: string): Promise<Task | null> {
     await this.assertActive();
     const result = this.model.completeTask(id);
     if (!result.ok) return null;
     if (result.changed) await this.save();
-    return taskRecord(result.value);
+    return result.value;
   }
 
-  async reopenTask(id: string): Promise<TaskRecord | null> {
+  async reopenTask(id: string): Promise<Task | null> {
     await this.assertActive();
     const result = this.model.reopenTask(id);
     if (!result.ok) return null;
     if (result.changed) await this.save();
-    return taskRecord(result.value);
+    return result.value;
   }
 
-  async setTaskRecurrence(id: string, recurrence: Recurrence | null): Promise<TaskRecord | null> {
+  async setTaskRecurrence(id: string, recurrence: Recurrence | null): Promise<Task | null> {
     await this.assertActive();
     const result = this.model.setTaskRecurrence(id, recurrence);
     if (!result.ok) return null;
     await this.save();
-    return taskRecord(result.value);
+    return result.value;
   }
 
-  async completeTaskOccurrence(id: string, scheduledOn: string, completedOn: string): Promise<TaskRecord | "invalid-recurrence" | null> {
+  async completeTaskOccurrence(id: string, scheduledOn: string, completedOn: string): Promise<Task | "invalid-recurrence" | null> {
     await this.assertActive();
     const result = this.model.completeOccurrence(id, scheduledOn, completedOn);
     if (!result.ok) return result.conflict === "invalid-recurrence" ? "invalid-recurrence" : null;
     if (result.changed) await this.save();
-    return taskRecord(result.value);
+    return result.value;
   }
 
   async undoTaskOccurrence(id: string, expectedRecurrenceDate: string,
-    recurrenceDateBefore: string, showUpDateBefore: string | null): Promise<TaskRecord | "invalid-recurrence" | null> {
+    recurrenceDateBefore: string, showUpDateBefore: string | null): Promise<Task | "invalid-recurrence" | null> {
     await this.assertActive();
     const result = this.model.undoOccurrence(id, expectedRecurrenceDate, recurrenceDateBefore, showUpDateBefore);
     if (!result.ok) return result.conflict === "invalid-recurrence" ? "invalid-recurrence" : null;
     if (result.changed) await this.save();
-    return taskRecord(result.value);
+    return result.value;
   }
 }
 
@@ -250,6 +247,7 @@ export type {
   ProjectDefaults,
   Project,
   ProjectState,
-  TaskRecord,
+  Task,
+  TaskParent,
   WaitingCondition,
 } from "@zero/agent-core";

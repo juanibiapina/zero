@@ -40,10 +40,3 @@ export function taskCompletion(task: Pick<Task, "parent">): TaskCompletion {
     default: return unreachableParent(parent);
   }
 }
-
-export type TaskRecord = Omit<Task, "parent"> & { projectId: string | null };
-
-export function taskRecord(task: Task): TaskRecord {
-  const { parent: _parent, ...fields } = task;
-  return { ...fields, projectId: taskProjectId(task) };
-}

@@ -2,13 +2,14 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { describe, expect, it, vi } from "vitest";
 import type { Recurrence } from "@zeroapps/recurrence";
 
-import type { TaskRecord as Task } from "../TaskDO/domain";
+import type { Task } from "../TaskDO/domain";
 import type { Env } from "../types";
 import { taskDoEnv } from "./taskdo-test-stub";
 import { createTasksRoutes, type SuggestTaskProject } from "./tasks";
 
 const TASK_ID = "11111111-1111-4111-8111-111111111111";
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
+const PARENT = { kind: "project" as const, projectId: PROJECT_ID };
 const recurrence: Recurrence = {
   version: 1,
   origin: "2026-10-01",
@@ -25,7 +26,7 @@ const task = (over: Partial<Task> = {}): Task => ({
   recurrenceDate: null,
   createdAt: "2026-09-26T10:00:00.000Z",
   completedAt: null,
-  projectId: null,
+  parent: null,
   sortKey: "a0",
   ...over,
 });
@@ -65,20 +66,20 @@ describe("task routes", () => {
       showUpDate: recurrence.origin,
       recurrence,
       recurrenceDate: recurrence.origin,
-      projectId: PROJECT_ID,
+      parent: PARENT,
     });
     const addTask = vi.fn(() => created);
     const response = await buildApp({ addTask })("/api/tasks", json("POST", {
       id: TASK_ID,
       text: "Pay rent",
       recurrence,
-      projectId: PROJECT_ID,
+      parent: PARENT,
     }));
 
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ task: created });
     expect(addTask).toHaveBeenCalledWith(
-      TASK_ID, "Pay rent", null, PROJECT_ID, recurrence,
+      TASK_ID, "Pay rent", null, PARENT, recurrence,
     );
   });
 
@@ -86,7 +87,7 @@ describe("task routes", () => {
     const response = await buildApp({ addTask: () => null })("/api/tasks", json("POST", {
       id: TASK_ID,
       text: "linked",
-      projectId: PROJECT_ID,
+      parent: PARENT,
     }));
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "task id is in use or project not found" });
@@ -96,7 +97,8 @@ describe("task routes", () => {
     { id: TASK_ID, text: "" },
     { id: TASK_ID, text: "task", showUpDate: "26/09/2026" },
     { id: "not-a-uuid", text: "task" },
-    { id: TASK_ID, text: "task", projectId: "not-a-uuid" },
+    { id: TASK_ID, text: "task", parent: { kind: "project", projectId: "not-a-uuid" } },
+    { id: TASK_ID, text: "task", parent: { kind: "medicine", medicineId: PROJECT_ID, role: "restock" } },
   ])("rejects malformed create input %# without calling TaskDO", async (body) => {
     const response = await buildApp({})("/api/tasks", json("POST", body));
     expect(response.status).toBe(400);
@@ -107,10 +109,10 @@ describe("task routes", () => {
       text: "edited",
       showUpDate: "2026-10-02",
       sortKey: "a5",
-      projectId: PROJECT_ID,
+      parent: PARENT,
     });
     const patchTask = vi.fn(() => updated);
-    const fields = { text: "edited", showUpDate: "2026-10-02", sortKey: "a5", projectId: PROJECT_ID };
+    const fields = { text: "edited", showUpDate: "2026-10-02", sortKey: "a5", parent: PARENT };
     const response = await buildApp({ patchTask })(`/api/tasks/${TASK_ID}`, json("PATCH", fields));
 
     expect(response.status).toBe(200);
@@ -120,7 +122,7 @@ describe("task routes", () => {
 
   it("preserves null clears when delegating a patch", async () => {
     const patchTask = vi.fn(() => task());
-    const fields = { showUpDate: null, projectId: null };
+    const fields = { showUpDate: null, parent: null };
     const response = await buildApp({ patchTask })(`/api/tasks/${TASK_ID}`, json("PATCH", fields));
     expect(response.status).toBe(200);
     expect(patchTask).toHaveBeenCalledWith(TASK_ID, fields);
@@ -129,7 +131,7 @@ describe("task routes", () => {
   it("maps patch domain results to Conflict and Not Found", async () => {
     const missingProject = await buildApp({ patchTask: () => "missing-project" })(
       `/api/tasks/${TASK_ID}`,
-      json("PATCH", { projectId: PROJECT_ID }),
+      json("PATCH", { parent: PARENT }),
     );
     expect(missingProject.status).toBe(409);
     expect(await missingProject.json()).toEqual({ error: "project not found" });
@@ -146,7 +148,8 @@ describe("task routes", () => {
     { text: "" },
     { showUpDate: "tomorrow" },
     { sortKey: "" },
-    { projectId: "not-a-uuid" },
+    { parent: { kind: "project", projectId: "not-a-uuid" } },
+    { projectId: PROJECT_ID },
   ])("rejects malformed patch input %# without calling TaskDO", async (body) => {
     const response = await buildApp({})(`/api/tasks/${TASK_ID}`, json("PATCH", body));
     expect(response.status).toBe(400);
