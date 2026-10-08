@@ -9,6 +9,7 @@ import {
   type Task,
   type TaskdoReplica,
 } from '@zero/agent-core';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, RefreshControl, SectionList, View } from 'react-native';
 
@@ -65,7 +66,10 @@ export default function UpcomingScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Upcoming" backToBrowse />
+      <ScreenHeader
+        title="Upcoming"
+        back={{ label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: () => router.dismissTo('/browse') }}
+      />
       {replica ? (
         <Upcoming replica={replica} />
       ) : (

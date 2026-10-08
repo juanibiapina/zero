@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BackRow, type BackLink } from '@/components/back-row';
 import { Text } from '@/components/ui/text';
 import { SyncStatusControl } from '@/components/sync-status-control';
 import { useTodoDataContext } from '@/lib/todo-data-context';
@@ -173,10 +174,19 @@ function AccountControl() {
 
 // Account actions stay app-owned so signing out can safely checkpoint and
 // remove the local workspace before Clerk drops the session.
-export function ScreenHeader({ title, showSyncStatus = false, backToBrowse = false }: { title: string; showSyncStatus?: boolean; backToBrowse?: boolean }) {
+export function ScreenHeader({ title, showSyncStatus = false, back }: { title: string; showSyncStatus?: boolean; back?: BackLink }) {
   const insets = useSafeAreaInsets();
+  if (back) {
+    return (
+      <>
+        <BackRow {...back} />
+        <View className="mb-2 min-h-12 justify-center px-screen-x">
+          <Text variant="title">{title}</Text>
+        </View>
+      </>
+    );
+  }
   return (
-    <>
     <View
       className="mb-2 flex-row items-center justify-between px-screen-x"
       style={{ paddingTop: insets.top + 12 }}
@@ -187,16 +197,5 @@ export function ScreenHeader({ title, showSyncStatus = false, backToBrowse = fal
         <AccountControl />
       </View>
     </View>
-    {backToBrowse ? (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back to Browse"
-        onPress={() => router.dismissTo('/browse')}
-        className="min-h-12 justify-center px-screen-x"
-      >
-        <Text className="text-accent">‹ Browse</Text>
-      </Pressable>
-    ) : null}
-    </>
   );
 }

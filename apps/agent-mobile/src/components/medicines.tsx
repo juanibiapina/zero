@@ -20,7 +20,6 @@ import { useColor } from '@/lib/theme';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
 
 const MEDICINE_ICONS = {
-  back: Icon.select({ ios: 'arrow.left', android: import('@expo/material-symbols/arrow_back.xml') }),
   more: Icon.select({ ios: 'ellipsis', android: import('@expo/material-symbols/more_horiz.xml') }),
   collapse: Icon.select({ ios: 'chevron.up', android: import('@expo/material-symbols/keyboard_arrow_up.xml') }),
   expand: Icon.select({ ios: 'chevron.down', android: import('@expo/material-symbols/keyboard_arrow_down.xml') }),
@@ -49,12 +48,11 @@ function useMedicines() {
   const today = useLocalDay();
   return { replica, snapshot, medicines: snapshot?.medicines ?? [], doses: snapshot?.doses ?? [], today };
 }
-function BackToMedicines() {
-  return <Pressable accessibilityRole="button" accessibilityLabel="Back to medicines" onPress={() => router.dismissTo('/browse/medicines')} className="min-h-12 flex-row items-center gap-2 px-screen-x"><MedicineGlyph name="back" /><Text variant="subtitle">Medicines</Text></Pressable>;
-}
+const BACK_TO_BROWSE = { label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: () => router.dismissTo('/browse') };
+const BACK_TO_MEDICINES = { label: 'Medicines', accessibilityLabel: 'Back to medicines', onPress: () => router.dismissTo('/browse/medicines') };
 function Page({ title, children }: { title: string; children: ReactNode }) {
   const insets = useSafeAreaInsets();
-  return <View className="flex-1 bg-background"><ScreenHeader title={title} /><BackToMedicines /><ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}><View className="px-screen-x">{children}</View></ScrollView></View>;
+  return <View className="flex-1 bg-background"><ScreenHeader title={title} back={BACK_TO_MEDICINES} /><ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}><View className="px-screen-x">{children}</View></ScrollView></View>;
 }
 function DoseTimes({ medicine }: { medicine: Medicine }) {
   return <View className="flex-row flex-wrap gap-x-4">
@@ -63,7 +61,7 @@ function DoseTimes({ medicine }: { medicine: Medicine }) {
 }
 export function MedicinesList() {
   const { replica, snapshot, today } = useMedicines();
-  return <View className="flex-1 bg-background"><ScreenHeader title="Medicines" backToBrowse />{replica && snapshot ? <MedicineListContent snapshot={snapshot} today={today} /> : <View className="px-screen-x py-6"><Text variant="subtitle">Opening medicines…</Text></View>}</View>;
+  return <View className="flex-1 bg-background"><ScreenHeader title="Medicines" back={BACK_TO_BROWSE} />{replica && snapshot ? <MedicineListContent snapshot={snapshot} today={today} /> : <View className="px-screen-x py-6"><Text variant="subtitle">Opening medicines…</Text></View>}</View>;
 }
 function listStatus(medicine: Medicine, today: string, doses: Dose[]): string | null {
   const state = medicineState(medicine, today);

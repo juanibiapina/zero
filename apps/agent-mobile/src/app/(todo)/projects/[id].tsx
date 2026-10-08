@@ -43,7 +43,7 @@ import {
   Pressable,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BackRow } from '@/components/back-row';
 import { EmojiPickerSheet } from '@/components/emoji-picker-sheet';
 import { Input } from '@/components/ui/input';
 import { useQuickAdd } from '@/components/quick-add-composer';
@@ -102,22 +102,6 @@ function reportProjectFailure(message: string) {
     id: 'project-error', durationMs: Infinity,
     action: { label: 'Dismiss', onPress: () => toast.dismiss('project-error') },
   });
-}
-
-function BackRow({ onBack }: { onBack: () => void }) {
-  const insets = useSafeAreaInsets();
-  return (
-    <View style={{ paddingTop: insets.top + 12 }} className="px-screen-x pb-2">
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back to projects"
-        hitSlop={8}
-        onPress={onBack}
-      >
-        <Text className="text-[16px] text-accent">‹ Projects</Text>
-      </Pressable>
-    </View>
-  );
 }
 
 type CommitProjectEdit = (
@@ -383,7 +367,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
   if (!project) {
     return (
       <View className="flex-1 bg-background">
-        <BackRow onBack={back} />
+        <BackRow label="Projects" accessibilityLabel="Back to projects" onPress={back} />
         <Text variant="subtitle" className="px-screen-x">
           This project is no longer here.
         </Text>
@@ -409,7 +393,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
       className="flex-1 bg-background"
       onTouchStart={flushDraft}
     >
-      <BackRow onBack={back} />
+      <BackRow label="Projects" accessibilityLabel="Back to projects" onPress={back} />
       <ReorderableTaskList
         api={tasksApi}
         tasks={projectTasks}

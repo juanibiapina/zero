@@ -71,7 +71,7 @@ it to styles through a Metro transform (no Babel preset).
   and adds no native code, so changing styles never needs an EAS rebuild — only
   `expo start --clear` after a config change.
 - **Components**: shared UI lives in `src/components/ui/` (`Text`, `Input`, `Fab`,
-  `CheckCircle`, `ListRow`, `ConfirmDialog`, `Sheet`) plus `ScreenHeader`,
+  `CheckCircle`, `ListRow`, `ConfirmDialog`, `Sheet`) plus `ScreenHeader` and `BackRow`,
   composed with the `cn()` helper in `src/lib/cn.ts` (clsx + tailwind-merge).
   `ListRow`/`CheckCircle` are the flat list-row shape used by Home, Projects,
   and Upcoming (now reached through the rightmost Browse tab).
