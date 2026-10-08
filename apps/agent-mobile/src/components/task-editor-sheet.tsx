@@ -265,11 +265,9 @@ export function TaskEditorSheet({
       }),
     );
   }, [inline, open, progress, reduceMotion, sheetHeight]);
-  const measuredBottomGap = useRef(false);
   const measureBottomGap = useCallback(() => {
-    if (!inline || (open && (measuredBottomGap.current || Keyboard.isVisible()))) return;
+    if (!inline || open) return;
     screen.current?.measureInWindow((_x, y, _width, screenHeight) => {
-      measuredBottomGap.current = true;
       setBottomGap(Math.max(0, height - y - screenHeight));
     });
   }, [height, inline, open]);

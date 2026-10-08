@@ -12,7 +12,6 @@ import { PillCountSheet } from '@/components/pill-count-sheet';
 import { ScreenHeader } from '@/components/screen-header';
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Fab } from '@/components/ui/fab';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
@@ -103,7 +102,7 @@ function MedicineListContent({ snapshot, today }: {
         </Pressable>;
       }}
     />
-    {adding ? <MedicineDrawer onClose={() => setAdding(false)} onSaved={(id) => { setAdding(false); router.push(`/browse/medicines/${id}`); }} /> : <Fab label="Add medicine" onPress={() => setAdding(true)} className="absolute right-4" style={{ bottom: insets.bottom + 16 }} />}
+    <MedicineDrawer open={adding} onOpen={() => setAdding(true)} onClose={() => setAdding(false)} onSaved={(id) => { setAdding(false); router.push(`/browse/medicines/${id}`); }} />
   </View>;
 }
 function ReminderNotice() {
@@ -225,7 +224,7 @@ export function MedicineDetail() {
     {undoing ? <ConfirmDialog title={`Mark ${time(undoing.scheduledAt)} dose as not taken?`} message="It will show as pending again." cancelLabel="Cancel" confirmLabel="Undo" onCancel={() => setUndoing(null)} onConfirm={() => { const dose = undoing; setUndoing(null); void run(() => replica.medicines.undo(dose.id)); }} /> : null}
     {counting === 'restock' ? <PillCountSheet title="How many pills did you get?" initial={supply?.refill ?? null} onClose={() => setCounting(null)} onSave={(amount) => { setCounting(null); void restockWithUndo({ replica, medicineId: medicine.id, amount, onError: setError }); }} /> : null}
     {counting === 'count' ? <PillCountSheet title="How many pills do you have now?" initial={supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} /> : null}
-    {copying ? <MedicineDrawer source={medicine} onClose={() => setCopying(false)} onSaved={(id) => { setCopying(false); router.replace(`/browse/medicines/${id}`); }} /> : null}
+    <MedicineDrawer open={copying} source={medicine} onClose={() => setCopying(false)} onSaved={(id) => { setCopying(false); router.replace(`/browse/medicines/${id}`); }} />
   </View>;
 }
 function MedicineIdentity({ medicine, onSave, options }: {
@@ -258,23 +257,33 @@ function MedicineIdentity({ medicine, onSave, options }: {
       placeholder="Notes, like “after food”" accessibilityLabel="Medicine description" className="text-subtitle" />
   </View>;
 }
-function MedicineDrawer({ source, onClose, onSaved }: { source?: Medicine; onClose: () => void; onSaved: (id: string) => void }) {
+function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: boolean; source?: Medicine; onOpen?: () => void; onClose: () => void; onSaved: (id: string) => void }) {
   const replica = useTodoReplica();
   const [draft, setDraft] = useState(() => MedicineDraft.create(medicineToday(), source, !!source));
-  const [description, setDescription] = useState(!!draft.input.instructions);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
+  const [creationId, setCreationId] = useState(safeRandomUUID);
+  const [wasOpen, setWasOpen] = useState(open);
   const pending = useRef(false);
-  const creationId = useRef(safeRandomUUID());
   const schedule = useRef<MedicineScheduleHandle>(null);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setDraft(MedicineDraft.create(medicineToday(), source, !!source));
+      setNotesOpen(false); setError(null); setDiscard(false); setCreationId(safeRandomUUID());
+    }
+  }
+  const description = notesOpen || !!draft.input.instructions;
   const close = () => { if (pending.current) return; if (discard) setDiscard(false); else if (draft.changed) setDiscard(true); else onClose(); };
   const back = () => { if (pending.current) return; if (discard) setDiscard(false); else if (!schedule.current?.handleBack()) close(); };
   const onHardwareBack = useEffectEvent(back);
   useEffect(() => {
+    if (!open) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { onHardwareBack(); return true; });
     return () => sub.remove();
-  }, []);
+  }, [open]);
   const save = async () => {
     if (!replica || pending.current) return;
     let input;
@@ -282,12 +291,12 @@ function MedicineDrawer({ source, onClose, onSaved }: { source?: Medicine; onClo
     try { input = draft.commit(); } catch (cause) { setError(errorText(cause)); return; }
     pending.current = true; setBusy(true);
     try {
-      onSaved((await replica.medicines.add(input, creationId.current)).id);
+      onSaved((await replica.medicines.add(input, creationId)).id);
     } catch (cause) { setError(errorText(cause)); }
     finally { pending.current = false; setBusy(false); }
   };
   const change = (next: MedicineDraft) => { setDraft(next); setError(null); };
-  return <TaskEditorSheet open inline autoFocus selectTextOnFocus={!!source} onClose={close} dismissLabel="Dismiss medicine editor" draft={draft.input.name} onChangeDraft={(name) => setDraft((current) => current.change({ name }))} onSubmit={() => void save()} placeholder="Name a medicine" inputAccessibilityLabel="Medicine name" inputEditable={!busy}
+  return <TaskEditorSheet open={open} onOpen={onOpen} collapsedFabLabel="Add medicine" inline autoFocus selectTextOnFocus={!!source} onClose={close} dismissLabel="Dismiss medicine editor" draft={draft.input.name} onChangeDraft={(name) => setDraft((current) => current.change({ name }))} onSubmit={() => void save()} placeholder="Name a medicine" inputAccessibilityLabel="Medicine name" inputEditable={!busy}
     context={<View className="px-screen-x pt-3"><Text variant="section">Add medicine</Text></View>}
     trailing={<MedicineSaveButton busy={busy} disabled={!draft.input.name.trim() || !replica} onPress={() => void save()} />}
     secondaryContent={<View className="border-t border-divider">
@@ -295,7 +304,7 @@ function MedicineDrawer({ source, onClose, onSaved }: { source?: Medicine; onClo
         accessibilityLabel="Medicine description" placeholder="Notes, like “after food”" multiline editable={!busy}
         value={draft.input.instructions ?? ''} onChangeText={(instructions) => change(draft.change({ instructions }))}
         className="min-h-12 px-screen-x py-3"
-      /> : <Pressable accessibilityRole="button" accessibilityLabel="Add description" disabled={busy} onPress={() => setDescription(true)} className="min-h-12 justify-center px-screen-x"><Text variant="subtitle">Add notes</Text></Pressable>}
+      /> : <Pressable accessibilityRole="button" accessibilityLabel="Add description" disabled={busy} onPress={() => setNotesOpen(true)} className="min-h-12 justify-center px-screen-x"><Text variant="subtitle">Add notes</Text></Pressable>}
       <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets scheduleRef={schedule} /></View>
       {error ? <Text variant="error" selectable className="px-screen-x pb-3">{error}</Text> : null}
     </View>}
