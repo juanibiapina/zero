@@ -89,11 +89,12 @@ notice with one button to fix it.
   system notification sound and vibration. Android may show a banner. Sound
   follows the phone's volume, Do Not Disturb and your category settings.
 - At the dose time, a locked phone or one with the screen off opens a
-  full-screen alarm with the medicine's name, the dose text, Taken and Postpone
-  1 hour, and plays the alarm sound for up to a minute. The alarm sound follows
-  the alarm volume and Android's alarm rules for Do Not Disturb. Back, the
-  power button, or either button stops the sound; after a minute it stops by
-  itself and the screen stays. The screen shows the medicine's details over the
+  full-screen alarm with the medicine's name, the dose text, and Silence,
+  Postpone 1 hour and Taken stacked at the bottom, and plays the alarm sound for
+  up to a minute. The alarm sound follows the alarm volume and Android's alarm
+  rules for Do Not Disturb. Silence stops the sound and keeps the screen with
+  Taken and Postpone 1 hour. Back, the power button, or any button stops the
+  sound; after a minute it stops by itself and the screen stays. The screen shows the medicine's details over the
   lock screen. A phone in use shows the notification instead, as Android does.
   When Android denies full-screen access, the notification still arrives and
   the list's notice offers to allow it.

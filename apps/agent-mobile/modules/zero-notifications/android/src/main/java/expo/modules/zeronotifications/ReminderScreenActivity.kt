@@ -48,7 +48,7 @@ class ReminderScreenActivity : Activity() {
   private class Target(val workspace: String, val source: String, val key: String, val date: String, val shownAt: Long)
 
   private val handler = Handler(Looper.getMainLooper())
-  private val silence = Runnable { stopSound() }
+  private val ringTimeout = Runnable { stopSound() }
   private var target: Target? = null
   private var sound: AlarmSound? = null
   private var rang: Target? = null
@@ -57,6 +57,7 @@ class ReminderScreenActivity : Activity() {
   private lateinit var text: TextView
   private lateinit var error: TextView
   private lateinit var actions: LinearLayout
+  private lateinit var silence: Button
   private var foregroundColor = Color.BLACK
   private var secondaryColor = Color.DKGRAY
   private var primary = Color.BLUE
@@ -138,14 +139,9 @@ class ReminderScreenActivity : Activity() {
     title.text = content.title
     text.text = content.text
     actions.removeAllViews()
-    val largeText = resources.configuration.fontScale > 1.3f
-    actions.orientation = if (largeText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-    for ((index, action) in content.actions.withIndex()) {
+    for (action in content.actions.sortedBy { it.settles }) {
       val button = actionButton(action.label, if (action.settles) primary else neutral, if (action.settles) onPrimary else foregroundColor) { press(action) }
-      val params = if (largeText) LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        else LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-      if (index > 0) { if (largeText) params.topMargin = dp(12) else params.leftMargin = dp(16) }
-      actions.addView(button, params)
+      actions.addView(button, stackParams())
     }
   }
 
@@ -169,14 +165,18 @@ class ReminderScreenActivity : Activity() {
     rang = current
     if (NotificationEngine.muted(this, current.workspace)) return
     sound = alarmSound(this).also { it.play() }
-    handler.postDelayed(silence, RING_MS)
+    silence.visibility = View.VISIBLE
+    handler.postDelayed(ringTimeout, RING_MS)
   }
 
   private fun stopSound() {
-    handler.removeCallbacks(silence)
+    handler.removeCallbacks(ringTimeout)
     sound?.stop()
     sound = null
+    silence.visibility = View.GONE
   }
+
+  private fun stackParams() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) }
 
   private fun close() {
     stopSound()
@@ -205,7 +205,8 @@ class ReminderScreenActivity : Activity() {
       setPadding(0, dp(16), 0, dp(16))
       accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
     }
-    actions = LinearLayout(this).apply { setPadding(0, dp(24), 0, 0) }
+    actions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    silence = actionButton("Silence", Color.TRANSPARENT, foregroundColor, secondaryColor) { stopSound() }.apply { visibility = View.GONE }
     val details = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
       gravity = Gravity.CENTER
@@ -218,7 +219,12 @@ class ReminderScreenActivity : Activity() {
       setPadding(spacing, spacing, spacing, spacing)
       addView(ScrollView(this@ReminderScreenActivity).apply { isFillViewport = true; addView(details) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
       addView(error)
-      addView(actions)
+      addView(LinearLayout(this@ReminderScreenActivity).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(0, dp(12), 0, 0)
+        addView(silence, stackParams())
+        addView(actions)
+      })
       setOnApplyWindowInsetsListener { view, insets ->
         if (Build.VERSION.SDK_INT >= 30) {
           val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
@@ -232,7 +238,7 @@ class ReminderScreenActivity : Activity() {
     }
   }
 
-  private fun actionButton(label: String, color: Int, textColor: Int, action: () -> Unit) = Button(this).apply {
+  private fun actionButton(label: String, color: Int, textColor: Int, stroke: Int? = null, action: () -> Unit) = Button(this).apply {
     text = label
     isAllCaps = false
     textSize = 18f
@@ -242,7 +248,11 @@ class ReminderScreenActivity : Activity() {
     minimumHeight = dp(72)
     setPadding(dp(16), dp(20), dp(16), dp(20))
     setTextColor(textColor)
-    val shape = GradientDrawable().apply { setColor(color); cornerRadius = dp(40).toFloat() }
+    val shape = GradientDrawable().apply {
+      setColor(color)
+      cornerRadius = dp(40).toFloat()
+      if (stroke != null) setStroke(dp(1), stroke)
+    }
     background = RippleDrawable(ColorStateList.valueOf(Color.argb(40, Color.red(textColor), Color.green(textColor), Color.blue(textColor))), shape, null)
     elevation = 0f
     setOnClickListener { action() }

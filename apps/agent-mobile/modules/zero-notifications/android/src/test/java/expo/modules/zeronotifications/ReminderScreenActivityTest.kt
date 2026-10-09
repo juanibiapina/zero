@@ -97,8 +97,24 @@ class ReminderScreenActivityTest {
   @Test
   fun showsTheCardAndRings() {
     val activity = open().get()
-    assertEquals(listOf("Vitamin D", "08:00 dose due", "Taken", "Postpone 1 hour"), texts(activity.window.decorView))
+    assertEquals(listOf("Vitamin D", "08:00 dose due", "Silence", "Postpone 1 hour", "Taken"), texts(activity.window.decorView))
     assertTrue(playing)
+  }
+
+  @Test
+  fun silenceStopsTheSoundAndKeepsTheScreen() {
+    val activity = open().get()
+    button(activity, "Silence").performClick()
+    idle()
+    assertFalse(playing)
+    assertFalse(activity.isFinishing)
+    assertEquals(listOf("Vitamin D", "08:00 dose due", "Postpone 1 hour", "Taken"), texts(activity.window.decorView))
+    assertTrue(receipts().none { it.getString("type") == "settled" })
+    assertTrue(shadowOf(manager).getNotification(NotificationEngine.occurrence("source", "item", day), 0) != null)
+    button(activity, "Taken").performClick()
+    idle()
+    assertEquals(listOf("settled"), receipts().map { it.getString("type") }.filter { it == "settled" })
+    assertTrue(activity.isFinishing)
   }
 
   @Test
@@ -109,6 +125,7 @@ class ReminderScreenActivityTest {
     idle(Duration.ofSeconds(1))
     assertFalse(playing)
     assertFalse(activity.isFinishing)
+    assertFalse("Silence" in texts(activity.window.decorView))
   }
 
   @Test
@@ -125,8 +142,9 @@ class ReminderScreenActivityTest {
   fun aSilencedWorkspaceNeverRings() {
     context.applicationInfo.flags = context.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
     NotificationEngine.silence(context, "workspace")
-    open()
+    val activity = open().get()
     assertEquals(0, plays)
+    assertFalse("Silence" in texts(activity.window.decorView))
   }
 
   @Test
