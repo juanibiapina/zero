@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { PROJECT_SECTION_FOLDS_KEY } from './project-section-folds';
 import { RUNTIME_PROFILE } from './runtime-profile';
 
 export async function resetHermeticTodoState(): Promise<void> {
@@ -11,6 +12,6 @@ export async function resetHermeticTodoState(): Promise<void> {
     storageKeys.todoWorkspaceKey,
     storageKeys.timezoneKey,
     storageKeys.iconSuggestionsKey,
-    storageKeys.projectSectionFoldsKey,
+    PROJECT_SECTION_FOLDS_KEY,
   ]);
 }

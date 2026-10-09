@@ -6,7 +6,6 @@ export type RuntimeProfile = Readonly<{
   storageKeys: Readonly<{
     timezoneKey: string;
     iconSuggestionsKey: string;
-    projectSectionFoldsKey: string;
     todoWorkspaceKey: string;
   }>;
   todoWorkspaceId: string | undefined;

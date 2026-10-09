@@ -6,7 +6,10 @@ import { RUNTIME_PROFILE } from './runtime-profile';
 
 export type ProjectSectionFolds = Partial<Record<ProjectDisplayStatus, boolean>>;
 
-const STORAGE_KEY = RUNTIME_PROFILE.storageKeys.projectSectionFoldsKey;
+export const PROJECT_SECTION_FOLDS_KEY = RUNTIME_PROFILE.hermetic
+  ? 'zero.e2e.project-section-folds.v1'
+  : 'zero.project-section-folds.v1';
+const STORAGE_KEY = PROJECT_SECTION_FOLDS_KEY;
 
 const read = async (): Promise<ProjectSectionFolds> => {
   try {

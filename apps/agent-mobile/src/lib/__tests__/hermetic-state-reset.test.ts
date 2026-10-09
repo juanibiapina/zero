@@ -13,7 +13,6 @@ jest.mock('../runtime-profile', () => ({
       todoWorkspaceKey: 'workspace',
       timezoneKey: 'timezone',
       iconSuggestionsKey: 'icons',
-      projectSectionFoldsKey: 'folds',
     },
   },
 }));
@@ -27,7 +26,7 @@ describe('hermetic state reset', () => {
     await resetHermeticTodoState();
 
     expect(mockMultiRemove).toHaveBeenCalledWith([
-      'workspace', 'timezone', 'icons', 'folds',
+      'workspace', 'timezone', 'icons', 'zero.e2e.project-section-folds.v1',
     ]);
   });
 });
