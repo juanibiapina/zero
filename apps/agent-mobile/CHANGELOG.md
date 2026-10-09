@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-09: Change the scheduler, project picker, task editor, dose, pill count, project status, and icon picker sheets to standard Android sheets: drag them by the handle, swipe them down or press Back to close them.
+
 - 2026-10-09: Change Projects to start with After and Backlog collapsed, and remember which sections you open or close on this phone.
 
 - 2026-10-08: Edit a medicine's name and notes right on its page. Adding a medicine opens with the keyboard ready on the name. Choose when a medicine starts (today, tomorrow, or another day) in its own Starts section. Remove the day line for dragging dose times, which could crash the app; tap a dose to change its time.

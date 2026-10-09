@@ -113,7 +113,14 @@ describe('TaskEditorSheet', () => {
     ]));
   });
 
-  it('shows the drawer grip and project icon once, then opens both metadata pickers', async () => {
+  it('closes the editing sheet when the user dismisses it', async () => {
+    const onClose = jest.fn();
+    const view = await render(<TaskEditorSheet {...base} onClose={onClose} />);
+    await fireEvent.press(view.getByLabelText('Close sheet'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the project icon once, then opens both metadata pickers', async () => {
     const schedule = jest.fn();
     const project = jest.fn();
     const view = await render(
@@ -122,7 +129,6 @@ describe('TaskEditorSheet', () => {
         projectAction={{ label: 'Launch', icon: '🎯', active: true, onPress: project }}
       />,
     );
-    expect(view.getByTestId('task-editor-grip')).toBeTruthy();
     expect(view.getAllByText('🎯 Launch')).toHaveLength(1);
     expect(view.queryByText('📁')).toBeNull();
     expect(view.queryByText('🗓')).toBeNull();

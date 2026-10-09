@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
-import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   KeyboardEvents,
@@ -31,6 +31,7 @@ import { useResolveClassNames } from 'uniwind';
 
 import { ScheduleHighlightInput } from '@/components/schedule-highlight-input';
 import { Input } from '@/components/ui/input';
+import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
 import { useColor } from '@/lib/theme';
@@ -183,10 +184,10 @@ function KeyboardGapFill({ height }: { height: number }) {
 
 // Create and edit share the title, metadata rows, and keyboard docking.
 // Creation stays in the screen window so its input can open the keyboard on
-// mount. Editing keeps the native Modal and its slide. The discard overlay
-// stays in the same window as its drawer.
+// mount. Editing opens in the app's native Sheet. The discard overlay stays in
+// the same window as its drawer.
 export function TaskEditorSheet({
-  open, onClose, onBack, dismissLabel, draft, onChangeDraft, onSubmit,
+  open, onClose, dismissLabel, draft, onChangeDraft, onSubmit,
   placeholder = 'Task', autoFocus = false, inline = false, inputRef, inputAccessibilityLabel,
   leading, modeSelector, context, editorContent, secondaryContent, trailing, inputEditable = true, selectTextOnFocus = false,
   scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
@@ -194,7 +195,6 @@ export function TaskEditorSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  onBack?: () => void;
   dismissLabel: string;
   draft: string;
   onChangeDraft: (text: string) => void;
@@ -298,15 +298,17 @@ export function TaskEditorSheet({
   const sheetBody = (
     <View
       accessibilityLabel="sheet"
-      style={{ paddingBottom: insets.bottom + 8 }}
-      className={cn(!inline && 'rounded-t-2xl bg-surface pt-2 shadow-raised', inline && 'pt-2')}
+      style={inline ? { paddingBottom: insets.bottom + 8 } : undefined}
+      className={cn(inline && 'pt-2', !inline && 'shrink pb-2')}
     >
-      <ScrollView style={{ maxHeight: Math.max(180, height - keyboardHeight - insets.top - insets.bottom - 32), flexGrow: 0 }} keyboardShouldPersistTaps="handled">
-      <View
-        testID="task-editor-grip"
-        importantForAccessibility="no"
-        className="mb-1 h-1 w-9 self-center rounded-full bg-divider"
-      />
+      <ScrollView style={{ maxHeight: inline ? Math.max(180, height - keyboardHeight - insets.top - insets.bottom - 32) : undefined, flexGrow: 0 }} keyboardShouldPersistTaps="handled">
+      {inline ? (
+        <View
+          testID="task-editor-grip"
+          importantForAccessibility="no"
+          className="mb-1 h-1 w-9 self-center rounded-full bg-divider"
+        />
+      ) : null}
       {modeSelector}
       {context}
       {editorContent ?? (
@@ -382,28 +384,12 @@ export function TaskEditorSheet({
       </ScrollView>
     </View>
   );
-  const modalContent = (
-    <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={dismissLabel}
-        className="flex-1 bg-scrim"
-        onPress={onClose}
-      />
-      <KeyboardStickyView
-        offset={{ opened: 0 }}
-        style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
-      >
-        {sheetBody}
-      </KeyboardStickyView>
-      {overlay}
-    </>
-  );
   if (!inline) {
     return (
-      <Modal visible={open} transparent animationType="slide" onRequestClose={onBack ?? onClose}>
-        {modalContent}
-      </Modal>
+      <Sheet open={open} onClose={onClose}>
+        {sheetBody}
+        {overlay}
+      </Sheet>
     );
   }
   return (

@@ -94,6 +94,14 @@ back only where the native component does not fit.
   needs a **new EAS dev build** (the sign-in Button first shipped in build 14) —
   JS hot-reload alone crashes on render on an older client that lacks the native
   view. Once the module is in the client, further JS changes hot-reload normally.
+- **Bottom sheets -> `Sheet` (`src/components/ui/sheet.tsx`).** It is the native
+  Material 3 sheet from `@expo/ui/community/bottom-sheet` with React Native
+  content, so dragging, swipe down, scrim, Back, and keyboard insets come from
+  Android. It fits its content and leaves room for the keyboard; `tall` fixes it
+  at 85% of the screen. Do not build a sheet from an RN `Modal`. A sheet's
+  input cannot `autoFocus` on mount, because the sheet's window is not focused
+  yet; focus it after a short delay, as `PillCountSheet` does. The quick-add
+  composer stays the in-screen morph described below.
 - **The Home task list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
   native but **not virtualized**; Home is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).

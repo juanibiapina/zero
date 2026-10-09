@@ -1,39 +1,83 @@
-import {
-  BottomSheet,
-  type BottomSheetContentPadding,
-} from '@expo/ui';
+import { BottomSheet, type BottomSheetMethods } from '@expo/ui/community/bottom-sheet';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Keyboard, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// A generic, entity-agnostic bottom sheet: a thin wrapper over the universal
-// @expo/ui BottomSheet (a real SwiftUI sheet on iOS, a Jetpack Compose
-// ModalBottomSheet on Android), so gesture, animation, and the accessibility
-// floor come from the OS — not @gorhom/bottom-sheet or a hand-rolled Reanimated
-// sheet. It knows nothing about any entity: callers pass native @expo/ui content
-// as `children` (the BottomSheet renders them in a native tree). Sibling of the
-// web `ui/sheet`, sharing the same `{ open, onClose, children }` contract.
-//
-// The component stays mounted and toggles `isPresented`; `snapPoints` is omitted
-// so the sheet auto-sizes to its (short) content. Back/scrim dismiss map to
-// `onClose`.
+import { useColor } from '@/lib/theme';
+
+const SHEET_CHROME = 64;
+const MIN_CONTENT_HEIGHT = 180;
+
 export type SheetProps = {
   open: boolean;
   onClose: () => void;
-  children: React.ReactNode;
-  contentPadding?: BottomSheetContentPadding;
+  tall?: boolean;
+  children: ReactNode;
 };
 
-export function Sheet({
-  open,
-  onClose,
-  children,
-  contentPadding,
-}: SheetProps) {
+export function Sheet({ open, onClose, tall = false, children }: SheetProps) {
+  const sheet = useRef<BottomSheetMethods>(null);
+  const [presented, setPresented] = useState(open);
+  const openRef = useRef(open);
+  const onCloseRef = useRef(onClose);
+  const surface = useColor('--color-surface');
+  const [kept, setKept] = useState(children);
+  if (open && kept !== children) setKept(children);
+  if (open && !presented) setPresented(true);
+
+  useEffect(() => {
+    openRef.current = open;
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    if (!open) sheet.current?.close();
+  }, [open]);
+
+  const closed = useCallback(() => {
+    setPresented(false);
+    if (openRef.current) onCloseRef.current();
+  }, []);
+
+  if (!presented) return null;
   return (
     <BottomSheet
-      isPresented={open}
-      onDismiss={onClose}
-      contentPadding={contentPadding}
+      ref={sheet}
+      index={0}
+      enablePanDownToClose
+      onClose={closed}
+      backgroundStyle={surface ? { backgroundColor: surface } : undefined}
     >
-      {children}
+      <SheetContent tall={tall}>{open ? children : kept}</SheetContent>
     </BottomSheet>
   );
+}
+
+function SheetContent({ tall, children }: { tall: boolean; children: ReactNode }) {
+  const { height } = useWindowDimensions();
+  const available = useAvailableHeight();
+  return (
+    <View
+      style={tall
+        ? { height: Math.min(Math.round(height * 0.85) - SHEET_CHROME, available) }
+        : { maxHeight: available }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function useAvailableHeight() {
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [keyboard, setKeyboard] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (event) => setKeyboard(event.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboard(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return Math.max(MIN_CONTENT_HEIGHT, height - insets.top - insets.bottom - keyboard - SHEET_CHROME);
 }

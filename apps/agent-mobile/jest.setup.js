@@ -245,16 +245,14 @@ jest.mock('react-native-keyboard-controller', () => {
 
 // @expo/ui renders real native views (requireNativeView), which is unavailable
 // under jest. Provide a minimal mock that renders the
-// pieces the sheet content uses as plain, queryable RN elements: BottomSheet
-// shows its children only while presented; Button is a Pressable whose
-// accessibilityLabel is its `label`. Defined with React.createElement (no JSX)
+// pieces the app uses as plain, queryable RN elements: Button is a Pressable
+// whose accessibilityLabel is its `label`. Defined with React.createElement (no JSX)
 // since a hoisted jest.mock factory can't safely hold JSX.
 //
 // The mock also enforces @expo/ui's host invariant: on Android every Jetpack
 // Compose component (Button, Column, Row, Text, TextInput, Icon) must be wrapped
-// in a `<Host>` or it fails to render with a Compose error banner. `Host` and
-// `BottomSheet` (which wraps its own Host natively) provide a context; the
-// hosted components throw when that context is absent. Without this guard a bare
+// in a `<Host>` or it fails to render with a Compose error banner. `Host`
+// provides a context; the hosted components throw when that context is absent. Without this guard a bare
 // `@expo/ui` component looks fine under jest but breaks on device.
 const mockReactForExpoUi = require('react');
 jest.mock('@expo/ui', () => {
@@ -327,18 +325,6 @@ jest.mock('@expo/ui', () => {
       testID,
     });
   };
-  const BottomSheet = ({ isPresented, children }) =>
-    isPresented
-      ? mockReactForExpoUi.createElement(
-          HostContext.Provider,
-          { value: true },
-          mockReactForExpoUi.createElement(
-            View,
-            { accessibilityLabel: 'sheet' },
-            children,
-          ),
-        )
-      : null;
   const Picker = ({ selectedValue, onValueChange, enabled = true, children }) => {
     useHosted('Picker');
     const [open, setOpen] = mockReactForExpoUi.useState(false);
@@ -359,9 +345,31 @@ jest.mock('@expo/ui', () => {
     Button,
     Icon,
     TextInput,
-    BottomSheet,
     Picker,
   };
+});
+
+// The native sheet behind the app's Sheet. It shows its React Native children
+// while open and offers the user's dismiss (swipe, scrim, Back) as one
+// "Close sheet" button. close() calls onClose as the native sheet does after its
+// exit animation.
+jest.mock('@expo/ui/community/bottom-sheet', () => {
+  const { View, Pressable, Text } = require('react-native');
+  const BottomSheet = ({ ref, index = 0, onClose, children }) => {
+    mockReactForExpoUi.useImperativeHandle(ref, () => ({ close: () => onClose?.() }), [onClose]);
+    if (index < 0) return null;
+    return mockReactForExpoUi.createElement(
+      View,
+      { accessibilityLabel: 'sheet' },
+      mockReactForExpoUi.createElement(
+        Pressable,
+        { accessibilityRole: 'button', accessibilityLabel: 'Close sheet', onPress: () => onClose?.() },
+        mockReactForExpoUi.createElement(Text, null, 'Close sheet'),
+      ),
+      children,
+    );
+  };
+  return { __esModule: true, BottomSheet, default: BottomSheet };
 });
 
 jest.mock('@expo/ui/community/datetime-picker', () => {

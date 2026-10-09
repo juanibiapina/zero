@@ -1,9 +1,9 @@
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { MedicineDraft, medicineDay, medicineEndDate, medicineToday, pillCount, type MedicineSlot, type Weekday } from '@zero/agent-core';
 import { useImperativeHandle, useState, type Ref } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, View } from 'react-native';
 
+import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 
 const WEEKDAYS: { day: Weekday; short: string; name: string }[] = [
@@ -90,9 +90,11 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
         <Stepper label="days" value={days} min={1} disabled={disabled} onChange={setDays} />
       </View> : null}
     </Section>
-    {slot ? <DoseSheet slot={slot} canRemove={doses.length > 1} disabled={disabled} onClose={() => setOpenSlot(null)}
-      onChange={(change) => onChange(change(draft))} onPickTime={(save) => setPicker({ mode: 'time', value: new Date(`2000-01-01T${slot.alarmAt}:00`), save: (date) => save(clockOf(date)) })}
-    /> : null}
+    <Sheet open={slot != null} onClose={() => setOpenSlot(null)}>
+      {slot ? <DoseForm slot={slot} canRemove={doses.length > 1} disabled={disabled} onClose={() => setOpenSlot(null)}
+        onChange={(change) => onChange(change(draft))} onPickTime={(save) => setPicker({ mode: 'time', value: new Date(`2000-01-01T${slot.alarmAt}:00`), save: (date) => save(clockOf(date)) })}
+      /> : null}
+    </Sheet>
     {picker ? <DateTimePicker value={picker.value} mode={picker.mode} is24Hour onChange={(event, date) => { if (event.type === 'set' && date) picker.save(date); setPicker(null); }} /> : null}
   </View>;
 }
@@ -110,42 +112,35 @@ export function Stepper({ label, value, min = 1, disabled = false, onChange }: {
   </View>;
 }
 
-function DoseSheet({ slot, canRemove, disabled, onClose, onChange, onPickTime }: {
+function DoseForm({ slot, canRemove, disabled, onClose, onChange, onPickTime }: {
   slot: MedicineSlot; canRemove: boolean; disabled: boolean; onClose: () => void;
   onChange: (change: (draft: MedicineDraft) => MedicineDraft) => Promise<void> | void;
   onPickTime: (save: (time: string) => void) => void;
 }) {
-  const insets = useSafeAreaInsets();
   const lead = minutesOf(slot.alarmAt) - minutesOf(slot.remindAt);
   const leads = HEADS_UP.some((option) => option.minutes === lead) ? HEADS_UP : [...HEADS_UP, { minutes: lead, label: leadLabel(lead) }].sort((a, b) => a.minutes - b.minutes);
-  return <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-    <Pressable accessibilityRole="button" accessibilityLabel="Close dose" className="flex-1 bg-scrim" onPress={onClose} />
-    <View style={{ paddingBottom: insets.bottom + 8 }} className="rounded-t-2xl bg-surface pt-2 shadow-raised">
-      <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
-      <ScrollView className="px-screen-x" keyboardShouldPersistTaps="handled">
-        <View className="min-h-14 flex-row items-center justify-between">
-          <Text variant="section">Dose</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Change time, ${slot.alarmAt}`} disabled={disabled} onPress={() => onPickTime((time) => void onChange((draft) => draft.time(slot.id, 'alarmAt', time)))} className="min-h-12 justify-center rounded-xl bg-surface-muted px-4">
-            <Text className="text-section font-semibold text-accent" style={{ fontVariant: ['tabular-nums'] }}>{slot.alarmAt}</Text>
-          </Pressable>
-        </View>
-        <View className="min-h-14 flex-row items-center justify-between border-t border-divider">
-          <Text accessibilityLabel={`Takes ${pillCount(slot.amount)}`}>{slot.amount === 1 ? 'Pill' : 'Pills'}</Text>
-          <Stepper label="pills" value={slot.amount} disabled={disabled} onChange={(amount) => void onChange((draft) => draft.amount(slot.id, amount))} />
-        </View>
-        <View className="border-t border-divider pt-3">
-          <Text>Remind me before</Text>
-          <View className="flex-row flex-wrap gap-x-2">
-            {leads.map((option) => <Chip key={option.minutes} label={option.label} accessibilityLabel={`Remind ${option.label} before`} selected={option.minutes === lead} disabled={disabled} onPress={() => void onChange((draft) => draft.heads(slot.id, option.minutes))} />)}
-          </View>
-        </View>
-        <View className="flex-row items-center justify-between border-t border-divider py-2">
-          {canRemove ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${slot.alarmAt} dose`} disabled={disabled} onPress={() => { onClose(); void onChange((draft) => draft.removeTime(slot.id)); }} className="min-h-12 justify-center"><Text className="font-medium text-danger">Remove</Text></Pressable> : <View />}
-          <Pressable accessibilityRole="button" accessibilityLabel="Done" onPress={onClose} className="min-h-12 justify-center px-2"><Text className="font-semibold text-accent">Done</Text></Pressable>
-        </View>
-      </ScrollView>
+  return <ScrollView className="px-screen-x" keyboardShouldPersistTaps="handled">
+    <View className="min-h-14 flex-row items-center justify-between">
+      <Text variant="section">Dose</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Change time, ${slot.alarmAt}`} disabled={disabled} onPress={() => onPickTime((time) => void onChange((draft) => draft.time(slot.id, 'alarmAt', time)))} className="min-h-12 justify-center rounded-xl bg-surface-muted px-4">
+        <Text className="text-section font-semibold text-accent" style={{ fontVariant: ['tabular-nums'] }}>{slot.alarmAt}</Text>
+      </Pressable>
     </View>
-  </Modal>;
+    <View className="min-h-14 flex-row items-center justify-between border-t border-divider">
+      <Text accessibilityLabel={`Takes ${pillCount(slot.amount)}`}>{slot.amount === 1 ? 'Pill' : 'Pills'}</Text>
+      <Stepper label="pills" value={slot.amount} disabled={disabled} onChange={(amount) => void onChange((draft) => draft.amount(slot.id, amount))} />
+    </View>
+    <View className="border-t border-divider pt-3">
+      <Text>Remind me before</Text>
+      <View className="flex-row flex-wrap gap-x-2">
+        {leads.map((option) => <Chip key={option.minutes} label={option.label} accessibilityLabel={`Remind ${option.label} before`} selected={option.minutes === lead} disabled={disabled} onPress={() => void onChange((draft) => draft.heads(slot.id, option.minutes))} />)}
+      </View>
+    </View>
+    <View className="flex-row items-center justify-between border-t border-divider py-2">
+      {canRemove ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${slot.alarmAt} dose`} disabled={disabled} onPress={() => { onClose(); void onChange((draft) => draft.removeTime(slot.id)); }} className="min-h-12 justify-center"><Text className="font-medium text-danger">Remove</Text></Pressable> : <View />}
+      <Pressable accessibilityRole="button" accessibilityLabel="Done" onPress={onClose} className="min-h-12 justify-center px-2"><Text className="font-semibold text-accent">Done</Text></Pressable>
+    </View>
+  </ScrollView>;
 }
 
 export function MedicineSaveButton({ busy, disabled, onPress }: { busy: boolean; disabled: boolean; onPress: () => void }) {

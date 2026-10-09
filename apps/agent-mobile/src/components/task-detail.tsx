@@ -17,14 +17,13 @@ import {
 import { toText } from '@zeroapps/recurrence';
 import { Host, Icon } from '@expo/ui';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Keyboard, Modal, Pressable, ScrollView, SectionList, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, SectionList, View } from 'react-native';
 
 import { PillCountSheet } from '@/components/pill-count-sheet';
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
 import { Input } from '@/components/ui/input';
+import { Sheet } from '@/components/ui/sheet';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
@@ -36,9 +35,9 @@ const OPEN_PROJECT_ICON = Icon.select({
   android: import('@expo/material-symbols/arrow_outward.xml'),
 });
 
-// The project picker: a bounded, keyboard-docked React Native modal with a
-// title filter and a pinned "No project" row (move back to loose). Mounting only
-// while open resets the filter between task edits and quick-add drafts.
+// The project picker: a sheet with a title filter and a pinned "No project" row
+// (move back to loose). The sheet mounts its content only while presented, which
+// resets the filter between task edits and quick-add drafts.
 type ProjectPickerSheetProps = {
   open: boolean;
   title?: string;
@@ -54,39 +53,26 @@ type ProjectPickerSheetProps = {
 };
 
 export function ProjectPickerSheet(props: ProjectPickerSheetProps) {
-  return props.open ? <OpenProjectPickerSheet {...props} /> : null;
+  return (
+    <Sheet open={props.open} onClose={props.onClose}>
+      <ProjectPicker {...props} />
+    </Sheet>
+  );
 }
 
-function OpenProjectPickerSheet({
-  open,
+function ProjectPicker({
   projects,
   openTasks,
   conditions,
   afterSourceProjectId,
   selectedProjectId,
   onPick,
-  onClose,
   title = 'Move to project',
   showNoProject = true,
   emptyCopy,
 }: ProjectPickerSheetProps) {
-  const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
   const [filter, setFilter] = useState('');
   const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', (event) =>
-      setKeyboardHeight(event.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener('keyboardDidHide', () =>
-      setKeyboardHeight(0),
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
   const needle = filter.trim();
   const today = useLocalDay();
   const grouped = useMemo(() => projectStatusSections({
@@ -96,108 +82,86 @@ function OpenProjectPickerSheet({
     ...section, data: section.collapsed ? [] : section.projects,
   })), [grouped]);
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close project picker"
-        className="flex-1 bg-scrim"
-        onPress={onClose}
-      />
-      <KeyboardStickyView
-        style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
-      >
-      <View
-        style={{
-          paddingBottom: insets.bottom + 8,
-          maxHeight: Math.max(
-            200,
-            height - keyboardHeight - insets.top - 48,
-          ),
-        }}
-        className="rounded-t-2xl bg-surface pt-2 shadow-raised"
-      >
-        <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
-        <Text className="px-screen-x pb-1 pt-2 text-[15px] font-semibold">
-          {title}
-        </Text>
+    <View className="shrink">
+      <Text className="px-screen-x pb-1 text-[15px] font-semibold">
+        {title}
+      </Text>
 
-        <View className="mx-screen-x my-2 min-h-12 justify-center rounded-xl bg-background px-3">
-          <Input
-            value={filter}
-            onChangeText={setFilter}
-            placeholder="Filter projects"
-            accessibilityLabel="Filter projects"
-            autoCorrect={false}
-            returnKeyType="search"
-            className="min-h-12"
-            testID="project-filter"
-          />
-        </View>
-
-        {showNoProject ? (
-          <QuickRow
-            icon="⊘"
-            label="No project"
-            onPress={() => onPick(null)}
-            testID="project-none"
-            selected={selectedProjectId == null}
-          />
-        ) : null}
-
-        <SectionList
-          style={{ flexShrink: 1 }}
-          className="border-t border-divider"
-          sections={sections}
-          initialNumToRender={20}
-          keyExtractor={(p) => p.id}
-          keyboardShouldPersistTaps="handled"
-          stickySectionHeadersEnabled={false}
-          ListEmptyComponent={
-            needle || emptyCopy ? (
-              <Text className="px-screen-x py-4 text-foreground-secondary">
-                {needle ? 'No matching projects' : emptyCopy}
-              </Text>
-            ) : null
-          }
-          renderSectionHeader={({ section }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${PROJECT_DISPLAY_STATUS_LABELS[section.status]}, ${section.count}`}
-              accessibilityState={{ expanded: !section.collapsed, disabled: Boolean(needle) }}
-              disabled={Boolean(needle)}
-              onPress={() => setCollapseOverride((prev) => ({ ...prev, [section.status]: !section.collapsed }))}
-              className="min-h-12 flex-row items-center gap-2 bg-background px-screen-x"
-            >
-              <Text variant="section">{section.collapsed ? '▸' : '▾'} {PROJECT_DISPLAY_STATUS_LABELS[section.status]}</Text>
-              <Text variant="caption">· {section.count}</Text>
-            </Pressable>
-          )}
-          renderItem={({ item: p }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={p.title}
-              accessibilityState={{ selected: p.id === selectedProjectId }}
-              testID={`project-${p.id}`}
-              onPress={() => onPick(p.id)}
-              className="min-h-12 flex-row items-center gap-3 px-screen-x py-3"
-            >
-              <Text className="w-6 text-center text-[18px]">{p.icon}</Text>
-              <Text
-                className={
-                  p.id === selectedProjectId
-                    ? 'flex-1 text-[16px] font-medium text-accent'
-                    : 'flex-1 text-[16px]'
-                }
-              >
-                {p.title}
-              </Text>
-              {p.id === selectedProjectId ? <Text importantForAccessibility="no">✓</Text> : null}
-            </Pressable>
-          )}
+      <View className="mx-screen-x my-2 min-h-12 justify-center rounded-xl bg-background px-3">
+        <Input
+          value={filter}
+          onChangeText={setFilter}
+          placeholder="Filter projects"
+          accessibilityLabel="Filter projects"
+          autoCorrect={false}
+          returnKeyType="search"
+          className="min-h-12"
+          testID="project-filter"
         />
       </View>
-      </KeyboardStickyView>
-    </Modal>
+
+      {showNoProject ? (
+        <QuickRow
+          icon="⊘"
+          label="No project"
+          onPress={() => onPick(null)}
+          testID="project-none"
+          selected={selectedProjectId == null}
+        />
+      ) : null}
+
+      <SectionList
+        style={{ flexShrink: 1 }}
+        className="border-t border-divider"
+        sections={sections}
+        initialNumToRender={20}
+        keyExtractor={(p) => p.id}
+        keyboardShouldPersistTaps="handled"
+        stickySectionHeadersEnabled={false}
+        ListEmptyComponent={
+          needle || emptyCopy ? (
+            <Text className="px-screen-x py-4 text-foreground-secondary">
+              {needle ? 'No matching projects' : emptyCopy}
+            </Text>
+          ) : null
+        }
+        renderSectionHeader={({ section }) => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${PROJECT_DISPLAY_STATUS_LABELS[section.status]}, ${section.count}`}
+            accessibilityState={{ expanded: !section.collapsed, disabled: Boolean(needle) }}
+            disabled={Boolean(needle)}
+            onPress={() => setCollapseOverride((prev) => ({ ...prev, [section.status]: !section.collapsed }))}
+            className="min-h-12 flex-row items-center gap-2 bg-background px-screen-x"
+          >
+            <Text variant="section">{section.collapsed ? '▸' : '▾'} {PROJECT_DISPLAY_STATUS_LABELS[section.status]}</Text>
+            <Text variant="caption">· {section.count}</Text>
+          </Pressable>
+        )}
+        renderItem={({ item: p }) => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={p.title}
+            accessibilityState={{ selected: p.id === selectedProjectId }}
+            testID={`project-${p.id}`}
+            onPress={() => onPick(p.id)}
+            className="min-h-12 flex-row items-center gap-3 px-screen-x py-3"
+          >
+            <Text className="w-6 text-center text-[18px]">{p.icon}</Text>
+            <Text
+              className={
+                p.id === selectedProjectId
+                  ? 'flex-1 text-[16px] font-medium text-accent'
+                  : 'flex-1 text-[16px]'
+              }
+            >
+              {p.title}
+            </Text>
+            {p.id === selectedProjectId ? <Text importantForAccessibility="no">✓</Text> : null}
+          </Pressable>
+        )}
+      />
+    </View>
   );
 }
 
@@ -237,8 +201,7 @@ function QuickRow({
   );
 }
 
-// The schedule selector: a plain React Native modal, NOT an @expo/ui tree, so it
-// reproduces Todoist's scheduler — quick options with the resolved weekday on the
+// The schedule selector: a sheet that reproduces Todoist's scheduler — quick options with the resolved weekday on the
 // right, an inline month calendar, and a "No date" row. It sets a task's
 // showUpDate (a plain date; no time, no recurrence). Exported so task creation
 // and editing open the same scheduler.
@@ -253,20 +216,20 @@ type ScheduleSheetProps = {
 };
 
 export function ScheduleSheet(props: ScheduleSheetProps) {
-  return props.open ? <OpenScheduleSheet {...props} /> : null;
+  return (
+    <Sheet open={props.open} onClose={props.onClose}>
+      <Scheduler {...props} />
+    </Sheet>
+  );
 }
 
-function OpenScheduleSheet({
-  open,
+function Scheduler({
   showUpDate,
   recurrenceLabel,
   onStopRecurrence,
   onCompleteForever,
   onPick,
-  onClose,
 }: ScheduleSheetProps) {
-  const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
   const accent = useColor('--color-accent');
   const onAccent = useColor('--color-on-accent');
   const today = useLocalDay();
@@ -293,149 +256,135 @@ function OpenScheduleSheet({
   };
 
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close scheduler"
-        className="flex-1 bg-scrim"
-        onPress={onClose}
+    <ScrollView style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled">
+      <Text className="px-screen-x pb-1 text-[15px] font-semibold">
+        Schedule
+      </Text>
+
+      <QuickRow
+        icon="🌤"
+        label="Today"
+        hint={weekdayShort(today)}
+        onPress={() => onPick(today)}
+        testID="schedule-today"
+        selected={selected === today}
       />
-      <View
-        style={{ paddingBottom: insets.bottom + 8, maxHeight: height - insets.top - 48 }}
-        className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface pt-2 shadow-raised"
-      >
-        <ScrollView style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled">
-        <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
-        <Text className="px-screen-x pb-1 pt-2 text-[15px] font-semibold">
-          Schedule
-        </Text>
+      <QuickRow
+        icon="⏭"
+        label="Tomorrow"
+        hint={weekdayShort(tmr)}
+        onPress={() => onPick(tmr)}
+        testID="schedule-tomorrow"
+        selected={selected === tmr}
+      />
 
-        <QuickRow
-          icon="🌤"
-          label="Today"
-          hint={weekdayShort(today)}
-          onPress={() => onPick(today)}
-          testID="schedule-today"
-          selected={selected === today}
-        />
-        <QuickRow
-          icon="⏭"
-          label="Tomorrow"
-          hint={weekdayShort(tmr)}
-          onPress={() => onPick(tmr)}
-          testID="schedule-tomorrow"
-          selected={selected === tmr}
-        />
-
-        {/* Inline month calendar */}
-        <View className="mt-2 border-t border-divider px-screen-x pt-3">
-          <View className="flex-row items-center justify-between pb-2">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Previous month"
-              className="min-h-12 min-w-12 items-center justify-center"
-              hitSlop={8}
-              onPress={() => step(-1)}
+      {/* Inline month calendar */}
+      <View className="mt-2 border-t border-divider px-screen-x pt-3">
+        <View className="flex-row items-center justify-between pb-2">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Previous month"
+            className="min-h-12 min-w-12 items-center justify-center"
+            hitSlop={8}
+            onPress={() => step(-1)}
+          >
+            <Text className="text-[20px] text-foreground-secondary">‹</Text>
+          </Pressable>
+          <Text className="text-[14px] font-medium">{monthTitle}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next month"
+            className="min-h-12 min-w-12 items-center justify-center"
+            hitSlop={8}
+            onPress={() => step(1)}
+          >
+            <Text className="text-[20px] text-foreground-secondary">›</Text>
+          </Pressable>
+        </View>
+        <View className="flex-row pb-1">
+          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+            <Text
+              key={i}
+              className="flex-1 text-center text-[12px] text-foreground-muted"
             >
-              <Text className="text-[20px] text-foreground-secondary">‹</Text>
-            </Pressable>
-            <Text className="text-[14px] font-medium">{monthTitle}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Next month"
-              className="min-h-12 min-w-12 items-center justify-center"
-              hitSlop={8}
-              onPress={() => step(1)}
-            >
-              <Text className="text-[20px] text-foreground-secondary">›</Text>
-            </Pressable>
-          </View>
-          <View className="flex-row pb-1">
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-              <Text
-                key={i}
-                className="flex-1 text-center text-[12px] text-foreground-muted"
-              >
-                {d}
-              </Text>
-            ))}
-          </View>
-          {grid.map((week, wi) => (
-            <View key={wi} className="flex-row">
-              {week.map((date) => {
-                const day = Number(date.split('-')[2]);
-                const inMonth = Number(date.split('-')[1]) === view.m0 + 1;
-                const isToday = date === today;
-                const isSelected = date === selected;
-                return (
-                  <Pressable
-                    key={date}
-                    accessibilityRole="button"
-                    accessibilityLabel={new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(new Date(`${date}T12:00:00`))}
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityHint={isToday ? 'Today' : undefined}
-                    testID={`schedule-date-${date}`}
-                    onPress={() => onPick(date)}
-                    className="min-h-12 flex-1 items-center justify-center py-1"
-                  >
-                    <View
-                      style={
-                        isSelected
-                          ? { backgroundColor: accent }
-                          : isToday
-                            ? { borderWidth: 1, borderColor: accent }
-                            : undefined
-                      }
-                      className="h-9 w-9 items-center justify-center rounded-full"
-                    >
-                      <Text
-                        style={isSelected ? { color: onAccent } : undefined}
-                        className={
-                          inMonth
-                            ? 'text-[15px] text-foreground'
-                            : 'text-[15px] text-foreground-muted'
-                        }
-                      >
-                        {day}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
+              {d}
+            </Text>
           ))}
         </View>
-
-        {recurrenceLabel && onStopRecurrence ? (
-          <View className="mt-2 border-t border-divider">
-            <QuickRow
-              icon="↻"
-              label={`Stop ${recurrenceLabel}`}
-              onPress={onStopRecurrence}
-              testID="schedule-stop-recurrence"
-            />
-            {onCompleteForever ? (
-              <QuickRow
-                icon="✓"
-                label="Complete forever"
-                onPress={onCompleteForever}
-                testID="schedule-complete-forever"
-              />
-            ) : null}
+        {grid.map((week, wi) => (
+          <View key={wi} className="flex-row">
+            {week.map((date) => {
+              const day = Number(date.split('-')[2]);
+              const inMonth = Number(date.split('-')[1]) === view.m0 + 1;
+              const isToday = date === today;
+              const isSelected = date === selected;
+              return (
+                <Pressable
+                  key={date}
+                  accessibilityRole="button"
+                  accessibilityLabel={new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(new Date(`${date}T12:00:00`))}
+                  accessibilityState={{ selected: isSelected }}
+                  accessibilityHint={isToday ? 'Today' : undefined}
+                  testID={`schedule-date-${date}`}
+                  onPress={() => onPick(date)}
+                  className="min-h-12 flex-1 items-center justify-center py-1"
+                >
+                  <View
+                    style={
+                      isSelected
+                        ? { backgroundColor: accent }
+                        : isToday
+                          ? { borderWidth: 1, borderColor: accent }
+                          : undefined
+                    }
+                    className="h-9 w-9 items-center justify-center rounded-full"
+                  >
+                    <Text
+                      style={isSelected ? { color: onAccent } : undefined}
+                      className={
+                        inMonth
+                          ? 'text-[15px] text-foreground'
+                          : 'text-[15px] text-foreground-muted'
+                      }
+                    >
+                      {day}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
-        ) : null}
+        ))}
+      </View>
+
+      {recurrenceLabel && onStopRecurrence ? (
         <View className="mt-2 border-t border-divider">
           <QuickRow
-            icon="⊘"
-            label="No date"
-            onPress={() => onPick(null)}
-            testID="schedule-none"
-            selected={selected == null}
+            icon="↻"
+            label={`Stop ${recurrenceLabel}`}
+            onPress={onStopRecurrence}
+            testID="schedule-stop-recurrence"
           />
+          {onCompleteForever ? (
+            <QuickRow
+              icon="✓"
+              label="Complete forever"
+              onPress={onCompleteForever}
+              testID="schedule-complete-forever"
+            />
+          ) : null}
         </View>
-        </ScrollView>
+      ) : null}
+      <View className="mt-2 border-t border-divider">
+        <QuickRow
+          icon="⊘"
+          label="No date"
+          onPress={() => onPick(null)}
+          testID="schedule-none"
+          selected={selected == null}
+        />
       </View>
-    </Modal>
+    </ScrollView>
   );
 }
 
@@ -759,7 +708,6 @@ export function useTaskDetail({
       />
 
       <ScheduleSheet
-        key={selected?.id ?? 'none'}
         open={scheduling && selected != null}
         showUpDate={selected?.showUpDate}
         recurrenceLabel={selected?.recurrence ? toText(selected.recurrence) : undefined}
@@ -779,18 +727,18 @@ export function useTaskDetail({
         onClose={() => setPicking(false)}
       />
 
-      {restocking ? (
-        <PillCountSheet
-          title="How many pills did you get?"
-          initial={restockMedicine?.supply?.refill ?? null}
-          onClose={() => setRestocking(null)}
-          onSave={(amount) => {
-            const { task, medicineId } = restocking;
-            setRestocking(null);
-            void restockWithUndo({ replica, medicineId, amount, taskId: task.id, onError });
-          }}
-        />
-      ) : null}
+      <PillCountSheet
+        open={restocking !== null}
+        title="How many pills did you get?"
+        initial={restockMedicine?.supply?.refill ?? null}
+        onClose={() => setRestocking(null)}
+        onSave={(amount) => {
+          if (!restocking) return;
+          const { task, medicineId } = restocking;
+          setRestocking(null);
+          void restockWithUndo({ replica, medicineId, amount, taskId: task.id, onError });
+        }}
+      />
     </>
   );
 

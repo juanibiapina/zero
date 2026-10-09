@@ -1,4 +1,4 @@
-import { Column, Host, Icon, ListItem, Text as UIText } from '@expo/ui';
+import { Host, Icon } from '@expo/ui';
 import { MenuView } from '@expo/ui/community/menu';
 import { useAuth } from '@clerk/expo';
 import { isNull } from '@tanstack/db';
@@ -587,7 +587,6 @@ function ProjectHeader({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
-  const foreground = useColor('--color-foreground');
   const secondary = useColor('--color-foreground-secondary');
   const danger = useColor('--color-danger');
   const ripple = useColor('--color-ripple');
@@ -693,46 +692,36 @@ function ProjectHeader({
         onPick={applyIcon}
       />
 
-      <Sheet
-        open={statusOpen}
-        onClose={() => setStatusOpen(false)}
-        contentPadding={{ top: 8, bottom: 16, left: 0, right: 0 }}
-      >
-        <Column>
-          <Column
-            spacing={2}
-            style={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: 8 }}
-          >
-            <UIText
-              textStyle={{ color: foreground, fontSize: 20, fontWeight: '600' }}
-            >
-              Project status
-            </UIText>
-            <UIText textStyle={{ color: secondary, fontSize: 14 }}>
-              {statusLabel}
-            </UIText>
-          </Column>
+      <Sheet open={statusOpen} onClose={() => setStatusOpen(false)}>
+        <View className="pb-4">
+          <View className="gap-0.5 px-screen-x pb-2">
+            <Text className="text-[20px] font-semibold">Project status</Text>
+            <Text variant="subtitle">{statusLabel}</Text>
+          </View>
           {project.state === 'backlog' ? (
-            <ListItem onPress={() => chooseState('in-play')}>
-              <UIText textStyle={{ color: foreground, fontSize: 16 }}>
-                Move out of backlog
-              </UIText>
-            </ListItem>
+            <StatusChoice label="Move out of backlog" onPress={() => chooseState('in-play')} />
           ) : (
-            <ListItem onPress={() => chooseState('backlog')}>
-              <UIText textStyle={{ color: foreground, fontSize: 16 }}>
-                Move to backlog
-              </UIText>
-            </ListItem>
+            <StatusChoice label="Move to backlog" onPress={() => chooseState('backlog')} />
           )}
-          <ListItem onPress={() => chooseState('done')}>
-            <UIText textStyle={{ color: foreground, fontSize: 16 }}>
-              Mark done
-            </UIText>
-          </ListItem>
-        </Column>
+          <StatusChoice label="Mark done" onPress={() => chooseState('done')} />
+        </View>
       </Sheet>
     </View>
+  );
+}
+
+function StatusChoice({ label, onPress }: { label: string; onPress: () => void }) {
+  const ripple = useColor('--color-ripple');
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      android_ripple={{ color: ripple }}
+      onPress={onPress}
+      className="min-h-14 justify-center px-screen-x"
+    >
+      <Text className="text-[16px]">{label}</Text>
+    </Pressable>
   );
 }
 
