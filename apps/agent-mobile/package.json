@@ -96,6 +96,11 @@
     "testTimeout": 60000
   },
   "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": ["expo-ui"]
+      }
+    },
     "install": {
       "exclude": [
         "react-native-keyboard-controller",

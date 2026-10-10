@@ -165,3 +165,4 @@ The keyboard-down overshoots are exactly 1.5% of each sheet's travel: 1678 px,
 ## Fix
 
 - **Keyboard up at open:** `Sheet` hides the keyboard before presenting and gives it back after closing. The rule is in the "Bottom sheets" bullet of `apps/agent-mobile/README.md`.
+- **Expressive spring:** `patches/@expo__ui@57.0.22.patch` opens sheets on the standard spring, as described in the same README bullet.

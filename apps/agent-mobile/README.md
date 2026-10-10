@@ -111,6 +111,13 @@ back only where the native component does not fit.
   field yourself when a sheet closes: while the sheet's window still has focus,
   the field takes focus without a keyboard, and the later restore then does
   nothing.
+  Sheets open on Material's standard spring: `patches/@expo__ui@57.0.22.patch`
+  wraps `@expo/ui`'s `ModalBottomSheet` in `MotionScheme.standard()`, because
+  `Host`'s expressive theme makes every sheet overshoot 1.5% of its height
+  when it opens. `@expo/ui` ships a prebuilt AAR that ignores patched sources;
+  the patch takes effect only because `expo.autolinking.android.buildFromSource`
+  in `package.json` lists `expo-ui`. Keep the two together, and drop both when
+  `@expo/ui` sets the sheet's motion itself.
 - **The Home task list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
   native but **not virtualized**; Home is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).

@@ -10,4 +10,5 @@ onlyBuiltDependencies:
   - workerd
 
 patchedDependencies:
+  '@expo/ui@57.0.22': patches/@expo__ui@57.0.22.patch
   wrangler@4.118.0: patches/wrangler@4.118.0.patch
