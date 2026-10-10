@@ -355,6 +355,7 @@ export function useQuickAdd({
         autoFocus={mode !== 'after'}
         inline
         onKeyboardWillHide={handleKeyboardWillHide}
+        holdPosition={overlay === 'schedule' || overlay === 'project'}
         onOpen={showFab ? () => open() : undefined}
         collapsedFabLabel="Add"
         inputRef={inputRef}

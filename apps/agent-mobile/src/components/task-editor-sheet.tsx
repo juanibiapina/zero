@@ -11,11 +11,7 @@ import {
 } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  KeyboardEvents,
-  KeyboardStickyView,
-  useReanimatedKeyboardAnimation,
-} from 'react-native-keyboard-controller';
+import { KeyboardController, KeyboardEvents } from 'react-native-keyboard-controller';
 import Animated, {
   Easing,
   Extrapolation,
@@ -31,6 +27,7 @@ import { useResolveClassNames } from 'uniwind';
 
 import { ScheduleHighlightInput } from '@/components/schedule-highlight-input';
 import { Input } from '@/components/ui/input';
+import { KeyboardDock } from '@/components/ui/keyboard-dock';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
@@ -43,6 +40,8 @@ const SHEET_RADIUS = 16;
 const ENTER_DURATION = 300;
 const EXIT_DURATION = 250;
 const MATERIAL_STANDARD = Easing.bezier(0.4, 0, 0.2, 1);
+const KEYBOARD_RESTORE_WAIT = 500;
+const IME_LEAD_FILL = 32;
 
 type EditorAction = {
   label: string;
@@ -168,20 +167,6 @@ export function AddModeSelector({
   );
 }
 
-// The sticky drawer can lead the IME by a frame; extend its surface over the exposed scrim.
-function KeyboardGapFill({ height }: { height: number }) {
-  const { progress } = useReanimatedKeyboardAnimation();
-  const visibility = useAnimatedStyle(() => ({ opacity: progress.get() > 0 ? 1 : 0 }));
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[{ position: 'absolute', left: 0, right: 0, bottom: -height, height }, visibility]}
-    >
-      <View className="flex-1 bg-surface" />
-    </Animated.View>
-  );
-}
-
 // Create and edit share the title, metadata rows, and keyboard docking.
 // Creation stays in the screen window so its input can open the keyboard on
 // mount. Editing opens in the app's native Sheet. The discard overlay stays in
@@ -191,7 +176,7 @@ export function TaskEditorSheet({
   placeholder = 'Task', autoFocus = false, inline = false, inputRef, inputAccessibilityLabel,
   leading, modeSelector, context, editorContent, secondaryContent, trailing, inputEditable = true, selectTextOnFocus = false,
   scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
-  onOpen, onKeyboardWillHide, collapsedFabLabel,
+  onOpen, onKeyboardWillHide, collapsedFabLabel, holdPosition = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -220,6 +205,7 @@ export function TaskEditorSheet({
   onOpen?: () => void;
   onKeyboardWillHide?: () => void;
   collapsedFabLabel?: string;
+  holdPosition?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
@@ -229,6 +215,7 @@ export function TaskEditorSheet({
   const screen = useRef<View>(null);
   const field = useRef<TextInput>(null);
   const previouslyFocusedForOpen = useRef(false);
+  const keyboardBeforeHold = useRef(false);
   const progress = useSharedValue(0);
   const reduceMotion = useReducedMotion();
   const accent = useColor('--color-accent');
@@ -239,11 +226,17 @@ export function TaskEditorSheet({
     if (shouldFocus && !previouslyFocusedForOpen.current) field.current?.focus();
     previouslyFocusedForOpen.current = shouldFocus;
   }, [inline, open, autoFocus]);
+  const holdingPosition = useRef(holdPosition);
+  useEffect(() => {
+    holdingPosition.current = holdPosition;
+  }, [holdPosition]);
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', (event) =>
       setKeyboardHeight(event.endCoordinates.height),
     );
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      if (!holdingPosition.current) setKeyboardHeight(0);
+    });
     return () => { show.remove(); hide.remove(); };
   }, []);
   useEffect(() => {
@@ -254,6 +247,22 @@ export function TaskEditorSheet({
     );
     return () => hide.remove();
   }, [inline, open, onKeyboardWillHide]);
+  useEffect(() => {
+    if (!inline || !open) {
+      keyboardBeforeHold.current = false;
+      return;
+    }
+    if (holdPosition) {
+      keyboardBeforeHold.current = KeyboardController.isVisible();
+      return;
+    }
+    if (!keyboardBeforeHold.current) return;
+    keyboardBeforeHold.current = false;
+    const timer = setTimeout(() => {
+      if (!KeyboardController.isVisible()) field.current?.focus();
+    }, KEYBOARD_RESTORE_WAIT);
+    return () => clearTimeout(timer);
+  }, [inline, open, holdPosition]);
   useImperativeHandle(inputRef, () => ({ focus: () => field.current?.focus() }), []);
   useEffect(() => {
     if (!inline || sheetHeight === 0) return;
@@ -425,13 +434,13 @@ export function TaskEditorSheet({
               }}
             />
           ) : null}
-          <KeyboardStickyView
+          <KeyboardDock
             offset={{ opened: bottomGap }}
+            hold={holdPosition}
+            fill={surface ? { height: bottomGap + insets.bottom + IME_LEAD_FILL, color: surface } : undefined}
             pointerEvents="box-none"
             style={{ position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'flex-end' }}
           >
-            {/* 32 dp covers the ~27 dp lead observed on the Pixel 7. */}
-            <KeyboardGapFill height={bottomGap + insets.bottom + 32} />
             <Animated.View
               testID="task-editor-morph-shell"
               pointerEvents={open || onOpen != null ? 'auto' : 'none'}
@@ -475,7 +484,7 @@ export function TaskEditorSheet({
                 <Text className="text-3xl leading-none text-on-accent">+</Text>
               </Animated.View>
             </Animated.View>
-          </KeyboardStickyView>
+          </KeyboardDock>
           {overlay}
         </>
     </View>

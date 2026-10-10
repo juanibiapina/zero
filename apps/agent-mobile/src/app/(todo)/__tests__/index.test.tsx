@@ -272,6 +272,47 @@ describe('HomeScreen', () => {
     expect(screen.getByDisplayValue('keep this draft')).toBeTruthy();
   });
 
+  it('keeps the quick-add draft open while the keyboard hides for the date picker', async () => {
+    const screen = await renderScreen();
+    await fireEvent.press(screen.getByLabelText('Add'));
+    await fireEvent.changeText(screen.getByPlaceholderText('Add a task'), 'call the dentist');
+    await fireEvent.press(screen.getByLabelText('No date'));
+
+    await act(async () => {
+      (global as typeof globalThis & {
+        __emitKeyboardEvent: (name: string) => void;
+      }).__emitKeyboardEvent('keyboardWillHide');
+    });
+    await fireEvent.press(screen.getByTestId('schedule-tomorrow'));
+
+    expect(screen.getByDisplayValue('call the dentist')).toBeTruthy();
+    expect(screen.queryByLabelText('No date')).toBeNull();
+    expect(screen.queryByText('Discard changes?')).toBeNull();
+  });
+
+  it('files a quick-add Task in the Project picked while the keyboard was hidden', async () => {
+    const screen = await renderScreen({ projects: [project('p', 'Run a 5K')] });
+    await fireEvent.press(screen.getByLabelText('Add'));
+    const input = screen.getByPlaceholderText('Add a task');
+    await fireEvent.changeText(input, 'buy running shoes');
+    await fireEvent.press(screen.getByLabelText('No project'));
+
+    await act(async () => {
+      (global as typeof globalThis & {
+        __emitKeyboardEvent: (name: string) => void;
+      }).__emitKeyboardEvent('keyboardWillHide');
+    });
+    await fireEvent.press(screen.getByTestId('project-p'));
+    expect(screen.queryByText('Discard changes?')).toBeNull();
+
+    await fireEvent(input, 'submitEditing');
+    await waitFor(() =>
+      expect(
+        [...screen.data.replica!.tasks.collection.values()].find((row) => row.text === 'buy running shoes'),
+      ).toMatchObject({ parent: { kind: 'project', projectId: 'p' } }),
+    );
+  });
+
   it('keeps independent Task and Project drafts when switching creation modes', async () => {
     const screen = await renderScreen();
     await fireEvent.press(screen.getByLabelText('Add'));

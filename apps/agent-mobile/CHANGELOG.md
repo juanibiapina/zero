@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-10: Fix the add drawers jumping down and back up when you pick a new task's date or project, or a new medicine's start day or dose time. The drawer now stays in place while the keyboard steps aside.
+
 - 2026-10-10: Fix the + button floating up the screen, or an empty gray panel covering the bottom of the screen, after you add something, switch apps, and come back.
 
 - 2026-10-09: Add Silence to the medicine alarm: it stops the sound and keeps Taken and Postpone 1 hour on screen. The alarm's buttons now stack across the full width, with Taken at the bottom.

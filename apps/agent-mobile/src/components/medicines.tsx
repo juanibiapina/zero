@@ -264,6 +264,7 @@ function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: bool
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [creationId, setCreationId] = useState(safeRandomUUID);
   const [wasOpen, setWasOpen] = useState(open);
   const pending = useRef(false);
@@ -296,7 +297,7 @@ function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: bool
     finally { pending.current = false; setBusy(false); }
   };
   const change = (next: MedicineDraft) => { setDraft(next); setError(null); };
-  return <TaskEditorSheet open={open} onOpen={onOpen} collapsedFabLabel="Add medicine" inline autoFocus selectTextOnFocus={!!source} onClose={close} dismissLabel="Dismiss medicine editor" draft={draft.input.name} onChangeDraft={(name) => setDraft((current) => current.change({ name }))} onSubmit={() => void save()} placeholder="Name a medicine" inputAccessibilityLabel="Medicine name" inputEditable={!busy}
+  return <TaskEditorSheet open={open} onOpen={onOpen} collapsedFabLabel="Add medicine" inline autoFocus selectTextOnFocus={!!source} onClose={close} dismissLabel="Dismiss medicine editor" draft={draft.input.name} onChangeDraft={(name) => setDraft((current) => current.change({ name }))} onSubmit={() => void save()} placeholder="Name a medicine" inputAccessibilityLabel="Medicine name" inputEditable={!busy} holdPosition={pickerOpen}
     context={<View className="px-screen-x pt-3"><Text variant="section">Add medicine</Text></View>}
     trailing={<MedicineSaveButton busy={busy} disabled={!draft.input.name.trim() || !replica} onPress={() => void save()} />}
     secondaryContent={<View className="border-t border-divider">
@@ -305,7 +306,7 @@ function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: bool
         value={draft.input.instructions ?? ''} onChangeText={(instructions) => change(draft.change({ instructions }))}
         className="min-h-12 px-screen-x py-3"
       /> : <Pressable accessibilityRole="button" accessibilityLabel="Add description" disabled={busy} onPress={() => setNotesOpen(true)} className="min-h-12 justify-center px-screen-x"><Text variant="subtitle">Add notes</Text></Pressable>}
-      <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets scheduleRef={schedule} /></View>
+      <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets scheduleRef={schedule} onPickerOpenChange={setPickerOpen} /></View>
       {error ? <Text variant="error" selectable className="px-screen-x pb-3">{error}</Text> : null}
     </View>}
     overlay={discard ? <ConfirmDialog title="Discard changes?" message="The changes you've made will not be saved." cancelLabel="Cancel" confirmLabel="Discard" destructive onCancel={() => setDiscard(false)} onConfirm={onClose} /> : null}

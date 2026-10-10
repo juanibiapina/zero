@@ -85,6 +85,8 @@ jest.mock('react-native-reanimated', () => {
       };
     },
     useAnimatedStyle: () => ({}),
+    useAnimatedReaction: () => {},
+    cancelAnimation: () => {},
     useReducedMotion: () => false,
     // Return the target synchronously and complete it immediately so tests can
     // observe work that is deliberately deferred until a slide finishes.
@@ -235,6 +237,7 @@ jest.mock('react-native-keyboard-controller', () => {
         };
       },
     },
+    KeyboardController: { isVisible: () => false },
     useKeyboardHandler: () => {},
     useReanimatedKeyboardAnimation: () => ({
       height: { value: 0 },

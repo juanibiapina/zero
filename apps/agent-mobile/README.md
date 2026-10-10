@@ -105,12 +105,22 @@ back only where the native component does not fit.
 - **The Home task list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
   native but **not virtualized**; Home is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).
-- **Kept custom on purpose.** The keyboard-attached quick-add bar
-  (`KeyboardStickyView` + reanimated) and the in-tree `ConfirmDialog` stay
-  hand-rolled: `@expo/ui` has no keyboard-attached quick-add primitive, and the
+- **Kept custom on purpose.** The keyboard-attached add drawers
+  (`KeyboardDock` in `src/components/ui/keyboard-dock.tsx` + reanimated) and
+  the in-tree `ConfirmDialog` stay hand-rolled: `@expo/ui` has no keyboard-attached quick-add primitive, and the
   only native dialog (RN `Alert`) dismisses the keyboard, which would regress the
   quick-add discard flow. The `Fab` is a floating circular button, not a
   native `Button` shape.
+- **Pickers over an add drawer keep the drawer still.** A native sheet or
+  dialog opens in its own window, so Android hides the keyboard while it is
+  open and brings it back when it closes. `TaskEditorSheet`'s `holdPosition`
+  keeps the drawer where it was meanwhile; set it while a picker is open.
+  `KeyboardDock` replaces `KeyboardStickyView` because the library's sticky
+  view cannot hold its position (only `KeyboardChatScrollView` has a
+  `freeze`); drop it if `KeyboardStickyView` gains one. Read keyboard shared
+  values directly inside `useAnimatedStyle`: a value read only through a
+  nested worklet function does not subscribe the style, which leaves the drawer
+  behind the keyboard.
 - **Two native libraries run ahead of the SDK pin.** `expo.install.exclude` in
   `package.json` keeps `expo install --fix` from downgrading them. Drop an
   exclude once the SDK bundles that version or later.

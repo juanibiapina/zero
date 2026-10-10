@@ -1,6 +1,6 @@
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { MedicineDraft, medicineDay, medicineEndDate, medicineToday, pillCount, type MedicineSlot, type Weekday } from '@zero/agent-core';
-import { useImperativeHandle, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useState, type Ref } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { Sheet } from '@/components/ui/sheet';
@@ -32,12 +32,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export type MedicineScheduleHandle = { handleBack: () => boolean };
 
-export function MedicineSchedule({ draft, onChange, disabled = false, presets = false, scheduleRef }: {
+export function MedicineSchedule({ draft, onChange, disabled = false, presets = false, scheduleRef, onPickerOpenChange }: {
   draft: MedicineDraft;
   onChange: (draft: MedicineDraft) => Promise<void> | void;
   disabled?: boolean;
   presets?: boolean;
   scheduleRef?: Ref<MedicineScheduleHandle>;
+  onPickerOpenChange?: (open: boolean) => void;
 }) {
   const [openSlot, setOpenSlot] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ mode: 'date' | 'time'; value: Date; save: (date: Date) => void } | null>(null);
@@ -52,6 +53,8 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
   const otherStart = startsOn !== today && startsOn !== tomorrow;
   const endsOn = (() => { try { return draft.endsOn; } catch { return null; } })();
   const slot = doses.find((item) => item.id === openSlot) ?? null;
+  const pickerOpen = slot != null || picker != null;
+  useEffect(() => { onPickerOpenChange?.(pickerOpen); }, [pickerOpen, onPickerOpenChange]);
   const pickDate = (value: string, save: (day: string) => void) => setPicker({ mode: 'date', value: new Date(`${value}T12:00:00`), save: (date) => save(medicineToday(date)) });
   const days = endsOn ? courseDays(startsOn, endsOn) : 0;
   const setDays = (count: number) => { if (count >= 1) void onChange(draft.withCourse({ kind: 'last-day', on: medicineEndDate(startsOn, count) })); };
