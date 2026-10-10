@@ -20,7 +20,7 @@ import { AdminPage } from "./pages/AdminPage";
 import { UserDetailPage } from "./pages/UserDetailPage";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
-if (!PUBLISHABLE_KEY) throw new Error("Add your Clerk Publishable Key to .env.local");
+if (!PUBLISHABLE_KEY) throw new Error("VITE_CLERK_PUBLISHABLE_KEY is missing: start the app with `pnpm dev`, which loads it from ZeroVault");
 
 type AppContext = {
   onboardingSeen: boolean;

@@ -12,6 +12,9 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // Public placeholder that satisfies the key guard in src/App.tsx, so tests
+    // need no secrets. Tests mock Clerk, so the value is never used.
+    env: { VITE_CLERK_PUBLISHABLE_KEY: "pk_test_placeholder" },
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
