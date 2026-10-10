@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-10: Fix the + button floating up the screen, or an empty gray panel covering the bottom of the screen, after you add something, switch apps, and come back.
+
 - 2026-10-09: Add Silence to the medicine alarm: it stops the sound and keeps Taken and Postpone 1 hour on screen. The alarm's buttons now stack across the full width, with Taken at the bottom.
 
 - 2026-10-09: Change the scheduler, project picker, task editor, dose, pill count, project status, and icon picker sheets to standard Android sheets: drag them by the handle, swipe them down or press Back to close them.
