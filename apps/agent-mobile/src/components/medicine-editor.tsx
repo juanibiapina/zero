@@ -1,6 +1,6 @@
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { MedicineDraft, medicineDay, medicineEndDate, medicineToday, pillCount, type MedicineSlot, type Weekday } from '@zero/agent-core';
-import { useEffect, useImperativeHandle, useState, type Ref } from 'react';
+import { useImperativeHandle, useLayoutEffect, useState, type Ref } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { Sheet } from '@/components/ui/sheet';
@@ -54,7 +54,7 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
   const endsOn = (() => { try { return draft.endsOn; } catch { return null; } })();
   const slot = doses.find((item) => item.id === openSlot) ?? null;
   const pickerOpen = slot != null || picker != null;
-  useEffect(() => { onPickerOpenChange?.(pickerOpen); }, [pickerOpen, onPickerOpenChange]);
+  useLayoutEffect(() => { onPickerOpenChange?.(pickerOpen); }, [pickerOpen, onPickerOpenChange]);
   const pickDate = (value: string, save: (day: string) => void) => setPicker({ mode: 'date', value: new Date(`${value}T12:00:00`), save: (date) => save(medicineToday(date)) });
   const days = endsOn ? courseDays(startsOn, endsOn) : 0;
   const setDays = (count: number) => { if (count >= 1) void onChange(draft.withCourse({ kind: 'last-day', on: medicineEndDate(startsOn, count) })); };

@@ -102,6 +102,15 @@ back only where the native component does not fit.
   input cannot `autoFocus` on mount, because the sheet's window is not focused
   yet; focus it after a short delay, as `PillCountSheet` does. The quick-add
   composer stays the in-screen morph described below.
+  Opening a `Sheet` while a keyboard is up hides the keyboard first and
+  presents the sheet once it has gone, at most 600 ms later. 500 ms after the
+  sheet closes, it gives the keyboard back to the field it took it from, unless
+  that field has left the screen or another field has focus. Material 3
+  freezes the open animation while another window's keyboard animates (see
+  `docs/investigations/mobile-picker-sheet-motion.md`). Do not refocus that
+  field yourself when a sheet closes: while the sheet's window still has focus,
+  the field takes focus without a keyboard, and the later restore then does
+  nothing.
 - **The Home task list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
   native but **not virtualized**; Home is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).
@@ -111,10 +120,14 @@ back only where the native component does not fit.
   only native dialog (RN `Alert`) dismisses the keyboard, which would regress the
   quick-add discard flow. The `Fab` is a floating circular button, not a
   native `Button` shape.
-- **Pickers over an add drawer keep the drawer still.** A native sheet or
-  dialog opens in its own window, so Android hides the keyboard while it is
-  open and brings it back when it closes. `TaskEditorSheet`'s `holdPosition`
-  keeps the drawer where it was meanwhile; set it while a picker is open.
+- **Pickers over an add drawer keep the drawer still.** A native dialog opens
+  in its own window, so Android hides the keyboard while it is open and brings
+  it back when it closes; a `Sheet` does both itself (see above).
+  `TaskEditorSheet`'s `holdPosition` keeps the drawer where it was meanwhile.
+  Set it in the same render that opens the picker: a `Sheet` hides the keyboard
+  in its first effect, so a hold that arrives a render later lets the drawer
+  drop. A child that owns the picker state reports it from `useLayoutEffect`,
+  as `MedicineSchedule` does.
   `KeyboardDock` replaces `KeyboardStickyView` because the library's sticky
   view cannot hold its position (only `KeyboardChatScrollView` has a
   `freeze`); drop it if `KeyboardStickyView` gains one. Read keyboard shared

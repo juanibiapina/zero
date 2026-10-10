@@ -278,16 +278,12 @@ export function useQuickAdd({
     projects,
   ]);
 
-  const closeIconPicker = useCallback(() => {
-    setOverlay(null);
-    inputRef.current?.focus();
-  }, []);
   const pickIcon = useCallback(
     (emoji: string) => {
       projectIcon.pick(emoji);
-      closeIconPicker();
+      setOverlay(null);
     },
-    [projectIcon, closeIconPicker],
+    [projectIcon],
   );
 
   const requestClose = useCallback(() => {
@@ -310,10 +306,6 @@ export function useQuickAdd({
   }, [adding, overlay, requestClose]);
 
   const handleBack = useCallback(() => {
-    if (overlay === 'icon') {
-      closeIconPicker();
-      return true;
-    }
     if (overlay != null) {
       setOverlay(null);
       return true;
@@ -327,7 +319,7 @@ export function useQuickAdd({
       return true;
     }
     return false;
-  }, [overlay, closeIconPicker, adding, hasDraft, closeAdd]);
+  }, [overlay, adding, hasDraft, closeAdd]);
 
   const taskActionsVisible = mode === 'task';
   const selectedProject = projects.find((project) => project.id === addProjectId) ?? null;
@@ -490,7 +482,7 @@ export function useQuickAdd({
 
       <EmojiPickerSheet
         open={overlay === 'icon'}
-        onClose={closeIconPicker}
+        onClose={() => setOverlay(null)}
         onPick={pickIcon}
         header={
           projectIcon.choice.icons.length > 0 ? (

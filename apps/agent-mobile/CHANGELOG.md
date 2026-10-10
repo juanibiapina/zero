@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-10: Fix the date, project, icon and dose pickers stalling and then jumping when you open them while typing. The keyboard now slides away first, then the picker opens, and the keyboard comes back when you close it.
+
 - 2026-10-10: Fix "Discard changes?" staying on screen after you discard a new medicine.
 
 - 2026-10-10: Fix the add drawers jumping down and back up when you pick a new task's date or project, or a new medicine's start day or dose time. The drawer now stays in place while the keyboard steps aside.
