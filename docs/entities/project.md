@@ -34,8 +34,8 @@ type a title, Zero suggests icons. A status pill explains the current
 attention, for example "After · 🏠 Buy a house".
 
 The Projects list groups Projects in this order: Active, Next, Waiting, After,
-Backlog. Empty groups are absent. After starts collapsed, and Backlog collapses
-when it is long. Every Project picker uses the same groups.
+Backlog. Empty groups are absent. After and Backlog start collapsed. Every
+Project picker uses the same groups, all open.
 
 A Project opens its own workspace, in this order: title and icon, status and
 lifecycle actions, description, Waiting conditions, After relationships, and

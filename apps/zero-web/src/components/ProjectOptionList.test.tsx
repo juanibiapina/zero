@@ -33,17 +33,17 @@ describe("ProjectOptionList", () => {
     expect(headers.map((header) => header.getAttribute("aria-label"))).toEqual([
       "Active, 1", "Next, 2", "Waiting, 1", "After, 1", "Backlog, 6",
     ]);
-    expect(screen.getByRole("button", { name: "After, 1" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByRole("button", { name: "Backlog, 6" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "After, 1" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Backlog, 6" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByRole("button", { name: "done" })).toBeNull();
     expect(screen.getByRole("button", { name: "No project" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Backlog, 6" }));
     fireEvent.click(screen.getByRole("button", { name: "backlog 0" }));
     expect(onPick).toHaveBeenCalledWith("backlog 0");
   });
 
   it("reveals folded Backlog matches without losing the fold", () => {
     render(<ProjectOptionList {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Backlog, 6" }));
     expect(screen.getByRole("button", { name: "Backlog, 6" })).toHaveAttribute("aria-expanded", "false");
     fireEvent.change(screen.getByRole("textbox", { name: "Filter projects" }), { target: { value: "BACKLOG 5" } });
     expect(screen.getByRole("button", { name: "Backlog, 1" })).toHaveAttribute("aria-expanded", "true");
@@ -59,7 +59,7 @@ describe("ProjectOptionList", () => {
     fireEvent.click(screen.getByRole("button", { name: "Backlog, 6" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Filter projects" }), { target: { value: "backlog 5" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Filter projects" }), { target: { value: "" } });
-    expect(screen.getByRole("button", { name: "Backlog, 6" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Backlog, 6" })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("groups only eligible After targets against the full Project context", () => {
@@ -68,7 +68,7 @@ describe("ProjectOptionList", () => {
       conditions={[...conditions, { id: "existing", projectId: "source", kind: "project-status",
         text: null, refId: "target", targetStatus: "done", createdAt: "2026-01-01", resolvedAt: null }]}
       afterSourceProjectId="source" onPick={onPick} emptyCopy="No available projects" />);
-    expect(screen.getByRole("button", { name: "Backlog, 6" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Backlog, 6" })).toHaveAttribute("aria-expanded", "true");
     fireEvent.change(screen.getByRole("textbox", { name: "Filter After projects" }), { target: { value: "backlog 5" } });
     expect(screen.getByRole("button", { name: "Backlog, 1" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByRole("button", { name: "No project" })).toBeNull();

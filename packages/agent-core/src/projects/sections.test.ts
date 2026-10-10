@@ -63,6 +63,16 @@ describe("projectStatusSections", () => {
     expect(fold({ backlog: false, next: true })).toEqual([["next", true], ["after", true], ["backlog", false]]);
   });
 
+  it("starts every section expanded on request and still honours a manual fold", () => {
+    const projects = [project("backlog", "backlog"), project("next"), project("after"), project("target")];
+    const fold = (override = {}) => projectStatusSections({
+      projects, tasks: [], conditions: [after("after", "target")], today, collapseOverride: override,
+      startExpanded: true,
+    }).map((section) => [section.status, section.collapsed]);
+    expect(fold()).toEqual([["next", false], ["after", false], ["backlog", false]]);
+    expect(fold({ backlog: true })).toEqual([["next", false], ["after", false], ["backlog", true]]);
+  });
+
   it("reveals folded matches during search without changing the manual fold", () => {
     const projects = Array.from({ length: 6 }, (_, i) => project(`backlog ${i}`, "backlog"));
     const options = { projects, tasks: [], conditions: [], today, collapseOverride: { backlog: true } };

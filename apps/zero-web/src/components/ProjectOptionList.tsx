@@ -35,6 +35,7 @@ export function ProjectOptionList({
   const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
   const sections = useMemo(() => projectStatusSections({
     projects, tasks, conditions, today, filter, collapseOverride, afterSourceProjectId,
+    startExpanded: true,
   }), [projects, tasks, conditions, today, filter, collapseOverride, afterSourceProjectId]);
   const searching = filter.trim().length > 0;
 

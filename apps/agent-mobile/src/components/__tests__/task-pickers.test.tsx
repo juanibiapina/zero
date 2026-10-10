@@ -116,7 +116,7 @@ describe('task pickers', () => {
     expect(screen.getByText('No available projects')).toBeTruthy();
   });
 
-  it('orders status sections and folds After and Backlog', async () => {
+  it('orders status sections and opens After and Backlog', async () => {
     const onPick = jest.fn();
     const screen = await render(<ProjectPickerSheet open projects={statusProjects}
       openTasks={openTasks} conditions={conditions} selectedProjectId={null}
@@ -125,10 +125,8 @@ describe('task pickers', () => {
     expect(headers.map((node) => node.props.accessibilityLabel)).toEqual([
       'Active, 1', 'Next, 2', 'Waiting, 1', 'After, 1', 'Backlog, 6',
     ]);
-    expect(screen.getByLabelText('After, 1').props.accessibilityState.expanded).toBe(false);
-    expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(false);
-    expect(screen.queryByLabelText('Backlog 0')).toBeNull();
-    await fireEvent.press(screen.getByLabelText('Backlog, 6'));
+    expect(screen.getByLabelText('After, 1').props.accessibilityState.expanded).toBe(true);
+    expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(true);
     await fireEvent.press(screen.getByLabelText('Backlog 0'));
     expect(onPick).toHaveBeenCalledWith('backlog-0');
   });
@@ -137,6 +135,7 @@ describe('task pickers', () => {
     const screen = await render(<ProjectPickerSheet open projects={statusProjects}
       openTasks={openTasks} conditions={conditions} selectedProjectId={null}
       onPick={() => {}} onClose={() => {}} />);
+    await fireEvent.press(screen.getByLabelText('Backlog, 6'));
     expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(false);
     await fireEvent.changeText(screen.getByLabelText('Filter projects'), 'backlog 5');
     expect(screen.getByLabelText('Backlog, 1').props.accessibilityState.expanded).toBe(true);
@@ -150,13 +149,13 @@ describe('task pickers', () => {
       selectedProjectId: null, onPick: () => {}, onClose: () => {} };
     const screen = await render(<ProjectPickerSheet {...props} open />);
     await fireEvent.press(screen.getByLabelText('Backlog, 6'));
-    expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(true);
+    expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(false);
     await fireEvent.changeText(screen.getByLabelText('Filter projects'), 'backlog 5');
     await fireEvent.changeText(screen.getByLabelText('Filter projects'), '');
-    expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(true);
+    expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(false);
     await screen.rerender(<ProjectPickerSheet {...props} open={false} />);
     await screen.rerender(<ProjectPickerSheet {...props} open />);
-    expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(false);
+    expect(screen.getByLabelText('Backlog, 6').props.accessibilityState.expanded).toBe(true);
   });
 
   it('lists only eligible After targets and still derives their status from all Projects', async () => {
@@ -168,7 +167,6 @@ describe('task pickers', () => {
     expect(screen.getByLabelText('Active, 1')).toBeTruthy();
     expect(screen.getByLabelText('After, 1')).toBeTruthy();
     expect(screen.queryByLabelText('Next project')).toBeNull();
-    await fireEvent.press(screen.getByLabelText('After, 1'));
     await fireEvent.press(screen.getByLabelText('After project'));
     expect(onPick).toHaveBeenCalledWith('after');
   });

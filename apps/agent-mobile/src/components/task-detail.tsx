@@ -77,6 +77,7 @@ function ProjectPicker({
   const today = useLocalDay();
   const grouped = useMemo(() => projectStatusSections({
     projects, tasks: openTasks, conditions, today, filter, collapseOverride, afterSourceProjectId,
+    startExpanded: true,
   }), [projects, openTasks, conditions, today, filter, collapseOverride, afterSourceProjectId]);
   const sections = useMemo(() => grouped.map((section) => ({
     ...section, data: section.collapsed ? [] : section.projects,

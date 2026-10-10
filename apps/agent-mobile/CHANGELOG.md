@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-10: Change project pickers to open with After and Backlog expanded, so every project is one tap away.
+
 - 2026-10-10: Fix sheets bouncing past their resting place and settling back when they open.
 
 - 2026-10-10: Fix the date, project, icon and dose pickers stalling and then jumping when you open them while typing. The keyboard now slides away first, then the picker opens, and the keyboard comes back when you close it.

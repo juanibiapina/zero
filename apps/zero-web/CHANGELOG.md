@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-10: Change project pickers to open with After and Backlog expanded, so every project is one tap away.
+
 - 2026-10-09: Change Backlog on Projects and in project pickers to start collapsed, like After.
 
 - 2026-10-08: Change the Medicines page to show the pills of each dose, say "tomorrow" or the weekday for the next dose instead of a raw date, and rename Set count to Recount.

@@ -286,7 +286,7 @@ describe("HomePage", () => {
     ]);
     render(<HomePage />, { wrapper: MemoryRouter });
     fireEvent.click(await screen.findByRole('button', { name: 'Add to a project' }));
-    expect(screen.getByRole('button', { name: 'Backlog, 6' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Backlog, 6' })).toHaveAttribute('aria-expanded', 'true');
     fireEvent.change(screen.getByRole('textbox', { name: 'Filter projects' }),
       { target: { value: 'backlog 5' } });
     expect(screen.getByRole('button', { name: 'Backlog 5' })).toBeInTheDocument();
@@ -484,14 +484,14 @@ describe("HomePage", () => {
     </MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: 'Add to source' }));
     fireEvent.click(screen.getByRole('button', { name: 'After project' }));
-    expect(await screen.findByRole('button', { name: 'Backlog, 6' })).toHaveAttribute('aria-expanded', 'false');
+    expect(await screen.findByRole('button', { name: 'Backlog, 6' })).toHaveAttribute('aria-expanded', 'true');
     fireEvent.change(screen.getByRole('textbox', { name: 'Filter After projects' }),
       { target: { value: 'backlog 5' } });
     expect(screen.getByRole('button', { name: 'backlog 5' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'target' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add After project' }));
-    expect(screen.getByRole('button', { name: 'Backlog, 6' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Backlog, 6' })).toHaveAttribute('aria-expanded', 'true');
     fireEvent.change(screen.getByRole('textbox', { name: 'Filter After projects' }),
       { target: { value: 'backlog 5' } });
     expect(screen.getByRole('button', { name: 'backlog 5' })).toBeInTheDocument();

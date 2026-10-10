@@ -26,6 +26,7 @@ export function projectStatusSections({
   filter = "",
   collapseOverride = {},
   afterSourceProjectId,
+  startExpanded = false,
 }: {
   projects: readonly Project[];
   tasks: readonly Task[];
@@ -34,6 +35,7 @@ export function projectStatusSections({
   filter?: string;
   collapseOverride?: Partial<Record<ProjectDisplayStatus, boolean>>;
   afterSourceProjectId?: string | null;
+  startExpanded?: boolean;
 }): ProjectSection[] {
   const eligible = afterSourceProjectId === undefined
     ? projects
@@ -66,7 +68,8 @@ export function projectStatusSections({
     sections.push({
       status,
       count: matches.length,
-      collapsed: !needle && (collapseOverride[status] ?? (status === "after" || status === "backlog")),
+      collapsed: !needle && (collapseOverride[status] ??
+        (!startExpanded && (status === "after" || status === "backlog"))),
       projects: matches,
     });
   }
