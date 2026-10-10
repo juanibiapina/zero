@@ -28,10 +28,10 @@ describe("Medicine drafts", () => {
     expect(input.startsOn).toBe(today);
     expect(input.endsOn).toBeNull();
   });
-  it("sets a dose's heads-up lead and keeps it when the dose moves, never before midnight", () => {
+  it("sets a dose's heads-up lead and keeps it when the dose moves, reminding the evening before a dose after midnight", () => {
     const draft = MedicineDraft.create(today, custom).heads("morning", 15).time("morning", "alarmAt", "10:00");
     expect(draft.commit().doses[0]).toMatchObject({ alarmAt: "10:00", remindAt: "09:45" });
-    expect(draft.time("morning", "alarmAt", "00:30").heads("morning", 60).commit().doses[0].remindAt).toBe("00:00");
+    expect(draft.time("morning", "alarmAt", "00:30").heads("morning", 60).commit().doses[0].remindAt).toBe("23:30");
   });
   it("adds a third custom dose with a thirty-minute reminder while preserving existing slots", () => {
     const input = MedicineDraft.create(today, custom).addTime().commit();
@@ -48,10 +48,10 @@ describe("Medicine drafts", () => {
     expect(next.doses.find((slot) => slot.alarmAt === "20:00")?.id).toBe(original.doses[0].id);
     expect(new Set(next.doses.map((slot) => slot.id)).size).toBe(3);
   });
-  it("keeps a custom reminder lead when moving a dose and rejects midnight or duplicate alarms", () => {
+  it("keeps a custom reminder lead when moving a dose, allows midnight, and rejects duplicate alarms", () => {
     const draft = MedicineDraft.create(today, custom).time("morning", "alarmAt", "07:00");
     expect(draft.commit().doses[0]).toEqual({ id: "morning", alarmAt: "07:00", remindAt: "06:30", amount: 1 });
-    expect(() => draft.time("morning", "alarmAt", "00:00").commit()).toThrow("same day");
+    expect(draft.time("morning", "alarmAt", "00:00").commit().doses[0]).toMatchObject({ alarmAt: "00:00", remindAt: "23:30" });
     expect(() => draft.time("morning", "alarmAt", "22:00").commit()).toThrow("different alarm time");
   });
   it("calculates the inclusive course end and retains invalid duration text for correction", () => {

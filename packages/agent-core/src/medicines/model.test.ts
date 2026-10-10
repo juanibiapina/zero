@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createMergeableStore } from "tinybase";
-import { MedicineModel, medicineCadence, medicineDay, medicineEndDate, medicineNextDay, medicineOccurrences, medicineState, type MedicineInput, type MedicineReceipt } from "./model";
+import { MedicineModel, medicineCadence, medicineDay, medicineEndDate, medicineLead, medicineNextDay, medicineOccurrences, medicineState, type MedicineInput, type MedicineReceipt } from "./model";
 
 const input: MedicineInput = { name: "Daily pill", instructions: "1 pill", startsOn: "2026-10-02", endsOn: "2026-10-11", paused: false, weekdays: [1, 2, 3, 4, 5, 6, 7],
   doses: [{ id: "morning", remindAt: "07:00", alarmAt: "08:00", amount: 1 }, { id: "evening", remindAt: "20:00", alarmAt: "22:00", amount: 1 }] };
@@ -53,6 +53,35 @@ describe("daily medicines", () => {
     const receipt: MedicineReceipt = { ...dose, actionId: "native1", kind: "taken", takenAt: "2026-10-02T07:40:00Z" };
     model.applyReceipts([receipt], "device"); model.undo(dose.id, "undo"); model.applyReceipts([receipt], "device");
     expect(model.getDose(dose.id)?.takenAt).toBeNull();
+  });
+  it("skips a dose without touching the supply, and Taken or Undo replaces the skip", () => {
+    const { model } = setup(); model.setSupply("medicine", { pillsLeft: 10, leadDays: 0 });
+    const dose = medicineOccurrences(model.get("medicine")!, "2026-10-02")[0];
+    model.skip(dose, "skip", "2026-10-02T08:05:00Z");
+    expect(model.getDose(dose.id)).toMatchObject({ takenAt: null, skippedAt: "2026-10-02T08:05:00Z" });
+    expect(model.get("medicine")?.supply?.pillsLeft).toBe(10);
+    model.take(dose, "take", "2026-10-02T08:10:00Z");
+    expect(model.getDose(dose.id)).toMatchObject({ takenAt: "2026-10-02T08:10:00Z", skippedAt: null });
+    expect(model.get("medicine")?.supply?.pillsLeft).toBe(9);
+    model.skip(dose, "skip again");
+    expect(model.getDose(dose.id)?.takenAt).toBe("2026-10-02T08:10:00Z");
+    model.undo(dose.id, "undo");
+    expect(model.getDose(dose.id)).toMatchObject({ takenAt: null, skippedAt: null });
+    expect(model.get("medicine")?.supply?.pillsLeft).toBe(10);
+  });
+  it("applies a skip receipt once, even when it replays after Undo", () => {
+    const { model } = setup(); const dose = medicineOccurrences(model.get("medicine")!, "2026-10-02")[0];
+    const receipt: MedicineReceipt = { ...dose, actionId: "native-skip", kind: "skipped", skippedAt: "2026-10-02T08:05:00Z" };
+    model.applyReceipts([receipt], "device");
+    expect(model.getDose(dose.id)?.skippedAt).toBe("2026-10-02T08:05:00Z");
+    model.undo(dose.id, "undo"); model.applyReceipts([receipt], "device");
+    expect(model.getDose(dose.id)?.skippedAt).toBeNull();
+  });
+  it("accepts a dose at midnight and an early reminder the evening before", () => {
+    const { model } = setup();
+    model.edit("medicine", { ...input, doses: [{ id: "night", remindAt: "23:40", alarmAt: "00:10", amount: 1 }, { id: "midnight", remindAt: "23:00", alarmAt: "00:00", amount: 1 }] });
+    expect(model.get("medicine")?.doses.map((slot) => medicineLead(slot))).toEqual([30, 60]);
+    expect(() => model.edit("medicine", { ...input, doses: [{ id: "same", remindAt: "08:00", alarmAt: "08:00", amount: 1 }] })).toThrow("earlier than its alarm");
   });
   it("hides late offline dose receipts after the medicine is deleted", () => {
     const { model } = setup(); const dose = medicineOccurrences(model.get("medicine")!, "2026-10-02")[0];

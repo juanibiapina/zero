@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, expect, it } from "vitest";
 import { createInMemoryTodoData } from "@/testing/in-memory-todo-data";
 import { TodoDataContextProvider } from "@/lib/todo-data";
-import { medicineToday, medicineEndDate, type TaskdoReplica } from "@zero/agent-core";
+import { MedicineDraft, medicineOccurrences, medicineToday, medicineEndDate, type TaskdoReplica } from "@zero/agent-core";
 import { MedicinesPage } from "./MedicinesPage";
 
 let replica: TaskdoReplica;
@@ -67,6 +67,21 @@ it("creates a finite multi-dose course and records, undoes, and retains independ
   expect(screen.getByText(/Scheduled 22:00/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Pause reminders" }));
   expect(await screen.findByRole("button", { name: "Resume reminders" })).toBeVisible();
+});
+
+it("shows a dose skipped on the phone, with Undo", async () => {
+  const todo = createInMemoryTodoData();
+  replica = todo.replica;
+  const medicine = await replica.medicines.add(MedicineDraft.create(medicineToday()).change({ name: "Daily pill" }).commit());
+  await replica.medicines.skip(medicineOccurrences(medicine, medicineToday())[0]);
+  render(<TodoDataContextProvider value={{ ...todo.data, authenticatedFeatures: false }}>
+    <MemoryRouter initialEntries={[`/medicines/${medicine.id}`]}><Routes>
+      <Route path="/medicines/:id" element={<MedicinesPage />} />
+    </Routes></MemoryRouter>
+  </TodoDataContextProvider>);
+  expect(await screen.findAllByText(/Skipped/)).not.toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+  expect(await screen.findByRole("button", { name: "Taken 20:00 dose" })).toBeVisible();
 });
 
 it("saves chosen weekdays and shows the next dose on a day off", async () => {

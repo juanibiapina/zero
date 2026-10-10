@@ -55,15 +55,27 @@ describe("medicine reminder durability", () => {
     await controller.close(); await replica.close();
   });
 
-  it("keeps notification receipts on close so account locking and explicit discard need no import", async () => {
+  it("keeps notifications working after close and imports what happened on the next open", async () => {
     const { replica, device, controller, settle } = await setup();
-    await settle();
     await controller.close();
-    expect(device.quiesced).toBe(true);
-    expect(device.queue).toHaveLength(1);
+    expect(device.quiesced).toBe(false);
+    await settle();
     expect(replica.snapshot().doses).toEqual([]);
-    await expect(settle()).rejects.toThrow("Closed");
-    await replica.close();
+    const next = createMedicineReminders(replica, device, "workspace");
+    await next.enable();
+    expect(replica.snapshot().doses[0]?.takenAt).toBe("2026-10-02T20:35:00Z");
+    expect(device.queue).toHaveLength(0);
+    await next.close(); await replica.close();
+  });
+
+  it("skips a dose from the app so its notification never returns", async () => {
+    const { replica, device, controller, dose, settled } = await setup();
+    await controller.skip(dose);
+    expect(replica.snapshot().doses[0]).toMatchObject({ takenAt: null, skippedAt: "2026-10-02T20:35:00Z" });
+    expect(device.queue).toHaveLength(0);
+    await controller.refresh();
+    expect(settled()).toBe(true);
+    await controller.close(); await replica.close();
   });
 
   it("keeps a Taken that arrives during an install silenced until it is imported", async () => {

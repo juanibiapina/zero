@@ -20,9 +20,9 @@ export type MedicineInput = Omit<Medicine, "id" | "createdAt" | "supply">;
 export type MedicineRestock = { amount: number; refill: number | null };
 export type Dose = {
   id: string; medicineId: string; slotId: string; on: string;
-  scheduledAt: string; takenAt: string | null;
+  scheduledAt: string; takenAt: string | null; skippedAt: string | null;
 };
-export type MedicineReceipt = Dose & { actionId: string; kind: "presented" | "taken" };
+export type MedicineReceipt = Dose & { actionId: string; kind: "presented" | "taken" | "skipped" };
 export type MedicineRecovery = { table: "medicines" | "doses"; id: string; text: string; reason: string };
 export type MedicineSnapshot = { medicines: Medicine[]; doses: Dose[]; recoveries: MedicineRecovery[] };
 
@@ -68,6 +68,10 @@ function validDay(value: unknown): value is string {
   const date = new Date(`${value}T12:00:00`);
   return Number.isFinite(date.getTime()) && medicineToday(date) === value;
 }
+const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+export function medicineLead(slot: Pick<MedicineSlot, "remindAt" | "alarmAt">): number {
+  return (((minutesOf(slot.alarmAt) - minutesOf(slot.remindAt)) % 1440) + 1440) % 1440;
+}
 const validTime = (value: unknown): value is string => typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
 const validInstant = (value: unknown): value is string => typeof value === "string" && Number.isFinite(Date.parse(value));
 function parse<T>(value: unknown): T | null {
@@ -83,7 +87,7 @@ export function validateMedicine(input: MedicineInput): void {
   const ids = new Set<string>(); const times = new Set<string>();
   for (const slot of input.doses) {
     if (!slot || typeof slot.id !== "string" || !slot.id || ids.has(slot.id)) throw new Error("Each dose needs its own identity");
-    if (!validTime(slot.remindAt) || !validTime(slot.alarmAt) || slot.remindAt >= slot.alarmAt) throw new Error("The reminder must be earlier than its alarm on the same day");
+    if (!validTime(slot.remindAt) || !validTime(slot.alarmAt) || slot.remindAt === slot.alarmAt) throw new Error("The reminder must be earlier than its alarm");
     if (times.has(slot.alarmAt)) throw new Error("Choose a different alarm time for each daily dose");
     if (!Number.isInteger(slot.amount) || slot.amount < 1) throw new Error("Each dose takes at least one pill");
     ids.add(slot.id); times.add(slot.alarmAt);
@@ -97,7 +101,7 @@ export function medicineState(medicine: Medicine, on = medicineToday()): "schedu
 export function medicineOccurrences(medicine: Medicine, on = medicineToday()): Dose[] {
   if (!medicineDueOn(medicine, on)) return [];
   return medicine.doses.map((slot) => ({ id: doseId(medicine.id, slot.id, on), medicineId: medicine.id, slotId: slot.id, on,
-    scheduledAt: new Date(`${on}T${slot.alarmAt}:00`).toISOString(), takenAt: null }));
+    scheduledAt: new Date(`${on}T${slot.alarmAt}:00`).toISOString(), takenAt: null, skippedAt: null }));
 }
 
 const count = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
@@ -244,23 +248,25 @@ export class MedicineModel {
   }
   getDose(id: string): Dose | null {
     const row = this.store.getRow("doses", id);
-    const confirmation = parse<{ takenAt: string | null; scheduledAt: string; actionId: string }>(row.confirmation);
+    const confirmation = parse<{ takenAt: string | null; skippedAt?: string | null; scheduledAt: string; actionId: string }>(row.confirmation);
     if (typeof row.medicineId !== "string" || typeof row.slotId !== "string" || !validDay(row.on) || !validInstant(row.scheduledAt) || doseId(row.medicineId, row.slotId, row.on) !== id) return null;
-    if (row.confirmation !== undefined && (!confirmation || typeof confirmation.actionId !== "string" || !confirmation.actionId || !validInstant(confirmation.scheduledAt) || (confirmation.takenAt !== null && !validInstant(confirmation.takenAt)))) return null;
+    if (row.confirmation !== undefined && (!confirmation || typeof confirmation.actionId !== "string" || !confirmation.actionId || !validInstant(confirmation.scheduledAt) || (confirmation.takenAt !== null && !validInstant(confirmation.takenAt)) || (confirmation.skippedAt != null && !validInstant(confirmation.skippedAt)))) return null;
     const medicine = this.get(row.medicineId);
     const pending = medicine && row.on >= medicineToday(this.now())
       ? medicineOccurrences(medicine, row.on).find((dose) => dose.slotId === row.slotId)?.scheduledAt
       : undefined;
+    const takenAt = confirmation?.takenAt ?? null;
+    const skippedAt = takenAt ? null : confirmation?.skippedAt ?? null;
     return { id, medicineId: row.medicineId, slotId: row.slotId, on: row.on,
-      scheduledAt: confirmation?.takenAt ? confirmation.scheduledAt : pending ?? row.scheduledAt,
-      takenAt: confirmation?.takenAt ?? null };
+      scheduledAt: takenAt || skippedAt ? confirmation!.scheduledAt : pending ?? row.scheduledAt,
+      takenAt, skippedAt };
   }
   present(dose: Dose): void {
     if (!this.get(dose.medicineId)) return;
     if (!validDay(dose.on) || !validInstant(dose.scheduledAt) || dose.id !== doseId(dose.medicineId, dose.slotId, dose.on)) throw new Error("Invalid Dose");
     const existing = this.getDose(dose.id);
     if (!existing) this.store.setRow("doses", dose.id, { medicineId: dose.medicineId, slotId: dose.slotId, on: dose.on, scheduledAt: dose.scheduledAt });
-    else if (!existing.takenAt && dose.on >= medicineToday(this.now())) this.store.setCell("doses", dose.id, "scheduledAt", dose.scheduledAt);
+    else if (!existing.takenAt && !existing.skippedAt && dose.on >= medicineToday(this.now())) this.store.setCell("doses", dose.id, "scheduledAt", dose.scheduledAt);
   }
   take(dose: Dose, actionId: string, takenAt = this.now().toISOString()): void {
     if (!validInstant(takenAt)) throw new Error("Invalid confirmation time");
@@ -271,6 +277,14 @@ export class MedicineModel {
       this.store.setCell("doses", dose.id, "confirmation", JSON.stringify({ actionId, takenAt, scheduledAt: dose.scheduledAt }));
       this.changePills(dose.medicineId, -this.slotAmount(dose.medicineId, dose.slotId));
     });
+  }
+  skip(dose: Dose, actionId: string, skippedAt = this.now().toISOString()): void {
+    if (!validInstant(skippedAt)) throw new Error("Invalid confirmation time");
+    this.present(dose);
+    if (!this.get(dose.medicineId)) return;
+    const existing = this.getDose(dose.id);
+    if (existing?.takenAt || existing?.skippedAt) return;
+    this.store.setCell("doses", dose.id, "confirmation", JSON.stringify({ actionId, takenAt: null, skippedAt, scheduledAt: dose.scheduledAt }));
   }
   undo(id: string, actionId: string): void {
     const dose = this.getDose(id);
@@ -286,6 +300,7 @@ export class MedicineModel {
         const marker = JSON.stringify([deviceId, receipt.actionId]);
         if (this.store.hasRow("medicineReceipts", marker)) continue;
         if (receipt.kind === "taken" && receipt.takenAt) this.take(receipt, receipt.actionId, receipt.takenAt);
+        else if (receipt.kind === "skipped" && receipt.skippedAt) this.skip(receipt, receipt.actionId, receipt.skippedAt);
         else this.present(receipt);
         this.store.setRow("medicineReceipts", marker, { consumed: true });
       }

@@ -80,6 +80,7 @@ export type TodoMedicines = {
   edit: (id: string, input: MedicineInput) => Promise<void>;
   remove: (id: string) => Promise<void>;
   take: (dose: Dose) => Promise<void>;
+  skip: (dose: Dose) => Promise<void>;
   undo: (id: string) => Promise<void>;
   applyReceipts: (receipts: MedicineReceipt[], deviceId: string) => Promise<void>;
   setSupply: (id: string, supply: { pillsLeft: number; leadDays: number }) => Promise<void>;
@@ -418,6 +419,7 @@ export function createTaskdoReplica({
       edit: (id, input) => write(() => { medicineModel.edit(id, input); }),
       remove: (id) => write(() => { medicineModel.remove(id); }),
       take: (dose) => write(() => { medicineModel.take(dose, randomId()); }),
+      skip: (dose) => write(() => { medicineModel.skip(dose, randomId()); }),
       undo: (id) => write(() => { medicineModel.undo(id, randomId()); }),
       applyReceipts: (receipts, deviceId) => write(() => { medicineModel.applyReceipts(receipts, deviceId); }),
       setSupply: (id, supply) => write(() => { medicineModel.setSupply(id, supply); }),

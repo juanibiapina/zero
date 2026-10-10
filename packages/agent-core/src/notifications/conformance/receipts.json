@@ -36,17 +36,21 @@
             7
           ]
         },
+        "at": "20:00",
         "stages": [
           {
-            "at": "19:45",
+            "offset": -15,
             "wake": "exact",
             "text": "Take 1 pill at 20:00"
           },
           {
-            "at": "20:00",
+            "offset": 0,
             "wake": "alarmClock",
-            "text": "Time to take 1 pill",
-            "fullScreen": true
+            "title": "Evening pill is due",
+            "icon": "warning",
+            "tone": "warning",
+            "fullScreen": true,
+            "text": "Due at 20:00 · take 1 pill"
           }
         ],
         "actions": [
@@ -60,6 +64,11 @@
             "label": "Postpone 1 hour",
             "kind": "snooze",
             "minutes": 60
+          },
+          {
+            "id": "skip",
+            "label": "Skip",
+            "kind": "settle"
           }
         ],
         "settled": [],

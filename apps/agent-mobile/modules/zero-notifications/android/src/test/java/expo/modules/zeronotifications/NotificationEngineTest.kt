@@ -40,20 +40,25 @@ class NotificationEngineTest {
 
   private fun reminder(
     key: String = "item", early: String = "07:45", due: String = "08:00", settled: List<String> = emptyList(),
-    from: String = "2026-09-01", until: String? = null, weekdays: List<Int> = (1..7).toList(),
+    from: String = "2026-09-01", until: String? = null, weekdays: List<Int> = (1..7).toList(), late: Int? = null,
   ) = JSONObject()
     .put("key", key).put("channel", "alerts").put("icon", "pill").put("title", "Title $key")
     .put("lockScreen", JSONObject().put("title", "Reminder").put("text", "Open the app"))
     .put("url", "app:///items/$key?date={date}")
     .put("recurrence", JSONObject().put("from", from).put("until", until ?: JSONObject.NULL).put("weekdays", JSONArray(weekdays)))
+    .put("at", due)
     .put("stages", JSONArray()
-      .put(JSONObject().put("at", early).put("wake", "exact").put("text", "Early $early"))
-      .put(JSONObject().put("at", due).put("wake", "alarmClock").put("text", "Due $due")))
+      .put(JSONObject().put("offset", -lead(early, due)).put("wake", "exact").put("text", "Early $early"))
+      .put(JSONObject().put("offset", 0).put("wake", "alarmClock").put("text", "Due $due"))
+      .also { stages -> if (late != null) stages.put(JSONObject().put("offset", late).put("wake", "alarmClock").put("text", "Late $late")) })
     .put("actions", JSONArray()
       .put(JSONObject().put("id", "done").put("label", "Done").put("kind", "settle"))
       .put(JSONObject().put("id", "later").put("label", "Later").put("kind", "snooze").put("minutes", 60)))
     .put("settled", JSONArray(settled))
     .put("data", "{\"key\":\"$key\"}")
+
+  private fun minutes(time: String) = time.substring(0, 2).toInt() * 60 + time.substring(3, 5).toInt()
+  private fun lead(early: String, due: String) = ((minutes(due) - minutes(early)) % 1440 + 1440) % 1440
 
   private fun schedule(vararg reminders: JSONObject) = JSONObject()
     .put("channels", JSONArray().put(JSONObject().put("id", "alerts").put("name", "Alerts").put("group", JSONObject().put("id", "group").put("name", "Group"))))
@@ -186,14 +191,15 @@ class NotificationEngineTest {
   }
 
   @Test
-  fun aSnoozeSkipsTheOccurrencesStagesInsideItAndReturnsWithTheLatestStage() {
+  fun aSnoozeKeepsTheCardQuietSkipsTheStagesInsideItAndReturnsWithTheLatestStage() {
     at("09:00"); install(reminder(early = "09:50", due = "10:30"))
     fire("09:50")
     at("09:55"); tap("Later")
-    assertNull(card())
+    assertEquals("Early 09:50", text())
+    assertFalse(alerting(card()!!))
     assertEquals(ms("10:55"), armed("alarm_clock"))
     fire("10:30")
-    assertNull(card())
+    assertEquals("Early 09:50", text())
     fire("10:55")
     assertEquals("Due 10:30", text())
     assertTrue(alerting(card()!!))
@@ -232,6 +238,31 @@ class NotificationEngineTest {
   }
 
   @Test
+  fun postponingAgainFromTheCardRestartsTheHour() {
+    at("09:00"); install(reminder(early = "09:10", due = "09:30"))
+    fire("09:30")
+    tap("Later")
+    at("09:40"); tap("Later")
+    assertEquals(ms("10:40"), armed("alarm_clock"))
+    fire("10:30")
+    assertFalse(alerting(card()!!))
+    fire("10:40")
+    assertTrue(alerting(card()!!))
+  }
+
+  @Test
+  fun settlingDuringASnoozeClosesTheCardAndCancelsTheSnooze() {
+    at("09:00"); install(reminder(early = "09:10", due = "09:30"))
+    fire("09:30")
+    tap("Later")
+    at("09:40"); tap("Done")
+    assertNull(card())
+    fire("10:30")
+    assertNull(card())
+    assertEquals(ms("09:30", "2026-10-03"), armed("alarm_clock"))
+  }
+
+  @Test
   fun installClosesCardsForRemovedRemindersAndChangedStageTimes() {
     at("07:00"); install(reminder(), reminder(key = "other"))
     fire("07:45")
@@ -243,14 +274,93 @@ class NotificationEngineTest {
   }
 
   @Test
-  fun aSwipedCardIsForgottenAndTheLaterStageStillShows() {
+  fun aSwipedCardComesBackQuietlyAndTheLaterStageStillShows() {
     at("07:00"); install(reminder())
     fire("07:45")
     val swipe = shadowOf(card()!!.deleteIntent).savedIntent
     manager.cancelAll()
     NotificationReceiver().onReceive(context, swipe)
-    NotificationEngine.restore(context, true)
+    assertEquals("Early 07:45", text())
+    assertFalse(alerting(card()!!))
+    fire("08:00")
+    assertEquals("Due 08:00", text())
+    assertTrue(alerting(card()!!))
+  }
+
+  @Test
+  fun aSwipeAfterSettleOrOnABlockedChannelShowsNothing() {
+    at("07:00"); install(reminder(), reminder(key = "other"))
+    fire("07:45")
+    val settled = shadowOf(card()!!.deleteIntent).savedIntent
+    tap("Done")
+    NotificationReceiver().onReceive(context, settled)
     assertNull(card())
+    val blocked = shadowOf(card("other")!!.deleteIntent).savedIntent
+    manager.cancelAll()
+    shadowOf(manager).setNotificationsEnabled(false)
+    NotificationReceiver().onReceive(context, blocked)
+    assertNull(card("other"))
+  }
+
+  @Test
+  fun installBringsBackACardThatDisappeared() {
+    at("07:00"); install(reminder())
+    fire("07:45")
+    manager.cancelAll()
+    at("07:50"); install(reminder())
+    assertEquals("Early 07:45", text())
+    assertFalse(alerting(card()!!))
+  }
+
+  @Test
+  fun cardsAreNotClosedWhenTheAppGoesAway() {
+    at("07:00"); install(reminder())
+    fire("07:45")
+    at("07:50"); install(reminder())
+    assertEquals("Early 07:45", text())
+  }
+
+  @Test
+  fun anEarlyStageBeforeMidnightBelongsToTheNextDaysOccurrence() {
+    at("22:00", "2026-10-01"); install(reminder(early = "23:40", due = "00:10"))
+    assertEquals(ms("23:40", "2026-10-01"), armed("exact"))
+    assertEquals(ms("00:10"), armed("alarm_clock"))
+    fire("23:40", "2026-10-01")
+    assertEquals("Early 23:40", text(date = day))
+    assertNull(card(date = "2026-10-01"))
+    fire("00:10")
+    assertEquals("Due 00:10", text(date = day))
+  }
+
+  @Test
+  fun aStageAfterMidnightKeepsItsOccurrenceDate() {
+    at("22:00"); install(reminder(early = "23:00", due = "23:30", late = 60))
+    fire("23:30")
+    assertEquals(ms("00:30", "2026-10-03"), armed("alarm_clock"))
+    fire("00:30", "2026-10-03")
+    assertEquals("Late 60", text())
+    assertTrue(alerting(card()!!))
+  }
+
+  @Test
+  fun aStoreFromTheOlderFormatKeepsItsCardAndAlarms() {
+    val legacy = reminder().apply {
+      remove("at")
+      put("stages", JSONArray()
+        .put(JSONObject().put("at", "07:45").put("wake", "exact").put("text", "Early 07:45"))
+        .put(JSONObject().put("at", "08:00").put("wake", "alarmClock").put("text", "Due 08:00")))
+    }
+    val id = NotificationEngine.occurrence(source, "item", day)
+    val stored = JSONObject()
+      .put("workspace", workspace).put("quiesced", false).put("processedUntil", ms("07:50"))
+      .put("schedules", JSONObject().put(source, schedule(legacy)))
+      .put("settledHere", JSONArray()).put("receipts", JSONArray())
+      .put("cards", JSONObject().put(id, JSONObject().put("source", source).put("key", "item").put("date", day).put("stage", 0).put("at", "07:45").put("shownAt", ms("07:45"))))
+      .put("snoozes", JSONObject()).put("alarms", JSONArray())
+    File(context.noBackupFilesDir, "zero-notifications.json").writeText(stored.toString())
+    at("07:50"); install(reminder())
+    assertEquals("Early 07:45", text())
+    assertEquals(ms("08:00"), armed("alarm_clock"))
     fire("08:00")
     assertEquals("Due 08:00", text())
   }

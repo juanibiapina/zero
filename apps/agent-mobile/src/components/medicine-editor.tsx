@@ -1,5 +1,5 @@
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
-import { MedicineDraft, medicineDay, medicineEndDate, medicineToday, pillCount, type MedicineSlot, type Weekday } from '@zero/agent-core';
+import { MedicineDraft, medicineDay, medicineEndDate, medicineLead, medicineToday, pillCount, type MedicineSlot, type Weekday } from '@zero/agent-core';
 import { useImperativeHandle, useLayoutEffect, useState, type Ref } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
@@ -11,7 +11,6 @@ const WEEKDAYS: { day: Weekday; short: string; name: string }[] = [
   { day: 4, short: 'T', name: 'Thursday' }, { day: 5, short: 'F', name: 'Friday' }, { day: 6, short: 'S', name: 'Saturday' }, { day: 7, short: 'S', name: 'Sunday' },
 ];
 const HEADS_UP = [{ minutes: 15, label: '15 min' }, { minutes: 30, label: '30 min' }, { minutes: 60, label: '1 hour' }];
-const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
 const clockOf = (date: Date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 const leadLabel = (minutes: number) => minutes % 60 === 0 ? `${minutes / 60} ${minutes === 60 ? 'hour' : 'hours'}` : minutes > 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 const courseDays = (start: string, end: string) => Math.round((Date.parse(`${end}T12:00:00`) - Date.parse(`${start}T12:00:00`)) / 86_400_000) + 1;
@@ -120,7 +119,7 @@ function DoseForm({ slot, canRemove, disabled, onClose, onChange, onPickTime }: 
   onChange: (change: (draft: MedicineDraft) => MedicineDraft) => Promise<void> | void;
   onPickTime: (save: (time: string) => void) => void;
 }) {
-  const lead = minutesOf(slot.alarmAt) - minutesOf(slot.remindAt);
+  const lead = medicineLead(slot);
   const leads = HEADS_UP.some((option) => option.minutes === lead) ? HEADS_UP : [...HEADS_UP, { minutes: lead, label: leadLabel(lead) }].sort((a, b) => a.minutes - b.minutes);
   return <ScrollView className="px-screen-x" keyboardShouldPersistTaps="handled">
     <View className="min-h-14 flex-row items-center justify-between">

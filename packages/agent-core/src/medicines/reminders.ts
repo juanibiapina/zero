@@ -52,6 +52,15 @@ export function createMedicineReminders(replica: TaskdoReplica, device: Notifica
     } finally { reconciling = false; }
   };
   const refresh = () => enqueue(() => flush());
+  const settle = (dose: Dose, action: "taken" | "skip") => enqueue(async () => {
+    if (!enabled) {
+      await (action === "taken" ? replica.medicines.take(dose) : replica.medicines.skip(dose));
+      return;
+    }
+    const { key, date } = medicineOccurrence(dose);
+    await device.settle(workspace, MEDICINE_SOURCE, key, date, action);
+    await flush();
+  });
   const unsubscribe = replica.subscribe(() => {
     if (enabled && !suspended && !reconciling && !closed && JSON.stringify(plan()) !== reconciledPlan) void refresh().catch(() => {});
   });
@@ -61,20 +70,14 @@ export function createMedicineReminders(replica: TaskdoReplica, device: Notifica
     getState: () => ({ enabled, error, pending: pending > 0 }),
     enable: () => enqueue(async () => { enabled = true; await flush(); }),
     refresh,
-    async take(dose: Dose) {
-      await enqueue(async () => {
-        if (!enabled) { await replica.medicines.take(dose); return; }
-        const { key, date } = medicineOccurrence(dose);
-        await device.settle(workspace, MEDICINE_SOURCE, key, date, "taken");
-        await flush();
-      });
-    },
+    take: (dose: Dose) => settle(dose, "taken"),
+    skip: (dose: Dose) => settle(dose, "skip"),
     undo: (id: string) => enqueue(async () => { await flush(); await replica.medicines.undo(id); await flush(); }),
     checkpoint: () => enqueue(async () => { suspended = true; await device.quiesce(workspace); await flush(true); }),
     resume: () => enqueue(async () => { suspended = false; if (enabled) await flush(); }),
     async close() {
       unsubscribe();
-      await enqueue(async () => { suspended = true; await device.quiesce(workspace); });
+      await enqueue(async () => { suspended = true; });
       closed = true;
       listeners.clear();
     },

@@ -27,11 +27,15 @@ only what comes next.
 - Each Dose is independent. Taking the morning dose leaves the evening dose
   pending.
 - Each dose time has an early reminder 15 minutes, 30 minutes or an hour
-  before it, on the same day.
+  before it. A dose can be at any time, midnight included; the early reminder
+  of a dose just after midnight comes the evening before.
 - Dates and times follow the phone's local clock. At midnight a new day starts
   with new Doses.
 - Taken records the moment you confirmed. It works from the notification,
   without opening the app, signing in, or a network connection.
+- Skip records that you chose not to take a Dose. It ends that Dose's
+  reminders like Taken but leaves the supply unchanged. Undo makes a skipped
+  Dose pending again.
 - A course ends on its last day. Pausing and missed doses do not extend it.
 - A day of the week that is not chosen has no Doses and no reminders. The first
   Dose is on the first chosen day on or after the start day. Pausing and missed
@@ -39,7 +43,7 @@ only what comes next.
 - Changing a dose time affects only future reminders. Past ones do not replay.
 - An ended routine keeps its history. Adding it again starts a new routine.
 - Supply is a count you set. Every Taken subtracts that dose time's pills, and
-  Undo adds them back. Taking a dose twice, or a notification Taken that
+  Undo adds them back. Skip changes nothing. Taking a dose twice, or a notification Taken that
   arrives again, subtracts once. The count never goes below zero.
 - The supply is low when the pills left are at or below what the schedule uses
   in the chosen number of days: chosen weekdays × pills per day × days ÷ 7,
@@ -55,8 +59,8 @@ only what comes next.
 
 Medicines has its own list under Browse on mobile and in the web sidebar. The
 list shows names and each dose time with its pills ("08:00 · 2 pills"). A
-Medicine's page shows today's doses and when you took them, with history on
-request. On a day that is not chosen, the list and the page show the next dose
+Medicine's page shows today's doses and when you took or skipped them, with
+history on request. On a day that is not chosen, the list and the page show the next dose
 day as "tomorrow", a weekday within the coming week, or a date. A counted
 Medicine shows "24 pills left · about 12 days" with Restock and Recount; an
 uncounted one offers Count pills.
@@ -64,8 +68,8 @@ uncounted one offers Count pills.
 On mobile, the Medicine's page is also its editor, and every change saves at
 once. The name and notes are text fields at the top and save when you leave
 them; a cleared name keeps the old one. Today's doses are tiles: tap one to
-record it as taken, with Undo in the toast, and long-press a taken one to undo
-it later. A chip per dose opens its exact time, its pills, how early to remind,
+record it as taken, with Undo in the toast; long-press a pending one to skip it
+after a confirmation, and long-press a taken or skipped one to undo it later. A chip per dose opens its exact time, its pills, how early to remind,
 and Remove; "+ Time" adds a dose. Weekdays, the start day (Starts: Today,
 Tomorrow, or a picked day; "Started" once it is past), Ongoing or a last day,
 and when to remind you to buy more (1 week, 2 weeks, 1 month) are chips on the
@@ -73,9 +77,11 @@ same page. The add sheet opens with the keyboard on the name and asks for the
 name, optional notes, and the same schedule, with 1× to 4× a day presets.
 
 On Android, a normal notification arrives at the early reminder and again at
-the dose time, with Taken and Postpone 1 hour. Both say how many pills to take
-("Take 2 pills at 20:00", then "Time to take 2 pills"). At the dose time a locked phone
-also opens a full-screen alarm with the same buttons. A paired watch can show
+the dose time, with Taken, Postpone 1 hour and Skip. Both say how many pills to
+take ("Take 2 pills at 20:00", then "Due at 20:00 · take 2 pills"). At the dose
+time the notification turns into a warning: a red accent, a warning icon and
+the title "<name> is due". A locked phone also opens a full-screen alarm with
+the same buttons. A paired watch can show
 the same notification. When reminders cannot reach you, the top of the list shows one
 notice with one button to fix it.
 
@@ -83,30 +89,30 @@ notice with one button to fix it.
 
 - Each Dose has one notification. The dose-time alarm replaces the early
   reminder and alerts again. Doses never replace each other, so the morning and
-  evening doses keep separate notifications, and an untaken dose's notification
-  stays after midnight until you take it or swipe it away.
+  evening doses keep separate notifications. A notification stays until you
+  press Taken or Skip, also after midnight. Opening the app, Clear all, the
+  lock screen and a swipe do not remove it; a swiped one comes back quietly.
 - Both stages use the Medicine reminders category with high importance, the
   system notification sound and vibration. Android may show a banner. Sound
   follows the phone's volume, Do Not Disturb and your category settings.
 - At the dose time, a locked phone or one with the screen off opens a
   full-screen alarm with the medicine's name, the dose text, and Silence,
-  Postpone 1 hour and Taken stacked at the bottom, and plays the alarm sound for
+  Postpone 1 hour, Skip and Taken stacked at the bottom, Taken last, and plays the alarm sound for
   up to a minute. The alarm sound follows the alarm volume and Android's alarm
   rules for Do Not Disturb. Silence stops the sound and keeps the screen with
-  Taken and Postpone 1 hour. Back, the power button, or any button stops the
+  its buttons. Back, the power button, or any button stops the
   sound; after a minute it stops by itself and the screen stays. The screen shows the medicine's details over the
   lock screen. A phone in use shows the notification instead, as Android does.
   When Android denies full-screen access, the notification still arrives and
   the list's notice offers to allow it.
-- Taken records that Dose, closes its notification, and cancels its dose-time
-  alarm, without opening the app. Tapping the notification opens that Dose.
-- Postpone 1 hour closes the notification and brings it back an hour later with
-  sound, saying the dose is due if its time has passed. A dose time inside that
-  hour waits for it. A Postpone can cross midnight and can be repeated. Taken,
-  pausing, deleting, or changing that dose time cancels it. Postpone stays on
-  one phone.
-- A swiped notification leaves the Dose pending; the dose-time alarm still
-  comes.
+- Taken and Skip record that Dose, close its notification, and cancel its
+  dose-time alarm, without opening the app. Tapping the notification opens that
+  Dose and leaves the notification in place.
+- Postpone 1 hour keeps the notification and moves its alarm an hour later:
+  nothing sounds for that hour, then it alerts again, as the warning if the dose
+  time has passed. A dose time inside that hour waits for it. A Postpone can
+  cross midnight; pressing it again restarts the hour. Taken, Skip, pausing,
+  deleting, or changing that dose time cancels it. Postpone stays on one phone.
 - Reminders arrive only for times still ahead when the phone learned of them.
   Turning reminders on, or adding a dose, after its early reminder skips that
   reminder; the dose-time alarm still comes.

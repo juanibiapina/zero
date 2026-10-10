@@ -170,6 +170,21 @@ describe('A medicine page', () => {
     await fireEvent.press(screen.getByLabelText('Undo'));
     await waitFor(() => expect(data.replica!.snapshot().doses[0].takenAt).toBeNull());
   });
+  it('skips a dose through a long press and a confirmation, and undoes the skip', async () => {
+    const { screen, data } = await openMedicine();
+    await fireEvent(screen.getByLabelText('Take 20:00 dose, 1 pill'), 'longPress');
+    await fireEvent.press(screen.getByLabelText('Cancel'));
+    expect(data.replica!.snapshot().doses).toEqual([]);
+    await fireEvent(screen.getByLabelText('Take 20:00 dose, 1 pill'), 'longPress');
+    expect(screen.getByText('Skip 20:00 dose?')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Skip'));
+    await waitFor(() => expect(data.replica!.snapshot().doses[0]).toMatchObject({ takenAt: null, skippedAt: expect.any(String) }));
+    await fireEvent(screen.getByLabelText('20:00 dose, skipped'), 'longPress');
+    expect(screen.getByText('Mark 20:00 dose as not skipped?')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Undo'));
+    await waitFor(() => expect(data.replica!.snapshot().doses[0].skippedAt).toBeNull());
+    expect(screen.getByLabelText('Take 20:00 dose, 1 pill')).toBeTruthy();
+  });
   it('changes pills and the reminder of a dose in place, and removes all but the last dose', async () => {
     const { screen, data } = await openMedicine();
     await fireEvent.press(screen.getByLabelText('Dose at 20:00, 1 pill. Change'));

@@ -119,9 +119,9 @@ function PillDots({ amount }: { amount: number }) {
     {amount > 4 ? <Text variant="caption">+{amount - 4}</Text> : null}
   </View>;
 }
-function DoseTile({ dose, slot, actionable, highlighted, disabled, onTake, onUndo }: {
+function DoseTile({ dose, slot, actionable, highlighted, disabled, onTake, onSkip, onUndo }: {
   dose: Dose; slot: MedicineSlot | undefined; actionable: boolean; highlighted: boolean; disabled: boolean;
-  onTake: () => void; onUndo: () => void;
+  onTake: () => void; onSkip: () => void; onUndo: () => void;
 }) {
   const at = time(dose.scheduledAt);
   const amount = slot?.amount ?? 1;
@@ -136,8 +136,14 @@ function DoseTile({ dose, slot, actionable, highlighted, disabled, onTake, onUnd
     if (!actionable) return <View accessible accessibilityLabel={`${at} dose, taken at ${time(dose.takenAt)}`} className={`${tile} bg-surface-muted`}>{body(status)}</View>;
     return <Pressable accessibilityLabel={`${at} dose, taken at ${time(dose.takenAt)}`} accessibilityHint="Long press to undo" accessibilityActions={[{ name: 'undo', label: `Undo ${at} dose` }]} onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'undo') onUndo(); }} onLongPress={onUndo} className={`${tile} bg-surface-muted`}>{body(status)}</Pressable>;
   }
+  if (dose.skippedAt) {
+    if (!actionable) return <View accessible accessibilityLabel={`${at} dose, skipped`} className={`${tile} bg-surface-muted`}>{body('Skipped')}</View>;
+    return <Pressable accessibilityLabel={`${at} dose, skipped`} accessibilityHint="Long press to undo" accessibilityActions={[{ name: 'undo', label: `Undo ${at} dose` }]} onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'undo') onUndo(); }} onLongPress={onUndo} className={`${tile} bg-surface-muted`}>{body('Skipped')}</Pressable>;
+  }
   if (!actionable) return <View accessible accessibilityLabel={`${at} dose, ${pillCount(amount)}`} className={`${tile} border border-divider`}>{body(pillCount(amount))}</View>;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`Take ${at} dose, ${pillCount(amount)}`} accessibilityState={{ selected: highlighted, disabled }} disabled={disabled} onPress={onTake} className={`${tile} border-2 border-accent ${highlighted ? 'bg-surface-muted' : ''}`}>{body(`Tap when you take ${pillCount(amount)}`)}</Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={`Take ${at} dose, ${pillCount(amount)}`} accessibilityHint="Long press to skip" accessibilityState={{ selected: highlighted, disabled }} disabled={disabled}
+    accessibilityActions={[{ name: 'skip', label: `Skip ${at} dose` }]} onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'skip') onSkip(); }}
+    onPress={onTake} onLongPress={onSkip} className={`${tile} border-2 border-accent ${highlighted ? 'bg-surface-muted' : ''}`}>{body(`Tap when you take ${pillCount(amount)}`)}</Pressable>;
 }
 export function MedicineDetail() {
   const params = useLocalSearchParams<{ id: string; dose?: string; slot?: string; date?: string }>();
@@ -149,6 +155,7 @@ export function MedicineDetail() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [copying, setCopying] = useState(false);
   const [undoing, setUndoing] = useState<Dose | null>(null);
+  const [skipping, setSkipping] = useState<Dose | null>(null);
   const [counting, setCounting] = useState<'restock' | 'count' | null>(null);
   const actionPending = useRef(false);
   const latestMedicine = useRef(medicine);
@@ -198,7 +205,7 @@ export function MedicineDetail() {
           const slot = medicine.doses.find((candidate) => candidate.id === dose.slotId);
           const actionable = dose.on === today && state === 'active' && !!slot;
           return <DoseTile key={dose.id} dose={dose} slot={slot} actionable={actionable} highlighted={dose.id === focus} disabled={busy}
-            onTake={() => void take(dose)} onUndo={() => { if (!busy) setUndoing(dose); }} />;
+            onTake={() => void take(dose)} onSkip={() => { if (!busy) setSkipping(dose); }} onUndo={() => { if (!busy) setUndoing(dose); }} />;
         })}
       </View> : null}
       <SectionTitle>Schedule</SectionTitle>
@@ -219,9 +226,10 @@ export function MedicineDetail() {
         </View>
       </View> : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Dose history" accessibilityState={{ expanded: historyOpen }} onPress={() => setHistoryOpen((current) => !current)} className="min-h-14 flex-row items-center justify-between gap-3 pt-6"><Text variant="section">History</Text><MedicineGlyph name={historyOpen ? 'collapse' : 'expand'} /></Pressable>
-      {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{day(dose.on)} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : 'Not recorded'}</Text></View>)}</View> : null}
+      {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{day(dose.on)} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : dose.skippedAt ? 'Skipped' : 'Not recorded'}</Text></View>)}</View> : null}
     </Page>
-    {undoing ? <ConfirmDialog title={`Mark ${time(undoing.scheduledAt)} dose as not taken?`} message="It will show as pending again." cancelLabel="Cancel" confirmLabel="Undo" onCancel={() => setUndoing(null)} onConfirm={() => { const dose = undoing; setUndoing(null); void run(() => replica.medicines.undo(dose.id)); }} /> : null}
+    {skipping ? <ConfirmDialog title={`Skip ${time(skipping.scheduledAt)} dose?`} message="Its reminder stops until the next dose." cancelLabel="Cancel" confirmLabel="Skip" onCancel={() => setSkipping(null)} onConfirm={() => { const dose = skipping; setSkipping(null); void run(() => replica.medicines.skip(dose)); }} /> : null}
+    {undoing ? <ConfirmDialog title={`Mark ${time(undoing.scheduledAt)} dose as not ${undoing.skippedAt ? 'skipped' : 'taken'}?`} message="It will show as pending again." cancelLabel="Cancel" confirmLabel="Undo" onCancel={() => setUndoing(null)} onConfirm={() => { const dose = undoing; setUndoing(null); void run(() => replica.medicines.undo(dose.id)); }} /> : null}
     <PillCountSheet open={counting === 'restock'} title="How many pills did you get?" initial={supply?.refill ?? null} onClose={() => setCounting(null)} onSave={(amount) => { setCounting(null); void restockWithUndo({ replica, medicineId: medicine.id, amount, onError: setError }); }} />
     <PillCountSheet open={counting === 'count'} title="How many pills do you have now?" initial={supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} />
     <MedicineDrawer open={copying} source={medicine} onClose={() => setCopying(false)} onSaved={(id) => { setCopying(false); router.replace(`/browse/medicines/${id}`); }} />

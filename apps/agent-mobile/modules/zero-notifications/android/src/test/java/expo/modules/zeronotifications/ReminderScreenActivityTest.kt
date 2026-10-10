@@ -46,10 +46,12 @@ class ReminderScreenActivityTest {
       .put("lockScreen", JSONObject().put("title", "Reminder").put("text", "Open the app"))
       .put("url", "app:///items/item?date={date}")
       .put("recurrence", JSONObject().put("from", "2026-09-01").put("until", JSONObject.NULL).put("weekdays", JSONArray((1..7).toList())))
-      .put("stages", JSONArray().put(JSONObject().put("at", "08:00").put("wake", "alarmClock").put("text", "08:00 dose due").put("fullScreen", true)))
+      .put("at", "08:00")
+      .put("stages", JSONArray().put(JSONObject().put("offset", 0).put("wake", "alarmClock").put("text", "08:00 dose due").put("fullScreen", true)))
       .put("actions", JSONArray()
         .put(JSONObject().put("id", "taken").put("label", "Taken").put("kind", "settle"))
-        .put(JSONObject().put("id", "later").put("label", "Postpone 1 hour").put("kind", "snooze").put("minutes", 60)))
+        .put(JSONObject().put("id", "later").put("label", "Postpone 1 hour").put("kind", "snooze").put("minutes", 60))
+        .put(JSONObject().put("id", "skip").put("label", "Skip").put("kind", "settle")))
       .put("settled", JSONArray()).put("data", ""))).toString()
 
   private fun at(time: String) { NotificationEngine.clock = { Clock.fixed(Instant.parse("${day}T${time}:00Z"), ZoneOffset.UTC) } }
@@ -97,7 +99,7 @@ class ReminderScreenActivityTest {
   @Test
   fun showsTheCardAndRings() {
     val activity = open().get()
-    assertEquals(listOf("Vitamin D", "08:00 dose due", "Silence", "Postpone 1 hour", "Taken"), texts(activity.window.decorView))
+    assertEquals(listOf("Vitamin D", "08:00 dose due", "Silence", "Postpone 1 hour", "Skip", "Taken"), texts(activity.window.decorView))
     assertTrue(playing)
   }
 
@@ -108,7 +110,7 @@ class ReminderScreenActivityTest {
     idle()
     assertFalse(playing)
     assertFalse(activity.isFinishing)
-    assertEquals(listOf("Vitamin D", "08:00 dose due", "Postpone 1 hour", "Taken"), texts(activity.window.decorView))
+    assertEquals(listOf("Vitamin D", "08:00 dose due", "Postpone 1 hour", "Skip", "Taken"), texts(activity.window.decorView))
     assertTrue(receipts().none { it.getString("type") == "settled" })
     assertTrue(shadowOf(manager).getNotification(NotificationEngine.occurrence("source", "item", day), 0) != null)
     button(activity, "Taken").performClick()
@@ -159,12 +161,12 @@ class ReminderScreenActivityTest {
   }
 
   @Test
-  fun postponeSnoozesAndCloses() {
+  fun postponeClosesTheScreenAndKeepsTheCard() {
     val activity = open().get()
     button(activity, "Postpone 1 hour").performClick()
     idle()
     assertTrue(receipts().none { it.getString("type") == "settled" })
-    assertEquals(null, shadowOf(manager).getNotification(NotificationEngine.occurrence("source", "item", day), 0))
+    assertTrue(shadowOf(manager).getNotification(NotificationEngine.occurrence("source", "item", day), 0) != null)
     assertFalse(playing)
     assertTrue(activity.isFinishing)
   }

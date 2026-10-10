@@ -139,8 +139,9 @@ class ReminderScreenActivity : Activity() {
     title.text = content.title
     text.text = content.text
     actions.removeAllViews()
-    for (action in content.actions.sortedBy { it.settles }) {
-      val button = actionButton(action.label, if (action.settles) primary else neutral, if (action.settles) onPrimary else foregroundColor) { press(action) }
+    val main = content.actions.firstOrNull()
+    for (action in content.actions.drop(1) + listOfNotNull(main)) {
+      val button = actionButton(action.label, if (action === main) primary else neutral, if (action === main) onPrimary else foregroundColor) { press(action) }
       actions.addView(button, stackParams())
     }
   }

@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-10: Show medicine doses you skipped on your phone, with Undo.
+
 - 2026-10-10: Change project pickers to open with After and Backlog expanded, so every project is one tap away.
 
 - 2026-10-09: Change Backlog on Projects and in project pickers to start collapsed, like After.

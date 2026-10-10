@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-10: Change medicine notifications to stay until you press Taken or the new Skip. Opening the app, Clear all and the lock screen leave them in place, and a swiped one comes back quietly. Postpone 1 hour now keeps the notification and moves its alarm an hour later. At the dose time the notification turns into a red warning. Long-press a dose to skip it in the app.
+
+- 2026-10-10: Add doses at midnight, with an early reminder that can come the evening before.
+
 - 2026-10-10: Change project pickers to open with After and Backlog expanded, so every project is one tap away.
 
 - 2026-10-10: Fix sheets bouncing past their resting place and settling back when they open.

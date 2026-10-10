@@ -47,14 +47,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -121,14 +122,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due",
                 "fullScreen": true
@@ -196,9 +198,10 @@
                 7
               ]
             },
+            "at": "14:00",
             "stages": [
               {
-                "at": "14:00",
+                "offset": 0,
                 "wake": "exact",
                 "text": "Due"
               }
@@ -250,14 +253,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -304,14 +308,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -378,14 +383,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -459,14 +465,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -534,14 +541,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -607,14 +615,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -682,14 +691,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -756,14 +766,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "late",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -830,14 +841,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due",
                 "fullScreen": false
@@ -905,14 +917,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due",
                 "fullScreen": "yes"
@@ -980,14 +993,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due",
                 "fullscreen": true
@@ -1049,14 +1063,15 @@
                 1.5
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1117,14 +1132,15 @@
                 "1"
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1191,14 +1207,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1265,14 +1282,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1340,14 +1358,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1413,14 +1432,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1487,14 +1507,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1562,14 +1583,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1644,14 +1666,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1737,14 +1760,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1811,14 +1835,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1885,14 +1910,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -1959,14 +1985,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2033,14 +2060,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2087,14 +2115,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2161,14 +2190,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2235,14 +2265,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2309,14 +2340,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2382,14 +2414,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2456,14 +2489,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2522,14 +2556,15 @@
               "until": null,
               "weekdays": []
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2591,14 +2626,15 @@
                 1
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2660,14 +2696,15 @@
                 1
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2728,14 +2765,15 @@
                 0
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2796,14 +2834,15 @@
                 8
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2870,14 +2909,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -2944,14 +2984,15 @@
                 7
               ]
             },
+            "at": "24:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "24:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3018,14 +3059,15 @@
                 7
               ]
             },
+            "at": "7:45",
             "stages": [
               {
-                "at": "7:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3092,14 +3134,15 @@
                 7
               ]
             },
+            "at": "07:60",
             "stages": [
               {
-                "at": "07:60",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3166,6 +3209,7 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [],
             "actions": [
               {
@@ -3229,14 +3273,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "08:30",
+                "offset": 30,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3303,14 +3348,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3377,14 +3423,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3460,14 +3507,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3534,14 +3582,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3608,14 +3657,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3682,14 +3732,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3756,14 +3807,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3830,14 +3882,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3904,14 +3957,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -3978,14 +4032,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -4052,14 +4107,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -4126,14 +4182,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -4200,14 +4257,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": "Dose at 08:00"
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -4274,14 +4332,15 @@
                 7
               ]
             },
+            "at": "08:00",
             "stages": [
               {
-                "at": "07:45",
+                "offset": -15,
                 "wake": "exact",
                 "text": ""
               },
               {
-                "at": "08:00",
+                "offset": 0,
                 "wake": "alarmClock",
                 "text": "08:00 dose due"
               }
@@ -4309,6 +4368,1296 @@
       },
       "expected": {
         "error": "invalid-content"
+      }
+    },
+    {
+      "name": "stages before and after midnight",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "00:10",
+            "stages": [
+              {
+                "offset": -30,
+                "wake": "exact",
+                "text": "Soon"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "Now"
+              },
+              {
+                "offset": 120,
+                "wake": "alarmClock",
+                "text": "Late"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "offsets at both limits",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -1440,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 1440,
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "an offset past a day after",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 1441,
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-stages"
+      }
+    },
+    {
+      "name": "an offset past a day before",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -1441,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-stages"
+      }
+    },
+    {
+      "name": "a fractional offset",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -14.5,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a string offset",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": "-15",
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a stage with a clock time instead of an offset",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "at": "07:45",
+                "wake": "exact",
+                "text": "Early"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a reminder without an anchor time",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a warning stage",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due",
+                "tone": "warning"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "an unknown tone",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due",
+                "tone": "critical"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a stage title",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due",
+                "title": "Vitamin D is due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "an empty stage title",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due",
+                "title": ""
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-content"
+      }
+    },
+    {
+      "name": "a null stage title",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due",
+                "title": null
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a stage icon",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due",
+                "icon": "warning"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "an unknown stage icon",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due",
+                "icon": "bell"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "error": "invalid-shape"
+      }
+    },
+    {
+      "name": "a warning reminder icon",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "warning",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due"
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "name": "every optional stage field",
+      "input": {
+        "channels": [
+          {
+            "id": "alerts",
+            "name": "Reminders",
+            "group": {
+              "id": "group",
+              "name": "Group"
+            }
+          }
+        ],
+        "reminders": [
+          {
+            "key": "[\"m1\",\"s1\"]",
+            "channel": "alerts",
+            "icon": "pill",
+            "title": "Vitamin D",
+            "lockScreen": {
+              "title": "Reminder",
+              "text": "Open the app for details"
+            },
+            "url": "app:///item?date={date}",
+            "recurrence": {
+              "from": "2026-09-01",
+              "until": null,
+              "weekdays": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "at": "08:00",
+            "stages": [
+              {
+                "offset": -15,
+                "wake": "exact",
+                "text": "Dose at 08:00"
+              },
+              {
+                "offset": 0,
+                "wake": "alarmClock",
+                "text": "08:00 dose due",
+                "title": "Due",
+                "icon": "warning",
+                "tone": "warning",
+                "fullScreen": true
+              }
+            ],
+            "actions": [
+              {
+                "id": "taken",
+                "label": "Taken",
+                "kind": "settle"
+              },
+              {
+                "id": "postpone",
+                "label": "Postpone 1 hour",
+                "kind": "snooze",
+                "minutes": 60
+              }
+            ],
+            "settled": [
+              "2026-09-02",
+              "2026-09-05"
+            ],
+            "data": "{\"alarmAt\":\"08:00\"}"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true
       }
     }
   ]

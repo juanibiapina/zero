@@ -8,7 +8,17 @@ export type Channel = { id: string; name: string; group: { id: string; name: str
 
 export type Recurrence = { from: LocalDate; until: LocalDate | null; weekdays: Weekday[] };
 
-export type Stage = { at: LocalTime; wake: "exact" | "alarmClock"; text: string; fullScreen?: true };
+export type Icon = "pill" | "warning";
+
+export type Stage = {
+  offset: number;
+  wake: "exact" | "alarmClock";
+  text: string;
+  title?: string;
+  icon?: Icon;
+  tone?: "warning";
+  fullScreen?: true;
+};
 
 export type Action =
   | { id: string; label: string; kind: "settle" }
@@ -17,11 +27,12 @@ export type Action =
 export type Reminder = {
   key: string;
   channel: string;
-  icon: "pill";
+  icon: Icon;
   title: string;
   lockScreen: { title: string; text: string };
   url: string;
   recurrence: Recurrence;
+  at: LocalTime;
   stages: Stage[];
   actions: Action[];
   settled: LocalDate[];
@@ -70,6 +81,8 @@ export type ScheduleError =
 
 export type ScheduleResult = { ok: true; schedule: Schedule } | { ok: false; error: ScheduleError };
 
+const icon = z.enum(["pill", "warning"]);
+
 const shape = z.strictObject({
   channels: z.array(z.strictObject({
     id: z.string(),
@@ -79,12 +92,21 @@ const shape = z.strictObject({
   reminders: z.array(z.strictObject({
     key: z.string(),
     channel: z.string(),
-    icon: z.literal("pill"),
+    icon,
     title: z.string(),
     lockScreen: z.strictObject({ title: z.string(), text: z.string() }),
     url: z.string(),
     recurrence: z.strictObject({ from: z.string(), until: z.string().nullable(), weekdays: z.array(z.number().int()) }),
-    stages: z.array(z.strictObject({ at: z.string(), wake: z.enum(["exact", "alarmClock"]), text: z.string(), fullScreen: z.literal(true).optional() })),
+    at: z.string(),
+    stages: z.array(z.strictObject({
+      offset: z.number().int(),
+      wake: z.enum(["exact", "alarmClock"]),
+      text: z.string(),
+      title: z.string().optional(),
+      icon: icon.optional(),
+      tone: z.literal("warning").optional(),
+      fullScreen: z.literal(true).optional(),
+    })),
     actions: z.array(z.discriminatedUnion("kind", [
       z.strictObject({ id: z.string(), label: z.string(), kind: z.literal("settle") }),
       z.strictObject({ id: z.string(), label: z.string(), kind: z.literal("snooze"), minutes: z.number().int() }),
@@ -102,6 +124,8 @@ export function isLocalDate(value: string): boolean {
   date.setUTCFullYear(year, month - 1, day);
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
+
+const MAX_OFFSET = 1440;
 
 const isLocalTime = (value: string) => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
 const ascending = (values: (string | number)[]) => values.every((value, index) => index === 0 || values[index - 1] < value);
@@ -131,8 +155,8 @@ function reminderError(reminder: z.infer<typeof shape>["reminders"][number], key
   if (!isLocalDate(recurrence.from) || (recurrence.until !== null && !isLocalDate(recurrence.until)) || !settled.every(isLocalDate)) return "invalid-date";
   if (!recurrence.weekdays.length || !ascending(recurrence.weekdays) || recurrence.weekdays.some((day) => day < 1 || day > 7)) return "invalid-recurrence";
   if (recurrence.until !== null && recurrence.until < recurrence.from) return "invalid-recurrence";
-  if (!stages.every((stage) => isLocalTime(stage.at))) return "invalid-time";
-  if (!stages.length || !ascending(stages.map((stage) => stage.at))) return "invalid-stages";
+  if (!isLocalTime(reminder.at)) return "invalid-time";
+  if (!stages.length || !ascending(stages.map((stage) => stage.offset)) || stages.some((stage) => stage.offset < -MAX_OFFSET || stage.offset > MAX_OFFSET)) return "invalid-stages";
   const actionIds = new Set<string>();
   if (actions.length > 3) return "invalid-actions";
   for (const action of actions) {
@@ -141,6 +165,6 @@ function reminderError(reminder: z.infer<typeof shape>["reminders"][number], key
     actionIds.add(action.id);
   }
   if (!ascending(settled)) return "invalid-settled";
-  if (!reminder.title || !reminder.url || !reminder.lockScreen.title || !reminder.lockScreen.text || stages.some((stage) => !stage.text)) return "invalid-content";
+  if (!reminder.title || !reminder.url || !reminder.lockScreen.title || !reminder.lockScreen.text || stages.some((stage) => !stage.text || stage.title === "")) return "invalid-content";
   return null;
 }

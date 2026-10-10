@@ -1,6 +1,6 @@
 import type { Channel, Receipt, Reminder, Schedule } from "../notifications/schedule";
 import { pillCount } from "./supply";
-import { doseId, medicineRecurrence, type Dose, type Medicine, type MedicineReceipt } from "./model";
+import { doseId, medicineLead, medicineRecurrence, type Dose, type Medicine, type MedicineReceipt } from "./model";
 
 export const MEDICINE_SOURCE = "medicines";
 export const MEDICINE_CHANNEL = "medicine-alerts-v2";
@@ -14,11 +14,11 @@ export function medicineReminderKey(medicineId: string, slotId: string): string 
 const withInstructions = (text: string, instructions: string | null) => [text, instructions ?? ""].filter((part) => part.trim()).join(" · ");
 
 export function medicineSchedule(snapshot: { medicines: Medicine[]; doses: Dose[] }): Schedule {
-  const taken = new Map<string, Set<string>>();
+  const settled = new Map<string, Set<string>>();
   for (const dose of snapshot.doses) {
-    if (!dose.takenAt) continue;
+    if (!dose.takenAt && !dose.skippedAt) continue;
     const key = medicineReminderKey(dose.medicineId, dose.slotId);
-    taken.set(key, (taken.get(key) ?? new Set()).add(dose.on));
+    settled.set(key, (settled.get(key) ?? new Set()).add(dose.on));
   }
   const reminders: Reminder[] = [];
   for (const medicine of snapshot.medicines) {
@@ -33,15 +33,20 @@ export function medicineSchedule(snapshot: { medicines: Medicine[]; doses: Dose[
         lockScreen: { title: "Medicine reminder", text: "Open Zero Agent for details" },
         url: `zeroagent:///browse/medicines/${encodeURIComponent(medicine.id)}?slot=${encodeURIComponent(slot.id)}&date={date}`,
         recurrence: medicineRecurrence(medicine),
+        at: slot.alarmAt,
         stages: [
-          { at: slot.remindAt, wake: "exact", text: withInstructions(`Take ${pillCount(slot.amount)} at ${slot.alarmAt}`, medicine.instructions) },
-          { at: slot.alarmAt, wake: "alarmClock", text: withInstructions(`Time to take ${pillCount(slot.amount)}`, medicine.instructions), fullScreen: true },
+          { offset: -medicineLead(slot), wake: "exact", text: withInstructions(`Take ${pillCount(slot.amount)} at ${slot.alarmAt}`, medicine.instructions) },
+          {
+            offset: 0, wake: "alarmClock", title: `${medicine.name} is due`, icon: "warning", tone: "warning", fullScreen: true,
+            text: withInstructions(`Due at ${slot.alarmAt} · take ${pillCount(slot.amount)}`, medicine.instructions),
+          },
         ],
         actions: [
           { id: "taken", label: "Taken", kind: "settle" },
           { id: "postpone", label: "Postpone 1 hour", kind: "snooze", minutes: 60 },
+          { id: "skip", label: "Skip", kind: "settle" },
         ],
-        settled: [...(taken.get(key) ?? [])].sort(),
+        settled: [...(settled.get(key) ?? [])].sort(),
         data: JSON.stringify({ alarmAt: slot.alarmAt }),
       });
     }
@@ -66,8 +71,9 @@ export function medicineReceipt(receipt: Receipt): MedicineReceipt | null {
   const [medicineId, slotId] = key as [string, string];
   const scheduledAt = new Date(`${receipt.date}T${data.alarmAt}:00`);
   if (!Number.isFinite(scheduledAt.getTime())) return null;
-  const dose: Dose = { id: doseId(medicineId, slotId, receipt.date), medicineId, slotId, on: receipt.date, scheduledAt: scheduledAt.toISOString(), takenAt: null };
+  const dose: Dose = { id: doseId(medicineId, slotId, receipt.date), medicineId, slotId, on: receipt.date, scheduledAt: scheduledAt.toISOString(), takenAt: null, skippedAt: null };
   if (receipt.type === "presented") return { ...dose, actionId: receipt.id, kind: "presented" };
   if (receipt.action === "taken") return { ...dose, actionId: receipt.id, kind: "taken", takenAt: receipt.at };
+  if (receipt.action === "skip") return { ...dose, actionId: receipt.id, kind: "skipped", skippedAt: receipt.at };
   return null;
 }

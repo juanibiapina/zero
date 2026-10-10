@@ -1,5 +1,5 @@
 import { safeRandomUUID } from "@tanstack/db";
-import { EVERY_DAY, medicineEndDate, validateMedicine, type MedicineInput, type MedicineSlot, type Weekday } from "./model";
+import { EVERY_DAY, medicineEndDate, medicineLead, validateMedicine, type MedicineInput, type MedicineSlot, type Weekday } from "./model";
 
 const DAILY_TIMES: Record<number, string[]> = {
   1: ["20:00"],
@@ -11,7 +11,7 @@ export type MedicineCourse = { kind: "ongoing" } | { kind: "days"; days: string 
 const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
 const clock = (value: number) => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 const defaultLead = (count: number) => count === 1 ? 60 : count === 3 ? 30 : 15;
-const reminder = (time: string, lead: number) => clock(Math.max(0, minutes(time) - lead));
+const reminder = (time: string, lead: number) => clock((((minutes(time) - lead) % 1440) + 1440) % 1440);
 
 export class MedicineDraft {
   private constructor(
@@ -54,14 +54,13 @@ export class MedicineDraft {
     const doses = this.input.doses.map((slot) => {
       if (slot.id !== slotId) return slot;
       if (key === "remindAt") return { ...slot, remindAt: value };
-      const lead = Math.max(1, minutes(slot.alarmAt) - minutes(slot.remindAt));
-      return { ...slot, alarmAt: value, remindAt: reminder(value, lead) };
+      return { ...slot, alarmAt: value, remindAt: reminder(value, medicineLead(slot)) };
     });
     return new MedicineDraft({ ...this.input, doses }, this.course, true);
   }
 
   heads(slotId: string, lead: number): MedicineDraft {
-    if (!Number.isInteger(lead) || lead < 1) return this;
+    if (!Number.isInteger(lead) || lead < 1 || lead > 1439) return this;
     const doses = this.input.doses.map((slot) => slot.id === slotId ? { ...slot, remindAt: reminder(slot.alarmAt, lead) } : slot);
     return new MedicineDraft({ ...this.input, doses }, this.course, true);
   }

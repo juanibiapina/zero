@@ -1,5 +1,6 @@
-# A native medicine reminder appears in the shade and Taken from the
-# notification is recorded as a dose.
+# A native medicine reminder appears in the shade, stays there while the app
+# opens and closes its reminders, and Taken from the notification is recorded
+# as a dose.
 appId: dev.juanibiapina.zeroagent
 ---
 - openLink: ${METRO_DEEP_LINK}
@@ -18,15 +19,26 @@ appId: dev.juanibiapina.zeroagent
     start: 50%, 0%
     end: 50%, 85%
 - extendedWaitUntil:
-    visible: E2E medicine
+    visible: E2E medicine.*
     timeout: 90000
+- pressKey: Back
+- tapOn: Import medicine receipts
+- extendedWaitUntil:
+    visible: "Persisted taken doses: 0.*"
+    timeout: 15000
+- swipe:
+    start: 50%, 0%
+    end: 50%, 85%
+- extendedWaitUntil:
+    visible: E2E medicine.*
+    timeout: 15000
 - runFlow:
     when:
       notVisible: Taken
     commands:
       - tapOn:
           id: android:id/expand_button
-          above: E2E medicine
+          above: E2E medicine.*
 - tapOn: Taken
 - pressKey: Back
 - tapOn: Import medicine receipts

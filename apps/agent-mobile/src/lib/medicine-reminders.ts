@@ -30,6 +30,7 @@ export async function attachMedicineReminders(replica: TaskdoReplica, workspace:
     medicines: {
       ...replica.medicines,
       take: (dose) => reminders.take(dose),
+      skip: (dose) => reminders.skip(dose),
       undo: (id) => reminders.undo(id),
       async add(input, creationId) {
         const result = await replica.medicines.add(input, creationId);
