@@ -309,6 +309,6 @@ function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: bool
       <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets scheduleRef={schedule} onPickerOpenChange={setPickerOpen} /></View>
       {error ? <Text variant="error" selectable className="px-screen-x pb-3">{error}</Text> : null}
     </View>}
-    overlay={discard ? <ConfirmDialog title="Discard changes?" message="The changes you've made will not be saved." cancelLabel="Cancel" confirmLabel="Discard" destructive onCancel={() => setDiscard(false)} onConfirm={onClose} /> : null}
+    overlay={discard ? <ConfirmDialog title="Discard changes?" message="The changes you've made will not be saved." cancelLabel="Cancel" confirmLabel="Discard" destructive onCancel={() => setDiscard(false)} onConfirm={() => { setDiscard(false); onClose(); }} /> : null}
   />;
 }

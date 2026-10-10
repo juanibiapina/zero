@@ -130,6 +130,7 @@ describe('Adding a medicine', () => {
     expect(screen.getByLabelText('Medicine name').props.value).toBe('Draft routine');
     await fireEvent.press(screen.getByLabelText('Dismiss medicine editor'));
     await fireEvent.press(screen.getByText('Discard'));
+    expect(screen.queryByText('Discard changes?')).toBeNull();
     expect(screen.data.replica!.snapshot().medicines).toHaveLength(0);
     await fireEvent.press(screen.getByLabelText('Add medicine'));
     expect(screen.getByLabelText('Medicine name').props.value).toBe('');

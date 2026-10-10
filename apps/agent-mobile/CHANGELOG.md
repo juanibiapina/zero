@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-10: Fix "Discard changes?" staying on screen after you discard a new medicine.
+
 - 2026-10-10: Fix the add drawers jumping down and back up when you pick a new task's date or project, or a new medicine's start day or dose time. The drawer now stays in place while the keyboard steps aside.
 
 - 2026-10-10: Fix the + button floating up the screen, or an empty gray panel covering the bottom of the screen, after you add something, switch apps, and come back.
