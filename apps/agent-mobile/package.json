@@ -75,7 +75,7 @@
     "lint": "eslint .",
     "uniwind:types": "uniwind generate-artifacts --css ./global.css --dts ./src/uniwind-types.d.ts",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests --forceExit --runInBand"
+    "test": "jest --passWithNoTests --runInBand"
   },
   "jest": {
     "preset": "jest-expo",
@@ -97,11 +97,6 @@
     "testTimeout": 60000
   },
   "expo": {
-    "autolinking": {
-      "android": {
-        "buildFromSource": ["expo-ui"]
-      }
-    },
     "install": {
       "exclude": [
         "react-native-keyboard-controller",

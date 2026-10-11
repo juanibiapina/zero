@@ -79,7 +79,9 @@ eas channel:insights --channel preview --runtime-version <runtime-version>
 
 Build a new APK when the native fingerprint changes. Native inputs include Expo
 configuration, config plugins, native modules, native dependencies, and the Expo
-SDK.
+SDK. `apps/agent-mobile/fingerprint.config.js` leaves `package.json` scripts out:
+before it, editing the `test` script gave every later update a runtime the
+installed APK rejected.
 
 A CI update with a new fingerprint is safe. Existing APKs reject it until a
 compatible APK is installed.

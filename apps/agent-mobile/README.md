@@ -127,10 +127,6 @@ back only where the native component does not fit.
   Opening a sheet while a field outside it has the keyboard hides the
   keyboard; closing the sheet gives it back to that field unless the field
   has left the screen or another field has focus.
-  `patches/@expo__ui@57.0.22.patch` and `expo.autolinking.android.buildFromSource`
-  in `package.json` served the earlier native `@expo/ui` sheet and no longer
-  affect any sheet. Drop both with the next native build; they change the
-  native fingerprint.
 - **The Home task list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
   native but **not virtualized**; Home is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).
