@@ -1,7 +1,7 @@
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { MedicineDraft, medicineDay, medicineEndDate, medicineLead, medicineToday, pillCount, type MedicineSlot, type Weekday } from '@zero/agent-core';
-import { useImperativeHandle, useLayoutEffect, useState, type Ref } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { useLayoutEffect, useState } from 'react';
+import { Pressable, View } from 'react-native';
 
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
@@ -29,23 +29,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return <View className="gap-1 pt-3"><Text variant="caption" className="font-semibold uppercase tracking-wide">{title}</Text>{children}</View>;
 }
 
-export type MedicineScheduleHandle = { handleBack: () => boolean };
-
-export function MedicineSchedule({ draft, onChange, disabled = false, presets = false, scheduleRef, onPickerOpenChange }: {
+export function MedicineSchedule({ draft, onChange, disabled = false, presets = false, onPickerOpenChange }: {
   draft: MedicineDraft;
   onChange: (draft: MedicineDraft) => Promise<void> | void;
   disabled?: boolean;
   presets?: boolean;
-  scheduleRef?: Ref<MedicineScheduleHandle>;
   onPickerOpenChange?: (open: boolean) => void;
 }) {
   const [openSlot, setOpenSlot] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ mode: 'date' | 'time'; value: Date; save: (date: Date) => void } | null>(null);
-  useImperativeHandle(scheduleRef, () => ({ handleBack: () => {
-    if (picker) { setPicker(null); return true; }
-    if (openSlot) { setOpenSlot(null); return true; }
-    return false;
-  } }), [picker, openSlot]);
   const today = medicineToday();
   const tomorrow = medicineEndDate(today, 2);
   const { doses, weekdays, startsOn } = draft.input;
@@ -92,7 +84,7 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
         <Stepper label="days" value={days} min={1} disabled={disabled} onChange={setDays} />
       </View> : null}
     </Section>
-    <Sheet open={slot != null} onClose={() => setOpenSlot(null)}>
+    <Sheet open={slot != null} onClose={() => setOpenSlot(null)} contextBridge={null}>
       {slot ? <DoseForm slot={slot} canRemove={doses.length > 1} disabled={disabled} onClose={() => setOpenSlot(null)}
         onChange={(change) => onChange(change(draft))} onPickTime={(save) => setPicker({ mode: 'time', value: new Date(`2000-01-01T${slot.alarmAt}:00`), save: (date) => save(clockOf(date)) })}
       /> : null}
@@ -121,7 +113,7 @@ function DoseForm({ slot, canRemove, disabled, onClose, onChange, onPickTime }: 
 }) {
   const lead = medicineLead(slot);
   const leads = HEADS_UP.some((option) => option.minutes === lead) ? HEADS_UP : [...HEADS_UP, { minutes: lead, label: leadLabel(lead) }].sort((a, b) => a.minutes - b.minutes);
-  return <ScrollView className="px-screen-x" keyboardShouldPersistTaps="handled">
+  return <View className="px-screen-x">
     <View className="min-h-14 flex-row items-center justify-between">
       <Text variant="section">Dose</Text>
       <Pressable accessibilityRole="button" accessibilityLabel={`Change time, ${slot.alarmAt}`} disabled={disabled} onPress={() => onPickTime((time) => void onChange((draft) => draft.time(slot.id, 'alarmAt', time)))} className="min-h-12 justify-center rounded-xl bg-surface-muted px-4">
@@ -142,7 +134,7 @@ function DoseForm({ slot, canRemove, disabled, onClose, onChange, onPickTime }: 
       {canRemove ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${slot.alarmAt} dose`} disabled={disabled} onPress={() => { onClose(); void onChange((draft) => draft.removeTime(slot.id)); }} className="min-h-12 justify-center"><Text className="font-medium text-danger">Remove</Text></Pressable> : <View />}
       <Pressable accessibilityRole="button" accessibilityLabel="Done" onPress={onClose} className="min-h-12 justify-center px-2"><Text className="font-semibold text-accent">Done</Text></Pressable>
     </View>
-  </ScrollView>;
+  </View>;
 }
 
 export function MedicineSaveButton({ busy, disabled, onPress }: { busy: boolean; disabled: boolean; onPress: () => void }) {

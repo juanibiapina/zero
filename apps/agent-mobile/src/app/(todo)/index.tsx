@@ -307,17 +307,9 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   );
 
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (detail.handleBack()) {
-        return true;
-      }
-      if (add.handleBack()) {
-        return true;
-      }
-      return false;
-    });
+    const sub = BackHandler.addEventListener('hardwareBackPress', add.handleBack);
     return () => sub.remove();
-  }, [detail, add]);
+  }, [add.handleBack]);
 
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 

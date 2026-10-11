@@ -42,7 +42,7 @@ export function EmojiPickerSheet({
   };
 
   return (
-    <Sheet open={open} onClose={onClose} tall>
+    <Sheet open={open} onClose={onClose} size="tall" contextBridge={null}>
       <View className="flex-1">
         {header ? (
           <>

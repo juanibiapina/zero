@@ -9,7 +9,7 @@ const base = {
   draft: 'Write proposal',
   onChangeDraft: jest.fn(),
   onSubmit: jest.fn(),
-  onClose: jest.fn(),
+  onClose: jest.fn<() => void>(),
 };
 
 describe('TaskEditorSheet', () => {
@@ -114,7 +114,7 @@ describe('TaskEditorSheet', () => {
   });
 
   it('closes the editing sheet when the user dismisses it', async () => {
-    const onClose = jest.fn();
+    const onClose = jest.fn<() => void>();
     const view = await render(<TaskEditorSheet {...base} onClose={onClose} />);
     await fireEvent.press(view.getByLabelText('Close sheet'));
     expect(onClose).toHaveBeenCalledTimes(1);

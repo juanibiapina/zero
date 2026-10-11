@@ -8,6 +8,7 @@
     "@expo/material-symbols": "^0.1.1",
     "@expo/metro-runtime": "~57.0.16",
     "@expo/ui": "~57.0.22",
+    "@gorhom/bottom-sheet": "5.2.14",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@tanstack/db": "0.12.1",
     "@tanstack/query-db-collection": "1.4.0",

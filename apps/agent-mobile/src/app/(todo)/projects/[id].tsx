@@ -332,12 +332,10 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       flushDraft();
-      if (detail.handleBack()) return true;
-      if (add.handleBack()) return true;
-      return false;
+      return add.handleBack();
     });
     return () => sub.remove();
-  }, [detail, add, flushDraft]);
+  }, [add, flushDraft]);
 
   const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
   const today = useLocalDay();
@@ -692,7 +690,7 @@ function ProjectHeader({
         onPick={applyIcon}
       />
 
-      <Sheet open={statusOpen} onClose={() => setStatusOpen(false)}>
+      <Sheet open={statusOpen} onClose={() => setStatusOpen(false)} contextBridge={null}>
         <View className="pb-4">
           <View className="gap-0.5 px-screen-x pb-2">
             <Text className="text-[20px] font-semibold">Project status</Text>

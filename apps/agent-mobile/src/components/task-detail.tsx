@@ -18,12 +18,12 @@ import { toText } from '@zeroapps/recurrence';
 import { Host, Icon } from '@expo/ui';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, SectionList, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { PillCountSheet } from '@/components/pill-count-sheet';
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
 import { Input } from '@/components/ui/input';
-import { Sheet } from '@/components/ui/sheet';
+import { Sheet, SheetSectionList } from '@/components/ui/sheet';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
@@ -54,7 +54,7 @@ type ProjectPickerSheetProps = {
 
 export function ProjectPickerSheet(props: ProjectPickerSheetProps) {
   return (
-    <Sheet open={props.open} onClose={props.onClose}>
+    <Sheet open={props.open} onClose={props.onClose} size="expandable" contextBridge={null}>
       <ProjectPicker {...props} />
     </Sheet>
   );
@@ -82,8 +82,9 @@ function ProjectPicker({
   const sections = useMemo(() => grouped.map((section) => ({
     ...section, data: section.collapsed ? [] : section.projects,
   })), [grouped]);
+  const divider = useColor('--color-divider');
   return (
-    <View className="shrink">
+    <View className="flex-1">
       <Text className="px-screen-x pb-1 text-[15px] font-semibold">
         {title}
       </Text>
@@ -111,9 +112,8 @@ function ProjectPicker({
         />
       ) : null}
 
-      <SectionList
-        style={{ flexShrink: 1 }}
-        className="border-t border-divider"
+      <SheetSectionList
+        style={{ flexShrink: 1, borderTopWidth: 1, borderTopColor: divider }}
         sections={sections}
         initialNumToRender={20}
         keyExtractor={(p) => p.id}
@@ -218,7 +218,7 @@ type ScheduleSheetProps = {
 
 export function ScheduleSheet(props: ScheduleSheetProps) {
   return (
-    <Sheet open={props.open} onClose={props.onClose}>
+    <Sheet open={props.open} onClose={props.onClose} contextBridge={null}>
       <Scheduler {...props} />
     </Sheet>
   );
@@ -257,7 +257,7 @@ function Scheduler({
   };
 
   return (
-    <ScrollView style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled">
+    <View>
       <Text className="px-screen-x pb-1 text-[15px] font-semibold">
         Schedule
       </Text>
@@ -385,7 +385,7 @@ function Scheduler({
           selected={selected == null}
         />
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -396,8 +396,6 @@ function Scheduler({
 //
 // The selected task comes from the collection so committing a typed date before
 // opening a picker keeps the editor available even when the task leaves Home.
-// `handleBack` is returned, not self-registered, so each screen keeps its own
-// Back priority (Home must still order quick-add and discard-confirm).
 export type TaskDetail = {
   // Open the editor for a task (seeds the editable draft from its text).
   open: (item: Task) => void;
@@ -407,11 +405,6 @@ export type TaskDetail = {
   complete: (item: Task) => void;
   // The detail sheet + schedule/project pickers, ready to render at the screen root.
   sheets: ReactNode;
-  // Consume an Android Back press when the editor or a picker is open. Returns
-  // true if it handled the press (the screen should then return true too).
-  handleBack: () => boolean;
-  // Whether the editor or either picker is currently open.
-  active: boolean;
 };
 
 export function useTaskDetail({
@@ -512,6 +505,13 @@ export function useTaskDetail({
     }
     setSelectedId(null);
   }, [commitDraft, onError, waitForPersist]);
+
+  const dismissDetail = useCallback((): void | false => {
+    if (closingDetailRef.current) return;
+    if (!commitDraft() && selected && api.collection.get(selected.id)) return false;
+    closingDetailRef.current = true;
+    setSelectedId(null);
+  }, [api, commitDraft, selected]);
 
   const openSelectedProject = useCallback(() => {
     if (!selectedProject || !commitDraft()) return;
@@ -622,31 +622,11 @@ export function useTaskDetail({
     [api, selected, projects, onError],
   );
 
-  const handleBack = useCallback(() => {
-    if (restocking) {
-      setRestocking(null);
-      return true;
-    }
-    if (picking) {
-      setPicking(false);
-      return true;
-    }
-    if (scheduling) {
-      setScheduling(false);
-      return true;
-    }
-    if (selected) {
-      commitAndClose();
-      return true;
-    }
-    return false;
-  }, [restocking, picking, scheduling, selected, commitAndClose]);
-
   const sheets = (
     <>
       <TaskEditorSheet
         open={selected != null}
-        onClose={commitAndClose}
+        onClose={dismissDetail}
         dismissLabel="Close task"
         draft={draftView.text}
         onChangeDraft={(text) => setDraft((current) => current.change(text))}
@@ -747,7 +727,5 @@ export function useTaskDetail({
     open,
     complete,
     sheets,
-    handleBack,
-    active: selected != null || scheduling || picking || restocking != null,
   };
 }
