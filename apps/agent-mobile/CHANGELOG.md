@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-11: Change Postpone 1 hour on medicine notifications to move the dose an hour later. The notification closes, the early reminder comes back before the new time, and the alarm rings at the new time. The dose-time notification keeps the pill icon.
+
 - 2026-10-11: Change sheets so you can drag them from anywhere, not just the handle. The task editor and project pickers open in the middle of the screen and drag up to full height, back to the middle, or down to close.
 
 - 2026-10-10: Change medicine notifications to stay until you press Taken or the new Skip. Opening the app, Clear all and the lock screen leave them in place, and a swiped one comes back quietly. Postpone 1 hour now keeps the notification and moves its alarm an hour later. At the dose time the notification turns into a red warning. Long-press a dose to skip it in the app.

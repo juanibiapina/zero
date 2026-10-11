@@ -40,7 +40,7 @@ class NotificationEngineTest {
 
   private fun reminder(
     key: String = "item", early: String = "07:45", due: String = "08:00", settled: List<String> = emptyList(),
-    from: String = "2026-09-01", until: String? = null, weekdays: List<Int> = (1..7).toList(), late: Int? = null,
+    from: String = "2026-09-01", until: String? = null, weekdays: List<Int> = (1..7).toList(), late: Int? = null, timed: Boolean = false,
   ) = JSONObject()
     .put("key", key).put("channel", "alerts").put("icon", "pill").put("title", "Title $key")
     .put("lockScreen", JSONObject().put("title", "Reminder").put("text", "Open the app"))
@@ -48,8 +48,8 @@ class NotificationEngineTest {
     .put("recurrence", JSONObject().put("from", from).put("until", until ?: JSONObject.NULL).put("weekdays", JSONArray(weekdays)))
     .put("at", due)
     .put("stages", JSONArray()
-      .put(JSONObject().put("offset", -lead(early, due)).put("wake", "exact").put("text", "Early $early"))
-      .put(JSONObject().put("offset", 0).put("wake", "alarmClock").put("text", "Due $due"))
+      .put(JSONObject().put("offset", -lead(early, due)).put("wake", "exact").put("text", if (timed) "Early at {time}" else "Early $early"))
+      .put(JSONObject().put("offset", 0).put("wake", "alarmClock").put("text", if (timed) "Due at {time}" else "Due $due"))
       .also { stages -> if (late != null) stages.put(JSONObject().put("offset", late).put("wake", "alarmClock").put("text", "Late $late")) })
     .put("actions", JSONArray()
       .put(JSONObject().put("id", "done").put("label", "Done").put("kind", "settle"))
@@ -67,6 +67,7 @@ class NotificationEngineTest {
   private fun install(vararg reminders: JSONObject, into: String = workspace) = NotificationEngine.install(context, into, source, schedule(*reminders))
   private fun at(time: String, date: String = day) { NotificationEngine.clock = { Clock.fixed(java.time.LocalDateTime.parse("${date}T$time").atZone(zone).toInstant(), zone) } }
   private fun fire(time: String, date: String = day) { at(time, date); NotificationEngine.wake(context) }
+  private fun fireAt(time: Long) { NotificationEngine.clock = { Clock.fixed(Instant.ofEpochMilli(time), zone) }; NotificationEngine.wake(context) }
   private fun card(key: String = "item", date: String = day): Notification? = shadowOf(manager).getNotification(NotificationEngine.occurrence(source, key, date), 0)
   private fun text(key: String = "item", date: String = day) = card(key, date)?.extras?.getString(Notification.EXTRA_TEXT)
   private fun tap(label: String, key: String = "item", date: String = day) = NotificationReceiver().onReceive(context, button(label, key, date))
@@ -191,43 +192,83 @@ class NotificationEngineTest {
   }
 
   @Test
-  fun aSnoozeKeepsTheCardQuietSkipsTheStagesInsideItAndReturnsWithTheLatestStage() {
-    at("09:00"); install(reminder(early = "09:50", due = "10:30"))
-    fire("09:50")
-    at("09:55"); tap("Later")
-    assertEquals("Early 09:50", text())
-    assertFalse(alerting(card()!!))
-    assertEquals(ms("10:55"), armed("alarm_clock"))
-    fire("10:30")
-    assertEquals("Early 09:50", text())
-    fire("10:55")
-    assertEquals("Due 10:30", text())
+  fun postponeMovesTheDoseAnHourAndItsEarlyStageComesBackBeforeTheNewTime() {
+    at("01:00"); install(reminder(early = "01:30", due = "02:00", timed = true))
+    fire("01:30")
+    at("01:35"); tap("Later")
+    assertNull(card())
+    assertEquals(ms("02:30"), armed("exact"))
+    assertEquals(ms("03:00"), armed("alarm_clock"))
+    fire("02:00")
+    assertNull(card())
+    fire("02:30")
+    assertEquals("Early at 03:00", text())
     assertTrue(alerting(card()!!))
-    assertEquals(listOf("Done", "Later"), card()!!.actions.map { it.title.toString() })
+    fire("03:00")
+    assertEquals("Due at 03:00", text())
+    assertTrue(alerting(card()!!))
   }
 
   @Test
-  fun aSnoozeThatEndsBeforeTheNextStageLeavesThatStageInPlace() {
-    at("07:00"); install(reminder(early = "08:00", due = "10:30"))
+  fun postponeInsideALongEarlyWindowShowsTheEarlyStageForTheNewTimeQuietly() {
+    at("23:00", "2026-10-01"); install(reminder(early = "00:00", due = "02:00", timed = true))
+    fire("00:00")
+    at("01:30"); tap("Later")
+    assertEquals("Early at 03:00", text())
+    assertFalse(alerting(card()!!))
+    assertEquals(ms("03:00"), armed("alarm_clock"))
+    fire("02:00")
+    assertEquals("Early at 03:00", text())
+    fire("03:00")
+    assertEquals("Due at 03:00", text())
+    assertTrue(alerting(card()!!))
+  }
+
+  @Test
+  fun postponeAfterTheDoseTimeCountsFromNowAndPostponingAgainAddsAnHour() {
+    at("09:00"); install(reminder(early = "09:10", due = "09:30", timed = true))
+    fire("09:30")
+    at("09:40"); tap("Later")
+    assertNull(card())
+    assertEquals(ms("10:40"), armed("alarm_clock"))
+    fire("10:20")
+    assertEquals("Early at 10:40", text())
+    at("10:25"); tap("Later")
+    assertNull(card())
+    assertEquals(ms("11:40"), armed("alarm_clock"))
+  }
+
+  @Test
+  fun aDoseCanBePostponedForDays() {
+    at("07:00"); install(reminder(weekdays = listOf(5), timed = true))
     fire("08:00")
-    tap("Later")
-    fire("09:00")
-    assertEquals("Early 08:00", text())
-    fire("10:30")
-    assertEquals("Due 10:30", text())
+    var due = ms("08:00")
+    repeat(100) {
+      tap("Later")
+      due += 3_600_000
+      fireAt(due - 15 * 60_000)
+    }
+    assertEquals(ms("12:00", "2026-10-06"), due)
+    assertEquals(due, armed("alarm_clock"))
+    fireAt(due)
+    assertEquals("Due at 12:00", text())
+    assertTrue(alerting(card()!!))
   }
 
   @Test
-  fun aSnoozeReturnsAfterMidnightForItsOwnOccurrence() {
-    at("22:00"); install(reminder(early = "22:30", due = "23:00"))
-    fire("23:00")
-    at("23:30"); tap("Later")
-    fire("00:30", "2026-10-03")
-    assertEquals("Due 23:00", text())
+  fun aPostponeCanCrossMidnightAndKeepsItsOccurrence() {
+    at("22:00"); install(reminder(early = "23:00", due = "23:30", timed = true))
+    fire("23:30")
+    at("23:40"); tap("Later")
+    fire("00:10", "2026-10-03")
+    assertEquals("Early at 00:40", text())
+    fire("00:40", "2026-10-03")
+    assertEquals("Due at 00:40", text())
+    assertNull(card(date = "2026-10-03"))
   }
 
   @Test
-  fun aRepeatedSnoozeTapSnoozesOnce() {
+  fun aRepeatedPostponeTapPostponesOnce() {
     at("09:00"); install(reminder(early = "09:10", due = "09:30"))
     fire("09:30")
     val later = button("Later")
@@ -238,28 +279,24 @@ class NotificationEngineTest {
   }
 
   @Test
-  fun postponingAgainFromTheCardRestartsTheHour() {
+  fun settlingAPostponedDoseCancelsItsAlarm() {
     at("09:00"); install(reminder(early = "09:10", due = "09:30"))
     fire("09:30")
     tap("Later")
-    at("09:40"); tap("Later")
-    assertEquals(ms("10:40"), armed("alarm_clock"))
-    fire("10:30")
-    assertFalse(alerting(card()!!))
-    fire("10:40")
-    assertTrue(alerting(card()!!))
-  }
-
-  @Test
-  fun settlingDuringASnoozeClosesTheCardAndCancelsTheSnooze() {
-    at("09:00"); install(reminder(early = "09:10", due = "09:30"))
-    fire("09:30")
-    tap("Later")
-    at("09:40"); tap("Done")
-    assertNull(card())
+    at("09:40"); NotificationEngine.settle(context, workspace, source, "item", day, "done")
     fire("10:30")
     assertNull(card())
     assertEquals(ms("09:30", "2026-10-03"), armed("alarm_clock"))
+  }
+
+  @Test
+  fun changingTheDoseTimeCancelsAPostpone() {
+    at("07:00"); install(reminder())
+    fire("08:00")
+    tap("Later")
+    assertEquals(ms("09:00"), armed("alarm_clock"))
+    at("08:10"); install(reminder(early = "08:45", due = "09:30"))
+    assertEquals(ms("09:30"), armed("alarm_clock"))
   }
 
   @Test
@@ -383,14 +420,33 @@ class NotificationEngineTest {
   }
 
   @Test
-  fun aSnoozeMissedWhileThePhoneWasOffReturnsQuietly() {
-    at("09:00"); install(reminder(early = "09:50", due = "10:30"))
-    fire("09:50")
-    tap("Later")
-    at("11:30")
+  fun aPostponedAlarmMissedWhileThePhoneWasOffShowsQuietly() {
+    at("09:00"); install(reminder(early = "09:50", due = "10:30", timed = true))
+    fire("10:30")
+    at("10:35"); tap("Later")
+    at("12:00")
     NotificationEngine.restore(context, true)
-    assertEquals("Due 10:30", text())
+    assertEquals("Due at 11:35", text())
     assertFalse(alerting(card()!!))
+  }
+
+  @Test
+  fun aStoreWithAnOldSnoozeAndAStageIconKeepsWorking() {
+    at("07:00"); install(reminder())
+    val withIcon = reminder().apply { getJSONArray("stages").getJSONObject(1).put("icon", "warning") }
+    val id = NotificationEngine.occurrence(source, "item", day)
+    val stored = JSONObject()
+      .put("workspace", workspace).put("quiesced", false).put("processedUntil", ms("08:10"))
+      .put("schedules", JSONObject().put(source, schedule(withIcon)))
+      .put("settledHere", JSONArray()).put("receipts", JSONArray())
+      .put("cards", JSONObject().put(id, JSONObject().put("source", source).put("key", "item").put("date", day).put("stage", 1).put("anchor", "08:00").put("offset", 0).put("shownAt", ms("08:00"))))
+      .put("snoozes", JSONObject().put(id, JSONObject().put("source", source).put("key", "item").put("date", day).put("until", ms("09:10")).put("anchor", "08:00").put("offset", 0)))
+      .put("alarms", JSONArray())
+    File(context.noBackupFilesDir, "zero-notifications.json").writeText(stored.toString())
+    fire("09:10")
+    assertEquals("Due 08:00", text())
+    assertTrue(alerting(card()!!))
+    assertEquals(R.drawable.ic_notification_pill, card()!!.smallIcon.resId)
   }
 
   @Test

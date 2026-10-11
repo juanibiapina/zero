@@ -8,14 +8,13 @@ export type Channel = { id: string; name: string; group: { id: string; name: str
 
 export type Recurrence = { from: LocalDate; until: LocalDate | null; weekdays: Weekday[] };
 
-export type Icon = "pill" | "warning";
+export type Icon = "pill";
 
 export type Stage = {
   offset: number;
   wake: "exact" | "alarmClock";
   text: string;
   title?: string;
-  icon?: Icon;
   tone?: "warning";
   fullScreen?: true;
 };
@@ -81,7 +80,7 @@ export type ScheduleError =
 
 export type ScheduleResult = { ok: true; schedule: Schedule } | { ok: false; error: ScheduleError };
 
-const icon = z.enum(["pill", "warning"]);
+const icon = z.enum(["pill"]);
 
 const shape = z.strictObject({
   channels: z.array(z.strictObject({
@@ -103,7 +102,6 @@ const shape = z.strictObject({
       wake: z.enum(["exact", "alarmClock"]),
       text: z.string(),
       title: z.string().optional(),
-      icon: icon.optional(),
       tone: z.literal("warning").optional(),
       fullScreen: z.literal(true).optional(),
     })),

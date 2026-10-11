@@ -115,12 +115,12 @@ class NotificationCardTest {
   }
 
   @Test
-  fun aStageCanReplaceTheIconAndTitle() {
-    showStage { it.put("icon", "warning").put("title", "Title is due") }
+  fun aStageCanReplaceTheTitleAndNameTheDoseTime() {
+    showStage { it.put("title", "Title is due at {time}").put("text", "Due at {time}") }
     val notification = card()
-    assertEquals(R.drawable.ic_notification_warning, notification.smallIcon.resId)
-    assertEquals(R.drawable.ic_notification_warning, notification.publicVersion.smallIcon.resId)
-    assertEquals("Title is due", notification.extras.getString(Notification.EXTRA_TITLE))
+    assertEquals(R.drawable.ic_notification_pill, notification.smallIcon.resId)
+    assertEquals("Title is due at 08:00", notification.extras.getString(Notification.EXTRA_TITLE))
+    assertEquals("Due at 08:00", notification.extras.getString(Notification.EXTRA_TEXT))
     assertEquals(Notification.CATEGORY_REMINDER, notification.category)
     assertEquals(Notification.COLOR_DEFAULT, notification.color)
   }

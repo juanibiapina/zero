@@ -35,10 +35,10 @@ export function medicineSchedule(snapshot: { medicines: Medicine[]; doses: Dose[
         recurrence: medicineRecurrence(medicine),
         at: slot.alarmAt,
         stages: [
-          { offset: -medicineLead(slot), wake: "exact", text: withInstructions(`Take ${pillCount(slot.amount)} at ${slot.alarmAt}`, medicine.instructions) },
+          { offset: -medicineLead(slot), wake: "exact", text: withInstructions(`Take ${pillCount(slot.amount)} at {time}`, medicine.instructions) },
           {
-            offset: 0, wake: "alarmClock", title: `${medicine.name} is due`, icon: "warning", tone: "warning", fullScreen: true,
-            text: withInstructions(`Due at ${slot.alarmAt} · take ${pillCount(slot.amount)}`, medicine.instructions),
+            offset: 0, wake: "alarmClock", title: `${medicine.name} is due`, tone: "warning", fullScreen: true,
+            text: withInstructions(`Due at {time} · take ${pillCount(slot.amount)}`, medicine.instructions),
           },
         ],
         actions: [

@@ -28,8 +28,7 @@ internal data class Recurrence(val from: LocalDate, val until: LocalDate?, val w
 internal enum class Wake { EXACT, ALARM_CLOCK }
 
 internal enum class Icon(val id: String, val drawable: Int) {
-  PILL("pill", R.drawable.ic_notification_pill),
-  WARNING("warning", R.drawable.ic_notification_warning);
+  PILL("pill", R.drawable.ic_notification_pill);
 
   companion object {
     fun of(id: String): Icon? = values().firstOrNull { it.id == id }
@@ -44,7 +43,6 @@ internal data class Stage(
   val text: String,
   val fullScreen: Boolean = false,
   val title: String? = null,
-  val icon: Icon? = null,
   val tone: Tone = Tone.NORMAL,
 )
 
@@ -100,7 +98,7 @@ internal object ScheduleParser {
 
   private class RawChannel(val id: String, val name: String, val groupId: String, val groupName: String)
   private class RawAction(val id: String, val label: String, val minutes: Int?)
-  private class RawStage(val offset: Int, val wake: Wake, val text: String, val fullScreen: Boolean, val title: String?, val icon: Icon?, val tone: Tone)
+  private class RawStage(val offset: Int, val wake: Wake, val text: String, val fullScreen: Boolean, val title: String?, val tone: Tone)
   private class RawReminder(
     val key: String, val channel: String, val icon: Icon, val title: String, val lockTitle: String, val lockText: String,
     val url: String, val from: String, val until: String?, val weekdays: List<Int>, val at: String, val stages: List<RawStage>,
@@ -143,7 +141,7 @@ internal object ScheduleParser {
       val recurrence = obj(reminder.get("recurrence"), "from", "until", "weekdays")
       val until = recurrence.get("until").let { value -> if (value == JSONObject.NULL) null else string(value) }
       val stages = list(reminder.get("stages")).map { item ->
-        val stage = objWith(item, setOf("offset", "wake", "text"), setOf("fullScreen", "title", "icon", "tone"))
+        val stage = objWith(item, setOf("offset", "wake", "text"), setOf("fullScreen", "title", "tone"))
         val fullScreen = stage.has("fullScreen")
         if (fullScreen && stage.get("fullScreen") != true) shapeError()
         val tone = if (!stage.has("tone")) Tone.NORMAL else if (stage.get("tone") == "warning") Tone.WARNING else shapeError()
@@ -151,7 +149,6 @@ internal object ScheduleParser {
         RawStage(
           integer(stage.get("offset")), wake, string(stage.get("text")), fullScreen,
           if (stage.has("title")) string(stage.get("title")) else null,
-          if (stage.has("icon")) icon(stage.get("icon")) else null,
           tone,
         )
       }
@@ -212,7 +209,7 @@ internal object ScheduleParser {
         reminder.key, reminder.channel, reminder.icon, reminder.title, reminder.lockTitle, reminder.lockText, reminder.url,
         Recurrence(LocalDate.parse(reminder.from), reminder.until?.let(LocalDate::parse), reminder.weekdays.toSet()),
         LocalTime.parse(reminder.at),
-        reminder.stages.map { Stage(it.offset, it.wake, it.text, it.fullScreen, it.title, it.icon, it.tone) },
+        reminder.stages.map { Stage(it.offset, it.wake, it.text, it.fullScreen, it.title, it.tone) },
         reminder.actions.map { Action(it.id, it.label, it.minutes) },
         reminder.settled.map(LocalDate::parse).toSet(),
         reminder.data,

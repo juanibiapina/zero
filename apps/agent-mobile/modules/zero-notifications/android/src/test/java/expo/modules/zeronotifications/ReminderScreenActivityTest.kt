@@ -14,6 +14,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -47,7 +48,7 @@ class ReminderScreenActivityTest {
       .put("url", "app:///items/item?date={date}")
       .put("recurrence", JSONObject().put("from", "2026-09-01").put("until", JSONObject.NULL).put("weekdays", JSONArray((1..7).toList())))
       .put("at", "08:00")
-      .put("stages", JSONArray().put(JSONObject().put("offset", 0).put("wake", "alarmClock").put("text", "08:00 dose due").put("fullScreen", true)))
+      .put("stages", JSONArray().put(JSONObject().put("offset", 0).put("wake", "alarmClock").put("text", "{time} dose due").put("fullScreen", true)))
       .put("actions", JSONArray()
         .put(JSONObject().put("id", "taken").put("label", "Taken").put("kind", "settle"))
         .put(JSONObject().put("id", "later").put("label", "Postpone 1 hour").put("kind", "snooze").put("minutes", 60))
@@ -161,12 +162,12 @@ class ReminderScreenActivityTest {
   }
 
   @Test
-  fun postponeClosesTheScreenAndKeepsTheCard() {
+  fun postponeClosesTheScreenAndTheCard() {
     val activity = open().get()
     button(activity, "Postpone 1 hour").performClick()
     idle()
     assertTrue(receipts().none { it.getString("type") == "settled" })
-    assertTrue(shadowOf(manager).getNotification(NotificationEngine.occurrence("source", "item", day), 0) != null)
+    assertNull(shadowOf(manager).getNotification(NotificationEngine.occurrence("source", "item", day), 0))
     assertFalse(playing)
     assertTrue(activity.isFinishing)
   }

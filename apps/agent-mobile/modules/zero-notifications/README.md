@@ -5,9 +5,9 @@ This native module shows scheduled notifications and runs their buttons with no 
 ## Terms
 
 - **Source:** one feature that installs its own schedule, such as `medicines`.
-- **Reminder:** one definition in a schedule: a repeat rule, an anchor time of day, its stages, its text, icon, buttons and link.
+- **Reminder:** one definition in a schedule: a repeat rule, an anchor time of day, its stages, its text, icon, buttons and link. A stage's title and text may contain `{time}`, which shows the occurrence's due time as `HH:mm`: the anchor time, or the postponed time after a postpone.
 - **Occurrence:** a Reminder on one date, identified by source, key and date.
-- **Stage:** a moment at which an occurrence shows, given as an offset in minutes (up to a day either way) from the Reminder's anchor time on the occurrence's date. A stage may fall on the day before or after that date and still belongs to its occurrence.
+- **Stage:** a moment at which an occurrence shows, given as an offset in minutes (up to a day either way) from the occurrence's due time. The due time is the Reminder's anchor time on the occurrence's date until a postpone moves it. A stage may fall on the day before or after that date and still belongs to its occurrence.
 - **Card:** the visible notification. An occurrence has at most one.
 - **Settled:** done. A settled occurrence shows nothing more.
 - **Receipt:** a record the module writes when a card is shown (`presented`) or a settle button is used (`settled`). JavaScript imports receipts and acknowledges them.
@@ -19,25 +19,25 @@ This native module shows scheduled notifications and runs their buttons with no 
 3. At each stage time of an unsettled occurrence, its card is posted or replaced with that stage's text, title, icon and tone, and alerts.
 4. Only stages scheduled before their time fire. A stage already past when its Reminder, date and time were first installed never shows. Reinstalling the same Reminder keeps its stages scheduled.
 5. A settle button records one receipt, closes the card and settles the occurrence. Repeating it changes nothing.
-6. A snooze button keeps the card, quietly, and skips the occurrence's stages until the snooze ends. Then the card alerts again through an alarm clock with the latest stage at or before that time. Pressing snooze again restarts it from then. Snoozes stay on the phone and write no receipt.
+6. A snooze button postpones the occurrence: its due time becomes the later of the current due time and now, plus the button's minutes, and every stage of the occurrence moves with it. The card then shows, quietly, the latest stage at or before now at the new times, or closes when there is none. Later stages show at their new times and alert as usual. Postpones stay on the phone and write no receipt.
 7. Cards are ongoing: the lock screen and Clear all leave them in place. A card the user dismisses anyway (a swipe on Android 14 and later) is posted again quietly; later stages of the occurrence still fire.
-8. Cards never expire. A card closes only when its occurrence is settled, through install (rule 9), or through quiesce, clear or another workspace (rule 14). Install, a wake and a restore quietly post again any card that should be visible and is not.
-9. Install closes a card or cancels a snooze when its occurrence is settled, its Reminder is gone or no longer occurs on that date, or the stage that showed the card no longer exists at the same anchor time and offset.
-10. A stage's time is the anchor's wall time on the occurrence's date in the phone's current zone, plus the offset in elapsed minutes. An anchor inside a daylight-saving gap moves forward by the gap.
+8. Cards never expire. A card closes only when its occurrence is settled or postponed (rule 6), through install (rule 9), or through quiesce, clear or another workspace (rule 14). Install, a wake and a restore quietly post again any card that should be visible and is not.
+9. Install closes a card when its occurrence is settled, its Reminder is gone or no longer occurs on that date, or the stage that showed the card no longer exists at the same anchor time and offset. It cancels a postpone when its occurrence is settled, its Reminder is gone or no longer occurs on that date, or the Reminder's anchor time changed.
+10. A stage's time is the occurrence's due time plus the offset in elapsed minutes. Without a postpone, the due time is the anchor's wall time on the occurrence's date in the phone's current zone. An anchor inside a daylight-saving gap moves forward by the gap.
 11. A stage with `fullScreen: true` gives its card a full-screen intent when it alerts and Android grants full-screen access. Quiet presentations never carry one. On a locked phone or with the screen off, Android opens the reminder screen: the Reminder title, the stage text and one full-width button per action, stacked at the bottom. The first action is the main one: it sits last, in the accent color, and the others stack above it in schedule order. On a phone in use, Android shows the card as a banner instead.
 12. The reminder screen plays the default alarm sound on a loop, with alarm usage, for at most 60 seconds, once per card. While it plays, a Silence button above the actions stops it and leaves the screen and its buttons open. Any button, leaving the screen (Back, Home, the power button) or the 60 seconds stop it; the screen stays open until a button or its card closes it. Its buttons run the same path as the card's buttons, and any of them closes the screen. The screen also closes when its card closes or changes. A silenced test workspace never plays the sound.
-13. A stage may replace the Reminder's `title` and `icon` while it shows. A stage with `tone: "warning"` gives its card and the card's lock-screen version a red accent and the alarm category; every source gets the same warning look. Icons come from the module's set: `pill` and `warning`.
+13. A stage may replace the Reminder's `title` while it shows. The card always shows the Reminder's `icon`. A stage with `tone: "warning"` gives its card and the card's lock-screen version a red accent and the alarm category; every source gets the same warning look. Icons come from the module's set: `pill`.
 14. One workspace owns the store. Another workspace takes it over unless unacknowledged settle receipts remain. A quiesced store shows nothing and refuses settle until the next install.
 
 The parser rejects a whole schedule on any error, including unknown fields, so a schedule this APK does not understand fails loudly.
 
 ## Delivery, power saving and restarts
 
-Stages with `wake: "alarmClock"` and snooze returns use Android alarm-clock scheduling, which wakes the phone through Battery Saver and Doze and shows the upcoming-alarm indicator. Stages with `wake: "exact"` use exact allow-while-idle alarms, which Android throttles per app in idle. The module arms at most one alarm of each kind, so a delayed exact alarm cannot delay an alarm clock. Both need exact-alarm access on Android 12 and later.
+Stages with `wake: "alarmClock"` use Android alarm-clock scheduling, which wakes the phone through Battery Saver and Doze and shows the upcoming-alarm indicator. Stages with `wake: "exact"` use exact allow-while-idle alarms, which Android throttles per app in idle. The module arms at most one alarm of each kind, so a delayed exact alarm cannot delay an alarm clock. Both need exact-alarm access on Android 12 and later.
 
 Every channel has high importance, the default notification sound and vibration. A schedule declares its channels and install creates any that are missing; after that only the name changes, and sound and importance belong to the user. Changing a channel id resets the user's settings for it. A blocked channel or channel group shows nothing and records nothing.
 
-Reboot clears alarms and notifications. After a reboot the module restores visible cards quietly and, for each Reminder, quietly shows the newest stage or snooze return it missed while the phone was off. Clock changes, zone changes, app updates and regained exact-alarm access re-arm the alarms and show anything that came due, alerting. The store lives in `no_backup`, outside Android backup.
+Reboot clears alarms and notifications. After a reboot the module restores visible cards quietly and, for each Reminder, quietly shows the newest stage it missed while the phone was off, at postponed times where a postpone applies. Clock changes, zone changes, app updates and regained exact-alarm access re-arm the alarms and show anything that came due, alerting. The store lives in `no_backup`, outside Android backup.
 
 ## What needs an APK
 

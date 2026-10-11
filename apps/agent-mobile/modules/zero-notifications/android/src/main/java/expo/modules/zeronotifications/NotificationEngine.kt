@@ -25,6 +25,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArraySet
 
@@ -32,7 +33,7 @@ internal class Card(val source: String, val key: String, val date: String, val s
 
 internal class ScreenContent(val title: String, val text: String, val actions: List<Action>)
 
-internal class Snooze(val source: String, val key: String, val date: String, val until: Long, val anchor: String, val offset: Int)
+internal class Postpone(val source: String, val key: String, val date: String, val anchor: String, val due: Long)
 
 internal object LegacyStore {
   private fun minutes(time: String) = time.substring(0, 2).toInt() * 60 + time.substring(3, 5).toInt()
@@ -44,6 +45,7 @@ internal object LegacyStore {
     for (i in 0 until reminders.length()) {
       val reminder = reminders.getJSONObject(i)
       val stages = reminder.optJSONArray("stages") ?: continue
+      for (s in 0 until stages.length()) if (stages.getJSONObject(s).remove("icon") != null) changed = true
       if (reminder.has("at") || stages.length() == 0) continue
       val anchor = stages.getJSONObject(stages.length() - 1).getString("at")
       for (s in 0 until stages.length()) {
@@ -71,7 +73,7 @@ internal class State(
   val settledHere: MutableSet<String> = linkedSetOf(),
   val receipts: MutableList<JSONObject> = mutableListOf(),
   val cards: MutableMap<String, Card> = linkedMapOf(),
-  val snoozes: MutableMap<String, Snooze> = linkedMapOf(),
+  val postpones: MutableMap<String, Postpone> = linkedMapOf(),
   var alarms: List<Pair<Wake, Long>> = emptyList(),
 ) {
   fun toJson(): JSONObject = JSONObject()
@@ -84,8 +86,8 @@ internal class State(
     .put("cards", JSONObject().also { out ->
       cards.forEach { (id, card) -> out.put(id, JSONObject().put("source", card.source).put("key", card.key).put("date", card.date).put("stage", card.stage).put("anchor", card.anchor).put("offset", card.offset).put("shownAt", card.shownAt)) }
     })
-    .put("snoozes", JSONObject().also { out ->
-      snoozes.forEach { (id, snooze) -> out.put(id, JSONObject().put("source", snooze.source).put("key", snooze.key).put("date", snooze.date).put("until", snooze.until).put("anchor", snooze.anchor).put("offset", snooze.offset)) }
+    .put("postpones", JSONObject().also { out ->
+      postpones.forEach { (id, postpone) -> out.put(id, JSONObject().put("source", postpone.source).put("key", postpone.key).put("date", postpone.date).put("anchor", postpone.anchor).put("due", postpone.due)) }
     })
     .put("alarms", JSONArray(alarms.map { (wake, time) -> JSONObject().put("wake", if (wake == Wake.ALARM_CLOCK) "alarmClock" else "exact").put("time", time) }))
 
@@ -112,8 +114,13 @@ internal class State(
       json.optJSONObject("snoozes")?.let { snoozes ->
         snoozes.keys().forEach { id ->
           val snooze = snoozes.getJSONObject(id)
-          val (anchor, offset) = position(snooze)
-          state.snoozes[id] = Snooze(snooze.getString("source"), snooze.getString("key"), snooze.getString("date"), snooze.getLong("until"), anchor, offset)
+          state.postpones[id] = Postpone(snooze.getString("source"), snooze.getString("key"), snooze.getString("date"), position(snooze).first, snooze.getLong("until"))
+        }
+      }
+      json.optJSONObject("postpones")?.let { postpones ->
+        postpones.keys().forEach { id ->
+          val postpone = postpones.getJSONObject(id)
+          state.postpones[id] = Postpone(postpone.getString("source"), postpone.getString("key"), postpone.getString("date"), postpone.getString("anchor"), postpone.getLong("due"))
         }
       }
       return state
@@ -133,9 +140,10 @@ internal object NotificationEngine {
   private val lock = Any()
   private val listeners = CopyOnWriteArraySet<() -> Unit>()
   private const val WARNING_COLOR = 0xFFB3261E.toInt()
+  private val TIME = DateTimeFormatter.ofPattern("HH:mm")
   internal var clock: () -> Clock = { Clock.systemDefaultZone() }
 
-  private class Candidate(val source: String, val reminder: Reminder, val date: LocalDate, val stage: Int, val time: Long, val snooze: Boolean)
+  private class Candidate(val source: String, val reminder: Reminder, val date: LocalDate, val stage: Int, val time: Long)
 
   fun occurrence(source: String, key: String, date: String): String = JSONArray(listOf(source, key, date)).toString()
 
@@ -161,8 +169,12 @@ internal object NotificationEngine {
   private fun alarmManager(c: Context) = c.getSystemService(AlarmManager::class.java)
   private fun notificationManager(c: Context) = c.getSystemService(NotificationManager::class.java)
   private fun schedules(state: State): Map<String, Schedule> = state.schedules.mapValues { (_, json) -> ScheduleParser.require(json) }
-  private fun instant(date: LocalDate, reminder: Reminder, stage: Stage, zone: ZoneId) =
-    ZonedDateTime.of(date, reminder.at, zone).toInstant().toEpochMilli() + stage.offset * 60_000L
+  private fun anchorTime(date: LocalDate, reminder: Reminder, zone: ZoneId) = ZonedDateTime.of(date, reminder.at, zone).toInstant().toEpochMilli()
+  private fun due(state: State, source: String, reminder: Reminder, date: LocalDate, zone: ZoneId): Long =
+    state.postpones[occurrence(source, reminder.key, date.toString())]?.takeIf { it.anchor == reminder.at.toString() }?.due ?: anchorTime(date, reminder, zone)
+  private fun stageTime(due: Long, stage: Stage) = due + stage.offset * 60_000L
+  private fun postponedDates(state: State, source: String, reminder: Reminder) =
+    state.postpones.values.filter { it.source == source && it.key == reminder.key }.map { LocalDate.parse(it.date) }
   private fun hasStage(reminder: Reminder, anchor: String, offset: Int) = reminder.at.toString() == anchor && reminder.stages.any { it.offset == offset }
   private fun localDate(time: Long, zone: ZoneId) = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
   private fun isSettled(state: State, source: String, reminder: Reminder, date: LocalDate) =
@@ -186,7 +198,7 @@ internal object NotificationEngine {
     state.settledHere.clear()
     unacknowledgedSettles(state).forEach { state.settledHere += occurrence(it.getString("source"), it.getString("key"), it.getString("date")) }
     val all = schedules(state)
-    prune(c, state, all)
+    prune(c, state, all, now)
     if (active) deliver(c, state, all, now, quiet = false, installed = source, previous = previous) else state.processedUntil = now
     repostMissing(c, state, all)
     arm(c, state, all, now)
@@ -223,7 +235,7 @@ internal object NotificationEngine {
     state.receipts += receipt
     state.settledHere += id
     state.cards.remove(id)
-    state.snoozes.remove(id)
+    state.postpones.remove(id)
     save(c, state)
     notificationManager(c).cancel(id, 0)
     arm(c, state, all, now)
@@ -234,22 +246,29 @@ internal object NotificationEngine {
   fun button(c: Context, workspace: String, source: String, key: String, date: String, action: String, shownAt: Long) {
     val reminder = synchronized(lock) { schedules(load(c))[source]?.reminder(key) } ?: return
     val chosen = reminder.actions.firstOrNull { it.id == action } ?: return
-    if (chosen.settles) settle(c, workspace, source, key, date, action) else snooze(c, workspace, source, key, date, chosen, shownAt)
+    if (chosen.settles) settle(c, workspace, source, key, date, action) else postpone(c, workspace, source, key, date, chosen, shownAt)
   }
 
-  private fun snooze(c: Context, workspace: String, source: String, key: String, date: String, action: Action, shownAt: Long) = synchronized(lock) {
+  private fun postpone(c: Context, workspace: String, source: String, key: String, date: String, action: Action, shownAt: Long) = synchronized(lock) {
     val state = load(c)
     if (state.workspace != workspace || state.quiesced) return@synchronized
     val id = occurrence(source, key, date)
-    val card = state.cards[id] ?: return@synchronized
-    if (card.shownAt != shownAt) return@synchronized
-    val now = clock().millis()
+    if (state.cards[id]?.shownAt != shownAt) return@synchronized
     val all = schedules(state)
-    state.snoozes[id] = Snooze(source, key, date, now + action.snoozeMinutes!! * 60_000L, card.anchor, card.offset)
-    val kept = Card(card.source, card.key, card.date, card.stage, card.anchor, card.offset, maxOf(now, card.shownAt + 1))
-    state.cards[id] = kept
-    save(c, state)
-    all[source]?.reminder(key)?.let { reminder -> if (canNotify(c, state, reminder.channel)) notificationManager(c).notify(id, 0, notification(c, state, kept, reminder, false)) }
+    val reminder = all[source]?.reminder(key) ?: return@synchronized
+    val now = clock().millis()
+    val zone = clock().zone
+    val day = LocalDate.parse(date)
+    deliver(c, state, all, now, quiet = false)
+    val moved = maxOf(due(state, source, reminder, day, zone), now - now % 60_000L) + action.snoozeMinutes!! * 60_000L
+    state.postpones[id] = Postpone(source, key, date, reminder.at.toString(), moved)
+    val stage = reminder.stages.indices.lastOrNull { stageTime(moved, reminder.stages[it]) <= now }
+    if (stage == null) {
+      state.cards.remove(id)
+      notificationManager(c).cancel(id, 0)
+    } else {
+      show(c, state, Candidate(source, reminder, day, stage, stageTime(moved, reminder.stages[stage])), alert = false, now = now)
+    }
     arm(c, state, all, now)
     save(c, state)
   }
@@ -316,7 +335,7 @@ internal object NotificationEngine {
     if (state.workspace != workspace || state.quiesced) return@synchronized null
     val card = state.cards[occurrence(source, key, date)]?.takeIf { it.shownAt == shownAt } ?: return@synchronized null
     val reminder = schedules(state)[source]?.reminder(key) ?: return@synchronized null
-    ScreenContent(reminder.title, stageOf(reminder, card).text, reminder.actions)
+    ScreenContent(reminder.title, withTime(state, card, reminder)(stageOf(reminder, card).text), reminder.actions)
   }
 
   fun silence(c: Context, workspace: String) {
@@ -348,7 +367,7 @@ internal object NotificationEngine {
     state.alarms = emptyList()
     for (id in state.cards.keys) notificationManager(c).cancel(id, 0)
     state.cards.clear()
-    state.snoozes.clear()
+    state.postpones.clear()
   }
 
   private fun ensureChannels(c: Context, channels: List<Channel>) {
@@ -389,54 +408,43 @@ internal object NotificationEngine {
     return manager.areNotificationsEnabled() && channel.importance != NotificationManager.IMPORTANCE_NONE && groupEnabled(c, channel.group)
   }
 
-  private fun prune(c: Context, state: State, all: Map<String, Schedule>) {
-    fun valid(source: String, key: String, date: String, anchor: String, offset: Int): Boolean {
-      val reminder = all[source]?.reminder(key) ?: return false
+  private fun prune(c: Context, state: State, all: Map<String, Schedule>, now: Long) {
+    fun open(source: String, key: String, date: String): Reminder? {
+      val reminder = all[source]?.reminder(key) ?: return null
       val day = LocalDate.parse(date)
-      return reminder.recurrence.occursOn(day) && !isSettled(state, source, reminder, day) && hasStage(reminder, anchor, offset)
+      return reminder.takeIf { it.recurrence.occursOn(day) && !isSettled(state, source, it, day) }
     }
-    for ((id, card) in state.cards.toList()) if (!valid(card.source, card.key, card.date, card.anchor, card.offset)) {
-      notificationManager(c).cancel(id, 0); state.cards.remove(id); state.snoozes.remove(id)
+    for ((id, card) in state.cards.toList()) if (open(card.source, card.key, card.date)?.let { hasStage(it, card.anchor, card.offset) } != true) {
+      notificationManager(c).cancel(id, 0); state.cards.remove(id)
     }
-    for ((id, snooze) in state.snoozes.toList()) if (!valid(snooze.source, snooze.key, snooze.date, snooze.anchor, snooze.offset)) state.snoozes.remove(id)
+    for ((id, postpone) in state.postpones.toList()) {
+      val reminder = open(postpone.source, postpone.key, postpone.date)
+      val spent = id !in state.cards && reminder != null && reminder.stages.all { stageTime(postpone.due, it) <= now }
+      if (reminder == null || reminder.at.toString() != postpone.anchor || spent) state.postpones.remove(id)
+    }
   }
-
-  private fun latestStage(reminder: Reminder, date: LocalDate, upTo: Long, zone: ZoneId): Int? =
-    reminder.stages.indices.lastOrNull { instant(date, reminder, reminder.stages[it], zone) <= upTo }
 
   private fun deliver(c: Context, state: State, all: Map<String, Schedule>, now: Long, quiet: Boolean, installed: String? = null, previous: Schedule? = null) {
     val zone = clock().zone
     val candidates = mutableListOf<Candidate>()
     val after = state.processedUntil
-    if (after in 1 until now) for ((source, schedule) in all) {
-      val start = maxOf(after, now - 8 * DAY_MS)
-      var date = localDate(start, zone).minusDays(2)
-      val last = localDate(now, zone).plusDays(2)
-      while (!date.isAfter(last)) {
-        for (reminder in schedule.reminders) {
-          if (!reminder.recurrence.occursOn(date) || isSettled(state, source, reminder, date)) continue
-          val snooze = state.snoozes[occurrence(source, reminder.key, date.toString())]
-          reminder.stages.forEachIndexed { index, stage ->
-            val time = instant(date, reminder, stage, zone)
-            if (time <= after || time > now || (snooze != null && time <= snooze.until)) return@forEachIndexed
-            if (source == installed) {
-              val old = previous?.reminder(reminder.key)
-              if (old == null || !old.recurrence.occursOn(date) || !hasStage(old, reminder.at.toString(), stage.offset)) return@forEachIndexed
-            }
-            candidates += Candidate(source, reminder, date, index, time, snooze = false)
+    val first = localDate(maxOf(after, now - 8 * DAY_MS), zone).minusDays(2)
+    val last = localDate(now, zone).plusDays(2)
+    val window = generateSequence(first) { it.plusDays(1) }.takeWhile { !it.isAfter(last) }.toList()
+    if (after in 1 until now) for ((source, schedule) in all) for (reminder in schedule.reminders) {
+      for (date in (window + postponedDates(state, source, reminder)).distinct()) {
+        if (!reminder.recurrence.occursOn(date) || isSettled(state, source, reminder, date)) continue
+        val dueAt = due(state, source, reminder, date, zone)
+        reminder.stages.forEachIndexed { index, stage ->
+          val time = stageTime(dueAt, stage)
+          if (time <= after || time > now) return@forEachIndexed
+          if (source == installed) {
+            val old = previous?.reminder(reminder.key)
+            if (old == null || !old.recurrence.occursOn(date) || !hasStage(old, reminder.at.toString(), stage.offset)) return@forEachIndexed
           }
+          candidates += Candidate(source, reminder, date, index, time)
         }
-        date = date.plusDays(1)
       }
-    }
-    for ((id, snooze) in state.snoozes.toList()) {
-      if (snooze.until > now) continue
-      state.snoozes.remove(id)
-      val reminder = all[snooze.source]?.reminder(snooze.key) ?: continue
-      val date = LocalDate.parse(snooze.date)
-      if (!reminder.recurrence.occursOn(date) || isSettled(state, snooze.source, reminder, date)) continue
-      val stage = latestStage(reminder, date, snooze.until, zone) ?: continue
-      candidates += Candidate(snooze.source, reminder, date, stage, snooze.until, snooze = true)
     }
     val newest = candidates.groupBy { it.source to it.reminder.key }.values.map { group ->
       val day = group.maxOf { it.date }
@@ -458,8 +466,8 @@ internal object NotificationEngine {
     save(c, state)
     if (alert) notificationManager(c).cancel(id, 0)
     notificationManager(c).notify(id, 0, notification(c, state, card, reminder, alert))
-    val wake = if (candidate.snooze || stage.wake == Wake.ALARM_CLOCK) "alarmClock" else "exact"
-    Log.i(TAG, "notification_presented stage=${if (candidate.snooze) "snooze" else candidate.stage.toString()} wake=$wake scheduled=${Instant.ofEpochMilli(candidate.time)} delivered=${Instant.ofEpochMilli(now)} alert=$alert")
+    val wake = if (stage.wake == Wake.ALARM_CLOCK) "alarmClock" else "exact"
+    Log.i(TAG, "notification_presented stage=${candidate.stage} wake=$wake scheduled=${Instant.ofEpochMilli(candidate.time)} delivered=${Instant.ofEpochMilli(now)} alert=$alert")
   }
 
   private fun receipt(source: String, reminder: Reminder, date: String, now: Long) = JSONObject()
@@ -488,6 +496,16 @@ internal object NotificationEngine {
     for ((source, schedule) in all) for (reminder in schedule.reminders) {
       val wakes = reminder.stages.map { it.wake }.toSet()
       val next = mutableMapOf<Wake, Pair<Long, LocalDate>>()
+      fun consider(date: LocalDate) {
+        if (!reminder.recurrence.occursOn(date) || isSettled(state, source, reminder, date)) return
+        val dueAt = due(state, source, reminder, date, zone)
+        for (stage in reminder.stages) {
+          val time = stageTime(dueAt, stage)
+          if (time <= now) continue
+          val best = next[stage.wake]
+          if (best == null || time < best.first) next[stage.wake] = time to date
+        }
+      }
       var cursor = localDate(now, zone).minusDays(2)
       var steps = 0
       while (steps++ < 16) {
@@ -495,22 +513,11 @@ internal object NotificationEngine {
         cursor = date.plusDays(1)
         val earliest = ZonedDateTime.of(date, reminder.at, zone).toInstant().toEpochMilli() - ScheduleParser.MAX_OFFSET * 60_000L
         if (next.keys == wakes && next.values.all { it.first < earliest }) break
-        if (isSettled(state, source, reminder, date)) continue
-        val snooze = state.snoozes[occurrence(source, reminder.key, date.toString())]
-        for (stage in reminder.stages) {
-          val time = instant(date, reminder, stage, zone)
-          if (time <= now || (snooze != null && time <= snooze.until)) continue
-          val best = next[stage.wake]
-          if (best == null || time < best.first) next[stage.wake] = time to date
-        }
+        consider(date)
       }
+      postponedDates(state, source, reminder).forEach(::consider)
       next[Wake.ALARM_CLOCK]?.let { (time, date) -> if (alarmClock == null || time < alarmClock.first) alarmClock = time to reminder.url.replace("{date}", date.toString()) }
       next[Wake.EXACT]?.let { (time, _) -> if (exact == null || time < exact) exact = time }
-    }
-    for (snooze in state.snoozes.values) {
-      if (snooze.until <= now) continue
-      val reminder = all[snooze.source]?.reminder(snooze.key) ?: continue
-      if (alarmClock == null || snooze.until < alarmClock.first) alarmClock = snooze.until to reminder.url.replace("{date}", snooze.date)
     }
     val armed = mutableListOf<Pair<Wake, Long>>()
     alarmClock?.let { (time, url) ->
@@ -527,6 +534,11 @@ internal object NotificationEngine {
 
   internal var canUseFullScreen: (Context) -> Boolean = { c -> Build.VERSION.SDK_INT < 34 || notificationManager(c).canUseFullScreenIntent() }
   private fun stageOf(reminder: Reminder, card: Card) = reminder.stages.firstOrNull { it.offset == card.offset } ?: reminder.stages[card.stage.coerceIn(reminder.stages.indices)]
+  private fun withTime(state: State, card: Card, reminder: Reminder): (String) -> String {
+    val zone = clock().zone
+    val time = Instant.ofEpochMilli(due(state, card.source, reminder, LocalDate.parse(card.date), zone)).atZone(zone).toLocalTime().format(TIME)
+    return { it.replace("{time}", time) }
+  }
 
   fun notification(c: Context, state: State, card: Card, reminder: Reminder, alert: Boolean): Notification {
     val workspace = state.workspace!!
@@ -539,12 +551,14 @@ internal object NotificationEngine {
       .putExtra("workspace", workspace).putExtra("source", card.source).putExtra("key", card.key).putExtra("date", card.date)
       .putExtra("action", button).putExtra("shownAt", card.shownAt), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     val channel = channelFor(c, state, reminder.channel)
-    val icon = (stage.icon ?: reminder.icon).drawable
+    val icon = reminder.icon.drawable
     val warning = stage.tone == Tone.WARNING
+    val fill = withTime(state, card, reminder)
+    val text = fill(stage.text)
     val public = Notification.Builder(c, channel).setSmallIcon(icon).setContentTitle(reminder.lockTitle).setContentText(reminder.lockText)
       .also { if (warning) it.setColor(WARNING_COLOR) }.build()
-    val builder = Notification.Builder(c, channel).setSmallIcon(icon).setContentTitle(stage.title ?: reminder.title)
-      .setContentText(stage.text).setStyle(Notification.BigTextStyle().bigText(stage.text)).setContentIntent(openPending).setDeleteIntent(broadcast(DISMISS, ""))
+    val builder = Notification.Builder(c, channel).setSmallIcon(icon).setContentTitle(fill(stage.title ?: reminder.title))
+      .setContentText(text).setStyle(Notification.BigTextStyle().bigText(text)).setContentIntent(openPending).setDeleteIntent(broadcast(DISMISS, ""))
       .setCategory(if (warning) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER).setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(public)
       .setOngoing(true).setOnlyAlertOnce(!alert)
     if (warning) builder.setColor(WARNING_COLOR)

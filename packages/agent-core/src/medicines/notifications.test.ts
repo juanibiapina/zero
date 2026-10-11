@@ -21,8 +21,8 @@ describe("medicine notification schedule", () => {
     expect(reminder.recurrence).toEqual({ from: "2026-09-01", until: null, weekdays: [1, 3, 5] });
     expect(reminder.at).toBe("08:00");
     expect(reminder.stages).toEqual([
-      { offset: -15, wake: "exact", text: "Take 1 pill at 08:00 · After food" },
-      { offset: 0, wake: "alarmClock", title: "Vitamin D is due", icon: "warning", tone: "warning", fullScreen: true, text: "Due at 08:00 · take 1 pill · After food" },
+      { offset: -15, wake: "exact", text: "Take 1 pill at {time} · After food" },
+      { offset: 0, wake: "alarmClock", title: "Vitamin D is due", tone: "warning", fullScreen: true, text: "Due at {time} · take 1 pill · After food" },
     ]);
     expect(reminder.actions.map((action) => action.label)).toEqual(["Taken", "Postpone 1 hour", "Skip"]);
     expect(reminder.url).toBe("zeroagent:///browse/medicines/vitamin?slot=morning&date={date}");
@@ -51,12 +51,12 @@ describe("medicine notification schedule", () => {
 
   it("omits blank instructions from the text", () => {
     const schedule = medicineSchedule({ medicines: [medicine({ instructions: "  " })], doses: [] });
-    expect(schedule.reminders[0].stages.map((stage) => stage.text)).toEqual(["Take 1 pill at 08:00", "Due at 08:00 · take 1 pill"]);
+    expect(schedule.reminders[0].stages.map((stage) => stage.text)).toEqual(["Take 1 pill at {time}", "Due at {time} · take 1 pill"]);
   });
 
   it("says how many pills each dose takes", () => {
     const schedule = medicineSchedule({ medicines: [medicine({ instructions: null, doses: [{ id: "morning", remindAt: "07:45", alarmAt: "08:00", amount: 2 }] })], doses: [] });
-    expect(schedule.reminders[0].stages.map((stage) => stage.text)).toEqual(["Take 2 pills at 08:00", "Due at 08:00 · take 2 pills"]);
+    expect(schedule.reminders[0].stages.map((stage) => stage.text)).toEqual(["Take 2 pills at {time}", "Due at {time} · take 2 pills"]);
   });
 });
 

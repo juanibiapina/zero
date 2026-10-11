@@ -5355,7 +5355,7 @@
       }
     },
     {
-      "name": "a stage icon",
+      "name": "a stage icon, which is not a stage field",
       "input": {
         "channels": [
           {
@@ -5427,87 +5427,11 @@
         ]
       },
       "expected": {
-        "ok": true
-      }
-    },
-    {
-      "name": "an unknown stage icon",
-      "input": {
-        "channels": [
-          {
-            "id": "alerts",
-            "name": "Reminders",
-            "group": {
-              "id": "group",
-              "name": "Group"
-            }
-          }
-        ],
-        "reminders": [
-          {
-            "key": "[\"m1\",\"s1\"]",
-            "channel": "alerts",
-            "icon": "pill",
-            "title": "Vitamin D",
-            "lockScreen": {
-              "title": "Reminder",
-              "text": "Open the app for details"
-            },
-            "url": "app:///item?date={date}",
-            "recurrence": {
-              "from": "2026-09-01",
-              "until": null,
-              "weekdays": [
-                1,
-                2,
-                3,
-                4,
-                5,
-                6,
-                7
-              ]
-            },
-            "at": "08:00",
-            "stages": [
-              {
-                "offset": -15,
-                "wake": "exact",
-                "text": "Dose at 08:00"
-              },
-              {
-                "offset": 0,
-                "wake": "alarmClock",
-                "text": "08:00 dose due",
-                "icon": "bell"
-              }
-            ],
-            "actions": [
-              {
-                "id": "taken",
-                "label": "Taken",
-                "kind": "settle"
-              },
-              {
-                "id": "postpone",
-                "label": "Postpone 1 hour",
-                "kind": "snooze",
-                "minutes": 60
-              }
-            ],
-            "settled": [
-              "2026-09-02",
-              "2026-09-05"
-            ],
-            "data": "{\"alarmAt\":\"08:00\"}"
-          }
-        ]
-      },
-      "expected": {
         "error": "invalid-shape"
       }
     },
     {
-      "name": "a warning reminder icon",
+      "name": "a warning icon, which no longer exists",
       "input": {
         "channels": [
           {
@@ -5578,7 +5502,7 @@
         ]
       },
       "expected": {
-        "ok": true
+        "error": "invalid-shape"
       }
     },
     {
@@ -5630,7 +5554,6 @@
                 "wake": "alarmClock",
                 "text": "08:00 dose due",
                 "title": "Due",
-                "icon": "warning",
                 "tone": "warning",
                 "fullScreen": true
               }

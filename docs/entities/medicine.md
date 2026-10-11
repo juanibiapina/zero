@@ -79,8 +79,8 @@ name, optional notes, and the same schedule, with 1× to 4× a day presets.
 On Android, a normal notification arrives at the early reminder and again at
 the dose time, with Taken, Postpone 1 hour and Skip. Both say how many pills to
 take ("Take 2 pills at 20:00", then "Due at 20:00 · take 2 pills"). At the dose
-time the notification turns into a warning: a red accent, a warning icon and
-the title "<name> is due". A locked phone also opens a full-screen alarm with
+time the notification turns into a warning: a red accent and the title
+"<name> is due", with the same pill icon. A locked phone also opens a full-screen alarm with
 the same buttons. A paired watch can show
 the same notification. When reminders cannot reach you, the top of the list shows one
 notice with one button to fix it.
@@ -108,11 +108,13 @@ notice with one button to fix it.
 - Taken and Skip record that Dose, close its notification, and cancel its
   dose-time alarm, without opening the app. Tapping the notification opens that
   Dose and leaves the notification in place.
-- Postpone 1 hour keeps the notification and moves its alarm an hour later:
-  nothing sounds for that hour, then it alerts again, as the warning if the dose
-  time has passed. A dose time inside that hour waits for it. A Postpone can
-  cross midnight; pressing it again restarts the hour. Taken, Skip, pausing,
-  deleting, or changing that dose time cancels it. Postpone stays on one phone.
+- Postpone 1 hour moves that Dose's time an hour later: 20:00 becomes 21:00.
+  Once the dose time has passed, it moves to an hour from now. The early
+  reminder and the alarm then come at the new times, and the notification says
+  the new time. The notification closes; if the early reminder for the new time
+  has already passed, it shows at once without sound. Pressing Postpone again
+  adds another hour. A Postpone can cross midnight. Taken, Skip, pausing, deleting, or changing that dose time cancels
+  it. Postpone stays on one phone, and the app keeps showing the dose time.
 - Reminders arrive only for times still ahead when the phone learned of them.
   Turning reminders on, or adding a dose, after its early reminder skips that
   reminder; the dose-time alarm still comes.
