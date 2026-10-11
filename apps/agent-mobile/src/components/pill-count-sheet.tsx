@@ -18,7 +18,7 @@ export function PillCountSheet({ open, title, initial, min = 1, saveLabel = 'Sav
   onSave: (count: number) => void;
   onClose: () => void;
 }) {
-  return <Sheet open={open} onClose={onClose}>
+  return <Sheet open={open} onClose={onClose} contextBridge={null}>
     <PillCountForm title={title} initial={initial} min={min} saveLabel={saveLabel} onSave={onSave} onClose={onClose} />
   </Sheet>;
 }

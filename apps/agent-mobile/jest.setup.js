@@ -352,27 +352,59 @@ jest.mock('@expo/ui', () => {
   };
 });
 
-// The native sheet behind the app's Sheet. It shows its React Native children
-// while open and offers the user's dismiss (swipe, scrim, Back) as one
-// "Close sheet" button. close() calls onClose as the native sheet does after its
-// exit animation.
-jest.mock('@expo/ui/community/bottom-sheet', () => {
-  const { View, Pressable, Text } = require('react-native');
-  const BottomSheet = ({ ref, index = 0, onClose, children }) => {
-    mockReactForExpoUi.useImperativeHandle(ref, () => ({ close: () => onClose?.() }), [onClose]);
-    if (index < 0) return null;
-    return mockReactForExpoUi.createElement(
+// The modal behind the app's Sheet. present() shows its children and reports
+// index 0; dismiss() hides them and reports onDismiss, as the library does after
+// its exit animation. The user's dismissal (drag, scrim) is one "Close sheet"
+// button. Inside it there is no sheet context, so sheet-aware inputs and scroll
+// views behave as plain React Native ones.
+jest.mock('@gorhom/bottom-sheet', () => {
+  const { View, Pressable, Text, ScrollView, SectionList, FlatList } = require('react-native');
+  const h = mockReactForExpoUi.createElement;
+  const BottomSheetModal = ({ ref, onChange, onDismiss, children }) => {
+    const [shown, setShown] = mockReactForExpoUi.useState(false);
+    const callbacks = mockReactForExpoUi.useRef({ onChange, onDismiss });
+    callbacks.current = { onChange, onDismiss };
+    const hide = () => {
+      setShown(false);
+      callbacks.current.onDismiss?.();
+    };
+    mockReactForExpoUi.useImperativeHandle(ref, () => ({
+      present: () => {
+        setShown(true);
+        callbacks.current.onChange?.(0);
+      },
+      dismiss: hide,
+      close: hide,
+    }), []);
+    if (!shown) return null;
+    return h(
       View,
       { accessibilityLabel: 'sheet' },
-      mockReactForExpoUi.createElement(
-        Pressable,
-        { accessibilityRole: 'button', accessibilityLabel: 'Close sheet', onPress: () => onClose?.() },
-        mockReactForExpoUi.createElement(Text, null, 'Close sheet'),
-      ),
+      h(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Close sheet', onPress: hide }, h(Text, null, 'Close sheet')),
       children,
     );
   };
-  return { __esModule: true, BottomSheet, default: BottomSheet };
+  return {
+    __esModule: true,
+    BottomSheetModal,
+    BottomSheetModalProvider: ({ children }) => children,
+    BottomSheetBackdrop: () => null,
+    BottomSheetView: View,
+    BottomSheetScrollView: ScrollView,
+    BottomSheetSectionList: SectionList,
+    BottomSheetFlatList: FlatList,
+    KEYBOARD_STATUS: { UNDETERMINED: 0, SHOWN: 1, HIDDEN: 2 },
+    useBottomSheetInternal: (unsafe) => {
+      if (unsafe) return null;
+      const value = (current) => ({ get: () => current, value: current });
+      return {
+        animatedDetentsState: value({ detents: [] }),
+        animatedKeyboardState: value({ status: 2, heightWithinContainer: 0 }),
+        animatedLayoutState: value({ containerHeight: 0, handleHeight: 0 }),
+        animatedPosition: value(0),
+      };
+    },
+  };
 });
 
 jest.mock('@expo/ui/community/datetime-picker', () => {

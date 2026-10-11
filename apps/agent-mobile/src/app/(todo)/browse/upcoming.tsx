@@ -117,14 +117,10 @@ function Upcoming({ replica }: { replica: TaskdoReplica }) {
     onError: setWriteError,
   });
 
-  // Android Back closes the deepest task or Project-add surface first.
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (detail.handleBack()) return true;
-      return add.handleBack();
-    });
+    const sub = BackHandler.addEventListener('hardwareBackPress', add.handleBack);
     return () => sub.remove();
-  }, [detail, add]);
+  }, [add.handleBack]);
 
   const accent = useColor('--color-accent');
   const { refreshing, onRefresh } = usePullRefresh(replica.refresh);

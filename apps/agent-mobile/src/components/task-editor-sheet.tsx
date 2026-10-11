@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
-import { ActivityIndicator, Keyboard, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Pressable, type TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardController, KeyboardEvents } from 'react-native-keyboard-controller';
 import Animated, {
@@ -28,7 +28,7 @@ import { useResolveClassNames } from 'uniwind';
 import { ScheduleHighlightInput } from '@/components/schedule-highlight-input';
 import { Input } from '@/components/ui/input';
 import { KeyboardDock } from '@/components/ui/keyboard-dock';
-import { Sheet } from '@/components/ui/sheet';
+import { Sheet, SheetScrollView } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
 import { useColor } from '@/lib/theme';
@@ -179,7 +179,7 @@ export function TaskEditorSheet({
   onOpen, onKeyboardWillHide, collapsedFabLabel, holdPosition = false,
 }: {
   open: boolean;
-  onClose: () => void;
+  onClose: () => void | false;
   dismissLabel: string;
   draft: string;
   onChangeDraft: (text: string) => void;
@@ -310,7 +310,7 @@ export function TaskEditorSheet({
       style={inline ? { paddingBottom: insets.bottom + 8 } : undefined}
       className={cn(inline && 'pt-2', !inline && 'shrink pb-2')}
     >
-      <ScrollView style={{ maxHeight: inline ? Math.max(180, height - keyboardHeight - insets.top - insets.bottom - 32) : undefined, flexGrow: 0 }} keyboardShouldPersistTaps="handled">
+      <SheetScrollView style={{ maxHeight: inline ? Math.max(180, height - keyboardHeight - insets.top - insets.bottom - 32) : undefined, flexGrow: 0 }} keyboardShouldPersistTaps="handled">
       {inline ? (
         <View
           testID="task-editor-grip"
@@ -390,12 +390,12 @@ export function TaskEditorSheet({
           {projectAction ? <EditorActionRow {...projectAction} /> : null}
         </View>
       ) : null}
-      </ScrollView>
+      </SheetScrollView>
     </View>
   );
   if (!inline) {
     return (
-      <Sheet open={open} onClose={onClose}>
+      <Sheet open={open} onClose={onClose} size="expandable" contextBridge={null}>
         {sheetBody}
         {overlay}
       </Sheet>

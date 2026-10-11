@@ -306,10 +306,11 @@ export function useQuickAdd({
   }, [adding, overlay, requestClose]);
 
   const handleBack = useCallback(() => {
-    if (overlay != null) {
+    if (overlay === 'discard') {
       setOverlay(null);
       return true;
     }
+    if (overlay != null) return false;
     if (adding && hasDraft) {
       setOverlay('discard');
       return true;

@@ -1,5 +1,7 @@
 # Mobile: picker sheets move when they open (Android)
 
+This describes the native `@expo/ui` sheet that `@gorhom/bottom-sheet` replaced on 2026-10-11.
+
 ## Cause
 
 The date and project picker sheets move after they appear because of two

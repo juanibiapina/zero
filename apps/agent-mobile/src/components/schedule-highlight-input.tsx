@@ -19,6 +19,7 @@ import {
 import { useResolveClassNames } from 'uniwind';
 
 import type { InputProps } from '@/components/ui/input';
+import { useSheetInputFocus } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
 import { useColor } from '@/lib/theme';
 
@@ -69,11 +70,14 @@ export const ScheduleHighlightInput = forwardRef<
     cursorColor,
     placeholderTextColor,
     style,
+    onFocus,
+    onBlur,
     ...props
   },
   forwardedRef,
 ) {
   const inputRef = useRef<TextInput>(null);
+  const focus = useSheetInputFocus(onFocus, onBlur);
   const [scrollY, setScrollY] = useState(0);
   const accent = useColor('--color-accent');
   const foreground = useColor('--color-foreground');
@@ -141,6 +145,8 @@ export const ScheduleHighlightInput = forwardRef<
       ) : null}
       <RNTextInput
         {...props}
+        onFocus={focus.onFocus}
+        onBlur={focus.onBlur}
         ref={inputRef}
         value={value}
         style={[

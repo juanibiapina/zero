@@ -94,38 +94,52 @@ back only where the native component does not fit.
   needs a **new EAS dev build** (the sign-in Button first shipped in build 14) —
   JS hot-reload alone crashes on render on an older client that lacks the native
   view. Once the module is in the client, further JS changes hot-reload normally.
-- **Bottom sheets -> `Sheet` (`src/components/ui/sheet.tsx`).** It is the native
-  Material 3 sheet from `@expo/ui/community/bottom-sheet` with React Native
-  content, so dragging, swipe down, scrim, Back, and keyboard insets come from
-  Android. It fits its content and leaves room for the keyboard; `tall` fixes it
-  at 85% of the screen. Do not build a sheet from an RN `Modal`. A sheet's
-  input cannot `autoFocus` on mount, because the sheet's window is not focused
-  yet; focus it after a short delay, as `PillCountSheet` does. The quick-add
-  composer stays the in-screen morph described below.
-  Opening a `Sheet` while a keyboard is up hides the keyboard first and
-  presents the sheet once it has gone, at most 600 ms later. 500 ms after the
-  sheet closes, it gives the keyboard back to the field it took it from, unless
-  that field has left the screen or another field has focus. Material 3
-  freezes the open animation while another window's keyboard animates (see
-  `docs/investigations/mobile-picker-sheet-motion.md`). Do not refocus that
-  field yourself when a sheet closes: while the sheet's window still has focus,
-  the field takes focus without a keyboard, and the later restore then does
-  nothing.
-  Sheets open on Material's standard spring: `patches/@expo__ui@57.0.22.patch`
-  wraps `@expo/ui`'s `ModalBottomSheet` in `MotionScheme.standard()`, because
-  `Host`'s expressive theme makes every sheet overshoot 1.5% of its height
-  when it opens. `@expo/ui` ships a prebuilt AAR that ignores patched sources;
-  the patch takes effect only because `expo.autolinking.android.buildFromSource`
-  in `package.json` lists `expo-ui`. Keep the two together, and drop both when
-  `@expo/ui` sets the sheet's motion itself.
+- **Bottom sheets -> `Sheet` (`src/components/ui/sheet/`).** Every bottom
+  sheet goes through `Sheet`, which wraps `BottomSheetModal` from
+  `@gorhom/bottom-sheet` (pinned exactly) the way Paseo does
+  (`getpaseo/paseo`, `packages/app/src/components/ui/isolated-bottom-sheet-modal/`).
+  Only that folder imports Gorhom. Sheets render in the app's window under
+  `BottomSheetModalProvider` in `src/app/_layout.tsx`, drag from the handle or
+  the content, and close on a downward drag, a scrim tap, or Back. Pick a
+  `size`:
+  - `fit` (default): sizes to its content up to 90% of the screen and scrolls
+    past that; the keyboard pushes it up. Pickers and short forms.
+  - `expandable`: opens at 60% and drags to the top and back. Its body is
+    sized to the visible part of the sheet above the keyboard, so a list's last
+    row is reachable at either height. The task editor and the project picker.
+  - `tall`: one 85% height that drags only by its handle, for content that
+    owns its scrolling (the emoji picker).
+
+  `onClose` reports a dismissal by the user (drag, scrim, Back), never a close
+  by the owner. Returning `false` keeps the sheet, which comes back; the task
+  editor does this for a draft it cannot save. `contextBridge` is required:
+  sheet content renders at the provider, so a context provided below
+  `src/app/_layout.tsx` must be provided again through it; pass `null` when the
+  content needs none. A sheet claims Android Back only while it is on screen,
+  and `BackHandler` asks the newest listener first, so a screen's own Back
+  handler must return `false` for anything a sheet shows.
+  Gorhom moves a sheet for the keyboard only while a field it knows about has
+  focus: `Input` and `ScheduleHighlightInput` register through
+  `useSheetInputFocus`. Scrolling content uses `SheetScrollView` or
+  `SheetSectionList`, so scrolling and dragging share one gesture; a `fit`
+  sheet already scrolls, so its content needs neither. Gorhom's scroll views
+  are not Uniwind-mapped, so give them `style`, not `className`.
+  Opening a sheet while a field outside it has the keyboard hides the
+  keyboard; closing the sheet gives it back to that field unless the field
+  has left the screen or another field has focus.
+  `patches/@expo__ui@57.0.22.patch` and `expo.autolinking.android.buildFromSource`
+  in `package.json` served the earlier native `@expo/ui` sheet and no longer
+  affect any sheet. Drop both with the next native build; they change the
+  native fingerprint.
 - **The Home task list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
   native but **not virtualized**; Home is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).
 - **Kept custom on purpose.** The keyboard-attached add drawers
-  (`KeyboardDock` in `src/components/ui/keyboard-dock.tsx` + reanimated) and
-  the in-tree `ConfirmDialog` stay hand-rolled: `@expo/ui` has no keyboard-attached quick-add primitive, and the
-  only native dialog (RN `Alert`) dismisses the keyboard, which would regress the
-  quick-add discard flow. The `Fab` is a floating circular button, not a
+  (`KeyboardDock` in `src/components/ui/keyboard-dock.tsx` + reanimated) stay
+  hand-rolled because they behave unlike sheets: they open with the keyboard,
+  close when it hides, and ask before discarding a draft. The in-tree
+  `ConfirmDialog` stays because the only native dialog (RN `Alert`) dismisses
+  the keyboard, which would regress the quick-add discard flow. The `Fab` is a floating circular button, not a
   native `Button` shape.
 - **Pickers over an add drawer keep the drawer still.** A native dialog opens
   in its own window, so Android hides the keyboard while it is open and brings

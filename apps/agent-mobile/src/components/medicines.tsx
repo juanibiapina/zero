@@ -7,7 +7,7 @@ import { Alert, BackHandler, FlatList, Pressable, ScrollView, View } from 'react
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackRow } from '@/components/back-row';
-import { Chip, MedicineSaveButton, MedicineSchedule, type MedicineScheduleHandle } from '@/components/medicine-editor';
+import { Chip, MedicineSaveButton, MedicineSchedule } from '@/components/medicine-editor';
 import { PillCountSheet } from '@/components/pill-count-sheet';
 import { ScreenHeader } from '@/components/screen-header';
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
@@ -276,7 +276,6 @@ function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: bool
   const [creationId, setCreationId] = useState(safeRandomUUID);
   const [wasOpen, setWasOpen] = useState(open);
   const pending = useRef(false);
-  const schedule = useRef<MedicineScheduleHandle>(null);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
@@ -286,7 +285,7 @@ function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: bool
   }
   const description = notesOpen || !!draft.input.instructions;
   const close = () => { if (pending.current) return; if (discard) setDiscard(false); else if (draft.changed) setDiscard(true); else onClose(); };
-  const back = () => { if (pending.current) return; if (discard) setDiscard(false); else if (!schedule.current?.handleBack()) close(); };
+  const back = () => { if (pending.current) return; if (discard) setDiscard(false); else close(); };
   const onHardwareBack = useEffectEvent(back);
   useEffect(() => {
     if (!open) return;
@@ -314,7 +313,7 @@ function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: bool
         value={draft.input.instructions ?? ''} onChangeText={(instructions) => change(draft.change({ instructions }))}
         className="min-h-12 px-screen-x py-3"
       /> : <Pressable accessibilityRole="button" accessibilityLabel="Add description" disabled={busy} onPress={() => setNotesOpen(true)} className="min-h-12 justify-center px-screen-x"><Text variant="subtitle">Add notes</Text></Pressable>}
-      <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets scheduleRef={schedule} onPickerOpenChange={setPickerOpen} /></View>
+      <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets onPickerOpenChange={setPickerOpen} /></View>
       {error ? <Text variant="error" selectable className="px-screen-x pb-3">{error}</Text> : null}
     </View>}
     overlay={discard ? <ConfirmDialog title="Discard changes?" message="The changes you've made will not be saved." cancelLabel="Cancel" confirmLabel="Discard" destructive onCancel={() => setDiscard(false)} onConfirm={() => { setDiscard(false); onClose(); }} /> : null}

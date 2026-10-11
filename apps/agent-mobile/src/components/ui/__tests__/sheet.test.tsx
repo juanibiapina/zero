@@ -1,120 +1,117 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { useState } from 'react';
-import { DeviceEventEmitter, Keyboard, Text, TextInput } from 'react-native';
+import { BackHandler, Keyboard, Text, TextInput } from 'react-native';
 
 import { Sheet } from '../sheet';
 
-const keyboardEvent = {
-  duration: 250,
-  easing: 'keyboard',
-  endCoordinates: { height: 300, screenX: 0, screenY: 500, width: 400 },
-};
-
-function emitKeyboard(name: 'keyboardDidShow' | 'keyboardDidHide') {
-  DeviceEventEmitter.emit(name, keyboardEvent);
-}
-
-async function keyboardUp({ hidesAfter }: { hidesAfter: number | null }) {
-  await act(async () => emitKeyboard('keyboardDidShow'));
-  jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {
-    TextInput.State.blurTextInput(TextInput.State.currentlyFocusedInput());
-    if (hidesAfter != null) setTimeout(() => emitKeyboard('keyboardDidHide'), hidesAfter);
+function captureBack() {
+  const listeners: Parameters<typeof BackHandler.addEventListener>[1][] = [];
+  jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_event, handler) => {
+    listeners.push(handler);
+    return { remove: () => { listeners.splice(listeners.indexOf(handler), 1); } };
   });
+  return async () => {
+    let handled = false;
+    await act(async () => {
+      handled = [...listeners].reverse().some((listener) => listener({} as never) === true);
+    });
+    return handled;
+  };
 }
 
-async function openPicker(onClose = () => {}) {
-  const view = await render(
-    <Sheet open={false} onClose={onClose}>
-      <Text>Pick a day</Text>
-    </Sheet>,
+function Owner({ onClose = () => {}, initial = true, answer }: {
+  onClose?: () => void;
+  initial?: boolean;
+  answer?: false;
+}) {
+  const [open, setOpen] = useState(initial);
+  return (
+    <>
+      <Text onPress={() => setOpen(true)}>Open</Text>
+      <Text onPress={() => setOpen(false)}>Owner close</Text>
+      <Sheet
+        open={open}
+        contextBridge={null}
+        onClose={() => {
+          onClose();
+          if (answer === false) return false;
+          setOpen(false);
+        }}
+      >
+        <Text>Pick a day</Text>
+      </Sheet>
+    </>
   );
-  await view.rerender(
-    <Sheet open onClose={onClose}>
-      <Text>Pick a day</Text>
-    </Sheet>,
-  );
-  return view;
 }
 
-afterEach(async () => {
-  await act(async () => emitKeyboard('keyboardDidHide'));
+afterEach(() => {
   TextInput.State.blurTextInput(TextInput.State.currentlyFocusedInput());
   jest.restoreAllMocks();
-  jest.useRealTimers();
 });
 
 describe('Sheet', () => {
-  it('reports a dismiss by the user once and hides its content', async () => {
-    const onClose = jest.fn();
-    function Owner() {
-      const [open, setOpen] = useState(true);
-      return (
-        <Sheet open={open} onClose={() => { onClose(); setOpen(false); }}>
-          <Text>Pick a day</Text>
-        </Sheet>
-      );
-    }
-    const view = await render(<Owner />);
+  it('reports a dismissal by the user once and hides its content', async () => {
+    const onClose = jest.fn<() => void>();
+    const view = await render(<Owner onClose={onClose} />);
+    expect(view.getByText('Pick a day')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Close sheet'));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(view.queryByText('Pick a day')).toBeNull();
   });
 
-  it('closes without reporting a dismiss when its owner closes it', async () => {
-    const onClose = jest.fn();
-    const view = await render(
-      <Sheet open onClose={onClose}>
-        <Text>Pick a day</Text>
-      </Sheet>,
-    );
-    await view.rerender(
-      <Sheet open={false} onClose={onClose}>
-        <Text>Pick a day</Text>
-      </Sheet>,
-    );
+  it('closes without reporting a dismissal when its owner closes it', async () => {
+    const onClose = jest.fn<() => void>();
+    const view = await render(<Owner onClose={onClose} />);
+    await fireEvent.press(view.getByText('Owner close'));
     expect(view.queryByText('Pick a day')).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('opens at once when no keyboard is up', async () => {
-    const view = await openPicker();
+  it('comes back when its owner answers a dismissal with false', async () => {
+    const view = await render(<Owner answer={false} />);
+    await fireEvent.press(view.getByLabelText('Close sheet'));
     expect(view.getByText('Pick a day')).toBeTruthy();
   });
 
-  it('hides an open keyboard and opens once it has gone', async () => {
-    jest.useFakeTimers();
-    await keyboardUp({ hidesAfter: 300 });
-    const view = await openPicker();
-    await act(async () => { jest.advanceTimersByTime(299); });
+  it('opens again after the owner closed it', async () => {
+    const view = await render(<Owner initial={false} />);
     expect(view.queryByText('Pick a day')).toBeNull();
-    await act(async () => { jest.advanceTimersByTime(1); });
+    await fireEvent.press(view.getByText('Open'));
     expect(view.getByText('Pick a day')).toBeTruthy();
   });
 
-  it('opens after 600 ms if the keyboard never reports it has gone', async () => {
-    jest.useFakeTimers();
-    await keyboardUp({ hidesAfter: null });
-    const view = await openPicker();
-    await act(async () => { jest.advanceTimersByTime(599); });
-    expect(view.queryByText('Pick a day')).toBeNull();
-    await act(async () => { jest.advanceTimersByTime(1); });
-    expect(view.getByText('Pick a day')).toBeTruthy();
+  it('closes only the top sheet on Back, then the one below', async () => {
+    const pressBack = captureBack();
+    const closed: string[] = [];
+    function Stack() {
+      const [editor, setEditor] = useState(true);
+      const [picker, setPicker] = useState(false);
+      return (
+        <>
+          <Sheet open={editor} contextBridge={null} onClose={() => { closed.push('editor'); setEditor(false); }}>
+            <Text onPress={() => setPicker(true)}>Editor</Text>
+          </Sheet>
+          <Sheet open={picker} contextBridge={null} onClose={() => { closed.push('picker'); setPicker(false); }}>
+            <Text>Picker</Text>
+          </Sheet>
+        </>
+      );
+    }
+    const view = await render(<Stack />);
+    await fireEvent.press(view.getByText('Editor'));
+    expect(await pressBack()).toBe(true);
+    expect(closed).toEqual(['picker']);
+    expect(view.getByText('Editor')).toBeTruthy();
+    expect(await pressBack()).toBe(true);
+    expect(closed).toEqual(['picker', 'editor']);
+    expect(await pressBack()).toBe(false);
   });
 
-  it('shows nothing and reports no dismiss when closed while the keyboard hides', async () => {
-    jest.useFakeTimers();
-    await keyboardUp({ hidesAfter: 300 });
-    const onClose = jest.fn();
-    const view = await openPicker(onClose);
-    await view.rerender(
-      <Sheet open={false} onClose={onClose}>
-        <Text>Pick a day</Text>
-      </Sheet>,
-    );
-    await act(async () => { jest.advanceTimersByTime(1000); });
-    expect(view.queryByText('Pick a day')).toBeNull();
-    expect(onClose).not.toHaveBeenCalled();
+  it('leaves Back alone while closed', async () => {
+    const pressBack = captureBack();
+    await render(<Owner initial={false} />);
+    expect(await pressBack()).toBe(false);
   });
 
   async function focusedField(isConnected: boolean) {
@@ -125,42 +122,28 @@ describe('Sheet', () => {
     });
     const field = { isConnected } as unknown as Parameters<typeof TextInput.State.focusTextInput>[0];
     await act(async () => TextInput.State.focusTextInput(field));
-    return field;
+    jest.spyOn(Keyboard, 'isVisible').mockReturnValue(true);
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {
+      TextInput.State.blurTextInput(TextInput.State.currentlyFocusedInput());
+    });
+    return { field, dismiss };
   }
 
-  async function openThenClose() {
-    await keyboardUp({ hidesAfter: 300 });
-    const view = await openPicker();
-    await act(async () => { jest.advanceTimersByTime(300); });
-    expect(view.getByText('Pick a day')).toBeTruthy();
-    await view.rerender(
-      <Sheet open={false} onClose={() => {}}>
-        <Text>Pick a day</Text>
-      </Sheet>,
-    );
-  }
-
-  it('gives the keyboard back to the field it took it from, 500 ms after closing', async () => {
-    jest.useFakeTimers();
-    const field = await focusedField(true);
-    await openThenClose();
-    await act(async () => { jest.advanceTimersByTime(499); });
+  it('hides the keyboard when it opens and gives it back to the field when it closes', async () => {
+    const { field, dismiss } = await focusedField(true);
+    const view = await render(<Owner initial={false} />);
+    await fireEvent.press(view.getByText('Open'));
+    expect(dismiss).toHaveBeenCalled();
     expect(TextInput.State.currentlyFocusedInput()).toBeNull();
-    await act(async () => { jest.advanceTimersByTime(1); });
+    await fireEvent.press(view.getByLabelText('Close sheet'));
     expect(TextInput.State.currentlyFocusedInput()).toBe(field);
   });
 
   it('leaves focus alone when the field has left the screen', async () => {
-    jest.useFakeTimers();
     await focusedField(false);
-    await openThenClose();
-    await act(async () => { jest.advanceTimersByTime(1000); });
+    const view = await render(<Owner initial={false} />);
+    await fireEvent.press(view.getByText('Open'));
+    await fireEvent.press(view.getByText('Owner close'));
     expect(TextInput.State.currentlyFocusedInput()).toBeNull();
-  });
-
-  it('stays open when its own input opens the keyboard', async () => {
-    const view = await openPicker();
-    await act(async () => emitKeyboard('keyboardDidShow'));
-    expect(view.getByText('Pick a day')).toBeTruthy();
   });
 });

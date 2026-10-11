@@ -4,6 +4,7 @@ import '@/lib/crypto-polyfill';
 import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { resourceCache } from '@clerk/expo/resource-cache';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -55,12 +56,14 @@ export default function RootLayout() {
               {/* Honor the OS "reduce motion" setting: disable animations when the
                   user asks, keep them otherwise. */}
               <ReducedMotionConfig mode={ReduceMotion.System} />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor },
-                }}
-              />
+              <BottomSheetModalProvider>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor },
+                  }}
+                />
+              </BottomSheetModalProvider>
             </KeyboardProvider>
           </QueryClientProvider>
         </ClerkProvider>

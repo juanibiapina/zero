@@ -97,11 +97,12 @@ describe('Adding a medicine', () => {
     expect(data.replica.snapshot().medicines).toHaveLength(1);
     await data.replica.close();
   });
-  it('closes the time picker, then the dose, before asking to discard on Back', async () => {
-    let pressBack = () => {};
+  it('closes the dose before asking to discard on Back', async () => {
+    const listeners: Parameters<typeof BackHandler.addEventListener>[1][] = [];
+    const pressBack = () => { [...listeners].reverse().some((listener) => listener({} as never) === true); };
     const backHandler = jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_event, handler) => {
-      pressBack = () => { (handler as () => unknown)(); };
-      return { remove: () => {} };
+      listeners.push(handler);
+      return { remove: () => { listeners.splice(listeners.indexOf(handler), 1); } };
     });
     const screen = await openScreen(<MedicinesList />);
     await fireEvent.press(screen.getByLabelText('Add medicine'));
@@ -110,9 +111,6 @@ describe('Adding a medicine', () => {
     await fireEvent.press(screen.getByLabelText('Change time, 20:00'));
     await fireEvent(screen.getByTestId('native-date-time-picker'), 'change', { type: 'set' }, new Date('2000-01-01T21:00:00'));
     expect(screen.getByLabelText('Change time, 21:00')).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText('Change time, 21:00'));
-    await act(async () => pressBack());
-    expect(screen.queryByTestId('native-date-time-picker')).toBeNull();
     await act(async () => pressBack());
     expect(screen.queryByLabelText('Change time, 21:00')).toBeNull();
     expect(screen.queryByText('Discard changes?')).toBeNull();
