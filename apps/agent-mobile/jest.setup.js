@@ -380,6 +380,30 @@ jest.mock('@expo/ui/community/datetime-picker', () => {
   return { DateTimePicker: (props) => mockReactForExpoUi.createElement(View, { ...props, testID: 'native-date-time-picker' }) };
 });
 
+const unref = (timer) => {
+  timer?.unref?.();
+  return timer;
+};
+require('@tanstack/react-query').timeoutManager.setTimeoutProvider({
+  setTimeout: (callback, delay) => unref(setTimeout(callback, delay)),
+  clearTimeout: (timer) => clearTimeout(timer),
+  setInterval: (callback, delay) => unref(setInterval(callback, delay)),
+  clearInterval: (timer) => clearInterval(timer),
+});
+
+jest.mock('@clerk/expo', () => ({
+  ClerkProvider: ({ children }) => children ?? null,
+  useAuth: () => ({
+    isLoaded: true,
+    isSignedIn: false,
+    userId: null,
+    getToken: async () => null,
+    signOut: async () => {},
+  }),
+  useUser: () => ({ isLoaded: true, isSignedIn: false, user: null }),
+  useSSO: () => ({ startSSOFlow: async () => ({}) }),
+}));
+
 // AsyncStorage has no native module under jest (it throws "NativeModule:
 // AsyncStorage is null" on import). Use the library's official in-memory jest
 // mock so the icon-suggestion cache (and any other AsyncStorage user) works

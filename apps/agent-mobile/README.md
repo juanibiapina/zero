@@ -346,6 +346,13 @@ run without changing the shared configuration:
 pnpm --filter @zero/agent-mobile exec jest --runInBand --silent=false <test>
 ```
 
+Mobile Jest must exit on its own when the run ends; `--forceExit` would hide
+leaked timers and channels. List what keeps it running with:
+
+```bash
+pnpm --filter @zero/agent-mobile exec jest --runInBand --detectOpenHandles
+```
+
 ### Run checks on a starved box (the `mini` host)
 
 The `mini` dev host has 2 CPUs and 7.6 GB RAM. These checks are cheap in
