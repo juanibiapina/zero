@@ -41,7 +41,9 @@ only what comes next.
   Dose is on the first chosen day on or after the start day. Pausing and missed
   doses do not move the chosen days.
 - Changing a dose time affects only future reminders. Past ones do not replay.
-- An ended routine keeps its history. Adding it again starts a new routine.
+- An ended routine keeps its history. Choosing Ongoing or a later last day
+  continues the same routine with its history and pill count. Days between
+  the end and the restart have no Doses on record.
 - Supply is a count you set. Every Taken subtracts that dose time's pills, and
   Undo adds them back. Skip changes nothing. Taking a dose twice, or a notification Taken that
   arrives again, subtracts once. The count never goes below zero.

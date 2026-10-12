@@ -12,11 +12,11 @@ const time = (instant: string) => new Date(instant).toLocaleTimeString([], { hou
 const WEEKDAYS: [Weekday, string][] = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [7, "Sunday"]];
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
 
-function MedicineForm({ replica, source, copy = false, onSaved }: { replica: TaskdoReplica; source?: Medicine; copy?: boolean; onSaved: (id: string) => void }) {
-  const [draft, setDraft] = useState<MedicineInput>(() => MedicineDraft.create(medicineToday(), source, copy).input);
-  const [endMode, setEndMode] = useState<"ongoing" | "last-day" | "days">(source?.endsOn && !copy ? "last-day" : "ongoing");
+function MedicineForm({ replica, source, onSaved }: { replica: TaskdoReplica; source?: Medicine; onSaved: (id: string) => void }) {
+  const [draft, setDraft] = useState<MedicineInput>(() => MedicineDraft.create(medicineToday(), source).input);
+  const [endMode, setEndMode] = useState<"ongoing" | "last-day" | "days">(source?.endsOn ? "last-day" : "ongoing");
   const [days, setDays] = useState("10"); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
-  const initialPills = !copy && source?.supply ? String(source.supply.pillsLeft) : "";
+  const initialPills = source?.supply ? String(source.supply.pillsLeft) : "";
   const initialLead = String(source?.supply?.leadDays ?? DEFAULT_LEAD_DAYS);
   const [pills, setPills] = useState(initialPills); const [lead, setLead] = useState(initialLead);
   const end = (() => { try { return endMode === "ongoing" ? null : endMode === "days" ? medicineEndDate(draft.startsOn, Number(days)) : draft.endsOn ?? draft.startsOn; } catch { return null; } })();
@@ -27,7 +27,7 @@ function MedicineForm({ replica, source, copy = false, onSaved }: { replica: Tas
       const count = pills.trim();
       if (count && !/^\d+$/.test(count)) throw new Error("Enter the number of pills you have");
       if (count && !/^\d+$/.test(lead.trim())) throw new Error("Enter a whole number of days");
-      const editing = !!source && !copy;
+      const editing = !!source;
       const id = editing ? (await replica.medicines.edit(source.id, value), source.id) : (await replica.medicines.add(value)).id;
       const supplyChanged = pills !== initialPills || lead !== initialLead;
       if (supplyChanged && count) await replica.medicines.setSupply(id, { pillsLeft: Number(count), leadDays: Number(lead.trim()) });
@@ -70,7 +70,7 @@ export function MedicinesPage() {
   const [snapshot, setSnapshot] = useState(() => replica?.snapshot());
   useEffect(() => replica?.subscribe(setSnapshot), [replica]);
   const today = useLocalDay(); const medicine = snapshot?.medicines.find((item) => item.id === id);
-  const [editor, setEditor] = useState<"new" | "edit" | "copy" | null>(search.has("new") ? "new" : null);
+  const [editor, setEditor] = useState<"new" | "edit" | null>(search.has("new") ? "new" : null);
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   const [undo, setUndo] = useState<string | null>(null); const [confirmDelete, setConfirmDelete] = useState(false);
   const [counting, setCounting] = useState<"restock" | "count" | null>(null);
@@ -99,13 +99,13 @@ export function MedicinesPage() {
         return <div key={dose.id} className="flex min-h-12 items-center justify-between gap-3 border-b py-2"><span>{time(dose.scheduledAt)}</span>{dose.takenAt || dose.skippedAt ? <span className="text-sm">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : "Skipped"} <Button variant="ghost" disabled={busy} onClick={() => void run(() => replica.medicines.undo(dose.id))}>Undo</Button></span> : <Button disabled={busy} onClick={() => take(dose)}>Taken {time(dose.scheduledAt)} dose</Button>}</div>;
       })}
       {undo ? <Button variant="ghost" disabled={busy} onClick={() => void run(async () => { await replica.medicines.undo(undo); setUndo(null); })}>Undo last taken dose</Button> : null}
-      {medicineState(medicine, today) === "ended" ? <Button variant="outline" onClick={() => setEditor("copy")}>Add again</Button> : <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))}>{medicine.paused ? "Resume reminders" : "Pause reminders"}</Button>}
+      {medicineState(medicine, today) === "ended" ? null : <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))}>{medicine.paused ? "Resume reminders" : "Pause reminders"}</Button>}
       <h2 className="font-semibold">History</h2><p className="text-sm text-muted-foreground">Taken at records when you pressed Taken.</p>
       {snapshot.doses.filter((dose) => dose.medicineId === medicine.id).sort((a, b) => b.on.localeCompare(a.on)).map((dose) => <div key={dose.id} className="flex flex-col gap-1 border-b py-2"><span>{dose.on} · Scheduled {time(dose.scheduledAt)}</span><span className="text-sm text-muted-foreground">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : dose.skippedAt ? "Skipped" : "Not recorded"}</span></div>)}
       <Button variant="ghost" onClick={() => setConfirmDelete(true)}>Delete medicine</Button><Link to="/medicines" className="text-sm underline">Back to medicines</Link>
     </> : null}
     <Sheet open={editor !== null} onClose={() => { setEditor(null); setSearch({}); }} title={editor === "edit" ? "Edit medicine" : "Add medicine"}>
-      {editor ? <MedicineForm key={`${editor}-${id ?? "new"}`} replica={replica} source={editor === "edit" || editor === "copy" ? medicine : undefined} copy={editor === "copy"} onSaved={(medicineId) => { setEditor(null); void navigate(`/medicines/${medicineId}`); }} /> : null}
+      {editor ? <MedicineForm key={`${editor}-${id ?? "new"}`} replica={replica} source={editor === "edit" ? medicine : undefined} onSaved={(medicineId) => { setEditor(null); void navigate(`/medicines/${medicineId}`); }} /> : null}
     </Sheet>
     {medicine && counting === "restock" ? <PillCountSheet title="How many pills did you get?" initial={medicine.supply?.refill ?? null} onClose={() => setCounting(null)} onSave={(amount) => { setCounting(null); void restockWithUndo({ replica, medicineId: medicine.id, amount, onError: setError }); }} /> : null}
     {medicine && counting === "count" ? <PillCountSheet title="How many pills do you have now?" initial={medicine.supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: medicine.supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} /> : null}

@@ -238,16 +238,18 @@ describe('A medicine page', () => {
     expect(screen.getByLabelText('Medicine name').props.value).toBe('Evening routine');
     expect(data.replica!.snapshot().doses[0]).toEqual(confirmation);
   });
-  it('adds an ended medicine again as a new one starting today', async () => {
+  it('continues an ended medicine in place, keeping its history', async () => {
     const daysAgo = (days: number) => { const date = new Date(); date.setDate(date.getDate() - days); return medicineToday(date); };
     const { screen, data, medicine } = await openMedicine({ startsOn: daysAgo(5), endsOn: daysAgo(1) });
+    await data.replica!.medicines.take(medicineOccurrences(medicine, daysAgo(2))[0]);
+    const history = data.replica!.snapshot().doses;
+    expect(screen.getByText(/^Ended /)).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Medicine options'));
-    await fireEvent.press(screen.getByText('Add again'));
-    expect(screen.getAllByLabelText('Medicine name').at(-1)!.props.value).toBe('Vitamin D');
-    await fireEvent.press(screen.getByLabelText('Add medicine'));
-    await waitFor(() => expect(data.replica!.snapshot().medicines).toHaveLength(2));
-    const added = data.replica!.snapshot().medicines.find((item) => item.id !== medicine.id)!;
-    expect(added).toMatchObject({ name: 'Vitamin D', startsOn: medicineToday(), endsOn: null });
+    expect(screen.queryByText('Add again')).toBeNull();
+    await fireEvent.press(screen.getByText('Ongoing'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines).toEqual([expect.objectContaining({ id: medicine.id, endsOn: null })]));
+    expect(data.replica!.snapshot().doses).toEqual(history);
+    expect(screen.queryByText(/^Ended /)).toBeNull();
   });
   it('pauses and resumes reminders from Medicine options', async () => {
     const { screen, data } = await openMedicine();

@@ -77,12 +77,6 @@ describe("Medicine drafts", () => {
     expect(next.commit().doses).toHaveLength(24);
     expect(() => next.addTime()).toThrow("up to 24");
   });
-  it("gives copied or re-added slots fresh identities and starts a fresh ongoing course", () => {
-    const copied = MedicineDraft.create(today, custom, true).commit();
-    expect(copied).toMatchObject({ startsOn: today, endsOn: null, paused: false });
-    expect(copied.doses.map((dose) => dose.alarmAt)).toEqual(custom.doses.map((dose) => dose.alarmAt));
-    expect(copied.doses.some((dose) => custom.doses.some((old) => old.id === dose.id))).toBe(false);
-  });
   it("retries a failed local creation without duplicating or reviving a deleted routine", async () => {
     let failing = true;
     const replica = createTaskdoReplica({ store: createMergeableStore(), queryClient: new QueryClient(), queryKeyScope: ["draft-retry"], save: async () => { if (failing) throw new Error("Storage full"); } });
@@ -98,10 +92,9 @@ describe("Medicine drafts", () => {
     expect(replica.snapshot().medicines).toHaveLength(0);
     await replica.close();
   });
-  it("starts daily and keeps chosen weekdays through edits and Add again", () => {
+  it("starts daily and keeps chosen weekdays through edits", () => {
     expect(MedicineDraft.create(today).change({ name: "Routine" }).commit().weekdays).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(MedicineDraft.create(today, custom).commit().weekdays).toEqual([1, 3, 5]);
-    expect(MedicineDraft.create(today, custom, true).commit().weekdays).toEqual([1, 3, 5]);
   });
   it("toggles weekdays in order and never removes the last one", () => {
     let draft = MedicineDraft.create(today).change({ name: "Routine" });

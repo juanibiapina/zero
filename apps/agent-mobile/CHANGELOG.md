@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-12: Change ended medicines so you can continue them from their page: choose Ongoing or a later last day and the medicine picks up again with its history and pill count. Remove Add again.
+
 - 2026-10-11: Change Postpone 1 hour on medicine notifications to move the dose an hour later. The notification closes, the early reminder comes back before the new time, and the alarm rings at the new time. The dose-time notification keeps the pill icon.
 
 - 2026-10-11: Change sheets so you can drag them from anywhere, not just the handle. The task editor and project pickers open in the middle of the screen and drag up to full height, back to the middle, or down to close.

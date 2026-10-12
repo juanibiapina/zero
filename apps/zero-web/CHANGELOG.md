@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-12: Remove Add again from ended medicines. Edit the medicine and choose Ongoing or a later last day to continue it with its history and pill count.
+
 - 2026-10-10: Show medicine doses you skipped on your phone, with Undo.
 
 - 2026-10-10: Change project pickers to open with After and Backlog expanded, so every project is one tap away.

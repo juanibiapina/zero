@@ -20,13 +20,10 @@ export class MedicineDraft {
     readonly changed = false,
   ) {}
 
-  static create(today: string, source?: MedicineInput, copy = false): MedicineDraft {
+  static create(today: string, source?: MedicineInput): MedicineDraft {
     const input: MedicineInput = source ? {
       ...source,
-      startsOn: copy ? today : source.startsOn,
-      endsOn: copy ? null : source.endsOn,
-      paused: copy ? false : source.paused,
-      doses: source.doses.map((slot) => ({ ...slot, id: copy ? safeRandomUUID() : slot.id })),
+      doses: source.doses.map((slot) => ({ ...slot })),
     } : {
       name: "", instructions: null, startsOn: today, endsOn: null, paused: false, weekdays: EVERY_DAY,
       doses: [{ id: safeRandomUUID(), alarmAt: "20:00", remindAt: reminder("20:00", defaultLead(1)), amount: 1 }],

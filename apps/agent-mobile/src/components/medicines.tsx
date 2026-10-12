@@ -153,7 +153,6 @@ export function MedicineDetail() {
   const [busy, setBusy] = useState(false);
   const [options, setOptions] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [copying, setCopying] = useState(false);
   const [undoing, setUndoing] = useState<Dose | null>(null);
   const [skipping, setSkipping] = useState<Dose | null>(null);
   const [counting, setCounting] = useState<'restock' | 'count' | null>(null);
@@ -196,7 +195,7 @@ export function MedicineDetail() {
   return <View className="flex-1 bg-background">
     <Page title={medicine.name} header={<MedicineIdentity key={medicine.id} medicine={medicine} onSave={saveText}
       options={<Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable>} />}>
-      {options ? <View className="border-y border-divider py-2">{state === 'ended' ? <Action label="Add again" disabled={busy} onPress={() => setCopying(true)} /> : <Action label={medicine.paused ? 'Resume reminders' : 'Pause reminders'} disabled={busy} onPress={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))} />}<Action label="Delete medicine" danger disabled={busy} onPress={remove} /></View> : null}
+      {options ? <View className="border-y border-divider py-2">{state === 'ended' ? null : <Action label={medicine.paused ? 'Resume reminders' : 'Pause reminders'} disabled={busy} onPress={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))} />}<Action label="Delete medicine" danger disabled={busy} onPress={remove} /></View> : null}
       {error ? <Text variant="error" selectable className="pt-2">{error}</Text> : null}
       <Text accessibilityRole="header" variant="section" className="pb-3 pt-2">{heading}</Text>
       {tiles.length ? <View className="flex-row flex-wrap gap-3">
@@ -209,7 +208,7 @@ export function MedicineDetail() {
         })}
       </View> : null}
       <SectionTitle>Schedule</SectionTitle>
-      {state === 'ended' ? <DoseTimes medicine={medicine} /> : <MedicineSchedule draft={draft} onChange={apply} disabled={busy} />}
+      <MedicineSchedule draft={draft} onChange={apply} disabled={busy} />
       <SectionTitle>Pills</SectionTitle>
       <View className="flex-row flex-wrap items-center justify-between gap-x-4">
         <Text className="min-w-0 flex-1" style={{ fontVariant: ['tabular-nums'] }}>{supplyLabel(medicine) ?? 'Not counted yet'}</Text>
@@ -232,7 +231,6 @@ export function MedicineDetail() {
     {undoing ? <ConfirmDialog title={`Mark ${time(undoing.scheduledAt)} dose as not ${undoing.skippedAt ? 'skipped' : 'taken'}?`} message="It will show as pending again." cancelLabel="Cancel" confirmLabel="Undo" onCancel={() => setUndoing(null)} onConfirm={() => { const dose = undoing; setUndoing(null); void run(() => replica.medicines.undo(dose.id)); }} /> : null}
     <PillCountSheet open={counting === 'restock'} title="How many pills did you get?" initial={supply?.refill ?? null} onClose={() => setCounting(null)} onSave={(amount) => { setCounting(null); void restockWithUndo({ replica, medicineId: medicine.id, amount, onError: setError }); }} />
     <PillCountSheet open={counting === 'count'} title="How many pills do you have now?" initial={supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} />
-    <MedicineDrawer open={copying} source={medicine} onClose={() => setCopying(false)} onSaved={(id) => { setCopying(false); router.replace(`/browse/medicines/${id}`); }} />
   </View>;
 }
 function MedicineIdentity({ medicine, onSave, options }: {
@@ -265,9 +263,9 @@ function MedicineIdentity({ medicine, onSave, options }: {
       placeholder="Notes, like “after food”" accessibilityLabel="Medicine description" className="text-subtitle" />
   </View>;
 }
-function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: boolean; source?: Medicine; onOpen?: () => void; onClose: () => void; onSaved: (id: string) => void }) {
+function MedicineDrawer({ open, onOpen, onClose, onSaved }: { open: boolean; onOpen?: () => void; onClose: () => void; onSaved: (id: string) => void }) {
   const replica = useTodoReplica();
-  const [draft, setDraft] = useState(() => MedicineDraft.create(medicineToday(), source, !!source));
+  const [draft, setDraft] = useState(() => MedicineDraft.create(medicineToday()));
   const [notesOpen, setNotesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -279,7 +277,7 @@ function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: bool
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setDraft(MedicineDraft.create(medicineToday(), source, !!source));
+      setDraft(MedicineDraft.create(medicineToday()));
       setNotesOpen(false); setError(null); setDiscard(false); setCreationId(safeRandomUUID());
     }
   }
@@ -304,7 +302,7 @@ function MedicineDrawer({ open, source, onOpen, onClose, onSaved }: { open: bool
     finally { pending.current = false; setBusy(false); }
   };
   const change = (next: MedicineDraft) => { setDraft(next); setError(null); };
-  return <TaskEditorSheet open={open} onOpen={onOpen} collapsedFabLabel="Add medicine" inline autoFocus selectTextOnFocus={!!source} onClose={close} dismissLabel="Dismiss medicine editor" draft={draft.input.name} onChangeDraft={(name) => setDraft((current) => current.change({ name }))} onSubmit={() => void save()} placeholder="Name a medicine" inputAccessibilityLabel="Medicine name" inputEditable={!busy} holdPosition={pickerOpen}
+  return <TaskEditorSheet open={open} onOpen={onOpen} collapsedFabLabel="Add medicine" inline autoFocus onClose={close} dismissLabel="Dismiss medicine editor" draft={draft.input.name} onChangeDraft={(name) => setDraft((current) => current.change({ name }))} onSubmit={() => void save()} placeholder="Name a medicine" inputAccessibilityLabel="Medicine name" inputEditable={!busy} holdPosition={pickerOpen}
     context={<View className="px-screen-x pt-3"><Text variant="section">Add medicine</Text></View>}
     trailing={<MedicineSaveButton busy={busy} disabled={!draft.input.name.trim() || !replica} onPress={() => void save()} />}
     secondaryContent={<View className="border-t border-divider">
