@@ -31,9 +31,45 @@ function courseFitsIn(medicine: Medicine, pillsLeft: number, today: string): boo
   return true;
 }
 
+const COURSE_LIMIT_DAYS = 36500;
+
+export function lastPillDay(medicine: Pick<Medicine, "startsOn" | "weekdays" | "doses">, pillsLeft: number, settledToday: ReadonlySet<string>, today: string): string {
+  const recurrence = { from: medicine.startsOn, until: null, weekdays: medicine.weekdays };
+  const slots = [...medicine.doses].sort((a, b) => a.alarmAt.localeCompare(b.alarmAt));
+  const weekly = weeklyPills(medicine);
+  let pills = pillsLeft;
+  let last: string | null = null;
+  let day = today < medicine.startsOn ? medicine.startsOn : today;
+  const walk = (days: number): boolean => {
+    for (let step = 0; step < days; step += 1, day = addDays(day, 1)) {
+      if (!occursOn(recurrence, day)) continue;
+      for (const slot of slots) {
+        if (day === today && settledToday.has(slot.id)) continue;
+        if (pills < slot.amount) return false;
+        pills -= slot.amount;
+        last = day;
+      }
+    }
+    return true;
+  };
+  if (walk(7)) {
+    if (weekly > 0 && pills >= weekly) {
+      const weeks = Math.min(Math.floor(pills / weekly), Math.floor(COURSE_LIMIT_DAYS / 7));
+      pills -= weeks * weekly;
+      day = addDays(day, weeks * 7);
+      for (let back = 1; back <= 7; back += 1) {
+        if (occursOn(recurrence, addDays(day, -back))) { last = addDays(day, -back); break; }
+      }
+    }
+    walk(7);
+  }
+  const end = last ?? (today >= medicine.startsOn && settledToday.size ? today : addDays(today, -1));
+  return end < medicine.startsOn ? medicine.startsOn : end;
+}
+
 export function supplyIsLow(medicine: Medicine, today: string): boolean {
   const supply = medicine.supply;
-  if (!supply) return false;
+  if (!supply || medicine.untilEmpty) return false;
   if (medicine.paused || (medicine.endsOn !== null && today > medicine.endsOn)) return false;
   if (supply.pillsLeft > restockThreshold(medicine, supply.leadDays)) return false;
   return !courseFitsIn(medicine, supply.pillsLeft, today);

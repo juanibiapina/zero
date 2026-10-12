@@ -14,24 +14,28 @@ const message = (cause: unknown) => cause instanceof Error ? cause.message : Str
 
 function MedicineForm({ replica, source, onSaved }: { replica: TaskdoReplica; source?: Medicine; onSaved: (id: string) => void }) {
   const [draft, setDraft] = useState<MedicineInput>(() => MedicineDraft.create(medicineToday(), source).input);
-  const [endMode, setEndMode] = useState<"ongoing" | "last-day" | "days">(source?.endsOn ? "last-day" : "ongoing");
+  const [endMode, setEndMode] = useState<"ongoing" | "last-day" | "days" | "until-empty">(source?.untilEmpty ? "until-empty" : source?.endsOn ? "last-day" : "ongoing");
   const [days, setDays] = useState("10"); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const initialPills = source?.supply ? String(source.supply.pillsLeft) : "";
   const initialLead = String(source?.supply?.leadDays ?? DEFAULT_LEAD_DAYS);
   const [pills, setPills] = useState(initialPills); const [lead, setLead] = useState(initialLead);
-  const end = (() => { try { return endMode === "ongoing" ? null : endMode === "days" ? medicineEndDate(draft.startsOn, Number(days)) : draft.endsOn ?? draft.startsOn; } catch { return null; } })();
+  const untilEmpty = endMode === "until-empty";
+  const end = (() => { try { return endMode === "ongoing" || untilEmpty ? null : endMode === "days" ? medicineEndDate(draft.startsOn, Number(days)) : draft.endsOn ?? draft.startsOn; } catch { return null; } })();
   const save = async () => {
     setBusy(true); setError(null);
     try {
-      const value = { ...draft, instructions: draft.instructions?.trim() || null, endsOn: endMode === "days" ? medicineEndDate(draft.startsOn, Number(days)) : end };
+      const value = { ...draft, instructions: draft.instructions?.trim() || null, untilEmpty,
+        endsOn: untilEmpty ? draft.endsOn : endMode === "days" ? medicineEndDate(draft.startsOn, Number(days)) : end };
       const count = pills.trim();
       if (count && !/^\d+$/.test(count)) throw new Error("Enter the number of pills you have");
-      if (count && !/^\d+$/.test(lead.trim())) throw new Error("Enter a whole number of days");
+      if (untilEmpty && !count) throw new Error("Count your pills first");
+      if (count && !untilEmpty && !/^\d+$/.test(lead.trim())) throw new Error("Enter a whole number of days");
       const editing = !!source;
-      const id = editing ? (await replica.medicines.edit(source.id, value), source.id) : (await replica.medicines.add(value)).id;
+      const counted = untilEmpty ? Number(count) : undefined;
+      const id = editing ? (await replica.medicines.edit(source.id, value, counted), source.id) : (await replica.medicines.add(value, undefined, counted)).id;
       const supplyChanged = pills !== initialPills || lead !== initialLead;
-      if (supplyChanged && count) await replica.medicines.setSupply(id, { pillsLeft: Number(count), leadDays: Number(lead.trim()) });
-      else if (supplyChanged && editing) await replica.medicines.clearSupply(id);
+      if (!untilEmpty && supplyChanged && count) await replica.medicines.setSupply(id, { pillsLeft: Number(count), leadDays: Number(lead.trim()) });
+      else if (!untilEmpty && supplyChanged && editing) await replica.medicines.clearSupply(id);
       onSaved(id);
     } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   };
@@ -50,13 +54,13 @@ function MedicineForm({ replica, source, onSaved }: { replica: TaskdoReplica; so
       </fieldset>
       <fieldset className="flex flex-col gap-2"><legend className="mb-2 font-semibold">Days</legend><div className="flex flex-wrap gap-3">{WEEKDAYS.map(([day, name]) => <label key={day} className="flex min-h-10 items-center gap-2"><input type="checkbox" checked={draft.weekdays.includes(day)} onChange={() => setDraft(MedicineDraft.create(medicineToday(), draft).toggleWeekday(day).input)} />{name}</label>)}</div></fieldset>
       <label className="flex flex-col gap-2">Starts<Input type="date" value={draft.startsOn} onChange={(event) => setDraft({ ...draft, startsOn: event.target.value })} required /></label>
-      <fieldset className="flex flex-col gap-2"><legend>Ends</legend><div className="flex flex-wrap gap-3">{(["ongoing", "last-day", "days"] as const).map((mode) => <label key={mode} className="flex min-h-10 items-center gap-2"><input type="radio" name="end-mode" checked={endMode === mode} onChange={() => setEndMode(mode)} />{mode === "ongoing" ? "Ongoing" : mode === "days" ? "Number of days" : "Last day"}</label>)}</div></fieldset>
+      <fieldset className="flex flex-col gap-2"><legend>Ends</legend><div className="flex flex-wrap gap-3">{(["ongoing", "last-day", "days", "until-empty"] as const).map((mode) => <label key={mode} className="flex min-h-10 items-center gap-2"><input type="radio" name="end-mode" checked={endMode === mode} onChange={() => setEndMode(mode)} />{mode === "ongoing" ? "Ongoing" : mode === "days" ? "Number of days" : mode === "until-empty" ? "Until pills run out" : "Last day"}</label>)}</div></fieldset>
       {endMode === "days" ? <label className="flex flex-col gap-2">Number of days<Input type="number" min={1} max={36500} step={1} value={days} onChange={(event) => setDays(event.target.value)} required /></label> : null}
       {endMode === "last-day" ? <label className="flex flex-col gap-2">Last day<Input type="date" min={draft.startsOn} value={end ?? draft.startsOn} onChange={(event) => setDraft({ ...draft, endsOn: event.target.value })} required /></label> : null}
       {endMode === "days" && end ? <p className="text-sm text-muted-foreground">Last day: {end}, inclusive</p> : null}
       <fieldset className="flex flex-col gap-3"><legend className="mb-2 font-semibold">Supply</legend>
-        <label className="flex flex-col gap-2">Pills you have<Input type="number" min={0} step={1} aria-label="Pills you have" placeholder="Optional" value={pills} onChange={(event) => setPills(event.target.value)} /></label>
-        {pills.trim() ? <label className="flex flex-col gap-2">Remind me to buy, days before they run out<Input type="number" min={0} step={1} aria-label="Days before running out" value={lead} onChange={(event) => setLead(event.target.value)} required /></label> : null}
+        <label className="flex flex-col gap-2">Pills you have<Input type="number" min={untilEmpty ? 1 : 0} step={1} aria-label="Pills you have" placeholder={untilEmpty ? undefined : "Optional"} value={pills} onChange={(event) => setPills(event.target.value)} required={untilEmpty} /></label>
+        {pills.trim() && !untilEmpty ? <label className="flex flex-col gap-2">Remind me to buy, days before they run out<Input type="number" min={0} step={1} aria-label="Days before running out" value={lead} onChange={(event) => setLead(event.target.value)} required /></label> : null}
       </fieldset>
     </fieldset>
     {error ? <p role="alert" className="text-destructive">{error}</p> : null}
@@ -91,7 +95,7 @@ export function MedicinesPage() {
       })}
     </> : null}
     {medicine ? <>
-      {medicine.instructions ? <p>{medicine.instructions}</p> : null}<p className="text-sm text-muted-foreground">{medicineCadence(medicine)} · {medicine.endsOn ? `Through ${medicine.endsOn}` : "Ongoing"}</p>
+      {medicine.instructions ? <p>{medicine.instructions}</p> : null}<p className="text-sm text-muted-foreground">{medicineCadence(medicine)} · {medicine.untilEmpty ? `Until pills run out · last dose ${medicine.endsOn}` : medicine.endsOn ? `Through ${medicine.endsOn}` : "Ongoing"}</p>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><span className="tabular-nums">{supplyLabel(medicine) ?? "Pills not counted"}</span><span className="flex gap-2"><Button variant="outline" disabled={busy} onClick={() => setCounting("restock")}>Restock</Button><Button variant="outline" disabled={busy} onClick={() => setCounting("count")}>{medicine.supply ? "Recount" : "Count pills"}</Button></span></div>
       <h2 className="font-semibold">{medicineState(medicine, today) === "active" ? medicineOccurrences(medicine, today).length ? "Today" : (medicineNextDay(medicine, today) ? `Next dose ${medicineDay(medicineNextDay(medicine, today)!, today)}` : "No more doses") : medicineState(medicine, today)}</h2>
       {medicineOccurrences(medicine, today).map((planned) => {

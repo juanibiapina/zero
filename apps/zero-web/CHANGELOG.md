@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-12: Add Until pills run out to medicines: enter the pills you have and the medicine ends on the day the last one is due.
+
 - 2026-10-12: Remove Add again from ended medicines. Edit the medicine and choose Ongoing or a later last day to continue it with its history and pill count.
 
 - 2026-10-10: Show medicine doses you skipped on your phone, with Undo.

@@ -76,8 +76,8 @@ export type TodoWaits = {
 };
 
 export type TodoMedicines = {
-  add: (input: MedicineInput, creationId?: string) => Promise<Medicine>;
-  edit: (id: string, input: MedicineInput) => Promise<void>;
+  add: (input: MedicineInput, creationId?: string, pillsLeft?: number) => Promise<Medicine>;
+  edit: (id: string, input: MedicineInput, pillsLeft?: number) => Promise<void>;
   remove: (id: string) => Promise<void>;
   take: (dose: Dose) => Promise<void>;
   skip: (dose: Dose) => Promise<void>;
@@ -406,17 +406,17 @@ export function createTaskdoReplica({
     projects: projectActions,
     waits: waitActions,
     medicines: {
-      async add(input, creationId = randomId()) {
+      async add(input, creationId = randomId(), pillsLeft) {
         let result!: Medicine;
         await write(() => {
           if (medicineModel.get(creationId)) {
-            medicineModel.edit(creationId, input);
+            medicineModel.edit(creationId, input, pillsLeft);
             result = medicineModel.get(creationId)!;
-          } else result = medicineModel.add(creationId, input);
+          } else result = medicineModel.add(creationId, input, pillsLeft);
         });
         return result;
       },
-      edit: (id, input) => write(() => { medicineModel.edit(id, input); }),
+      edit: (id, input, pillsLeft) => write(() => { medicineModel.edit(id, input, pillsLeft); }),
       remove: (id) => write(() => { medicineModel.remove(id); }),
       take: (dose) => write(() => { medicineModel.take(dose, randomId()); }),
       skip: (dose) => write(() => { medicineModel.skip(dose, randomId()); }),

@@ -33,6 +33,15 @@ describe("Medicine drafts", () => {
     expect(draft.commit().doses[0]).toMatchObject({ alarmAt: "10:00", remindAt: "09:45" });
     expect(draft.time("morning", "alarmAt", "00:30").heads("morning", 60).commit().doses[0].remindAt).toBe("23:30");
   });
+  it("runs until the counted pills run out, and keeps that course when edited", () => {
+    const draft = MedicineDraft.create(today).change({ name: "Antibiotic" }).frequency(2).withCourse({ kind: "until-empty", pillsLeft: 10 });
+    expect(draft.pillsLeft).toBe(10);
+    expect(draft.commit()).toMatchObject({ untilEmpty: true, endsOn: "2026-10-07" });
+    const stored = { ...draft.commit(), endsOn: "2026-10-07" };
+    const edited = MedicineDraft.create(today, stored).addTime();
+    expect(edited.pillsLeft).toBeUndefined();
+    expect(edited.commit()).toMatchObject({ untilEmpty: true, endsOn: "2026-10-07" });
+  });
   it("adds a third custom dose with a thirty-minute reminder while preserving existing slots", () => {
     const input = MedicineDraft.create(today, custom).addTime().commit();
     expect(input.doses.slice(0, 2)).toEqual(custom.doses);

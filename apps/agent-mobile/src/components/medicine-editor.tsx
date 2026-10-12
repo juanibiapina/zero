@@ -3,6 +3,7 @@ import { MedicineDraft, medicineDay, medicineEndDate, medicineLead, medicineToda
 import { useLayoutEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
+import { Input } from '@/components/ui/input';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 
@@ -29,14 +30,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return <View className="gap-1 pt-3"><Text variant="caption" className="font-semibold uppercase tracking-wide">{title}</Text>{children}</View>;
 }
 
-export function MedicineSchedule({ draft, onChange, disabled = false, presets = false, onPickerOpenChange }: {
+export function MedicineSchedule({ draft, onChange, disabled = false, presets = false, onPickerOpenChange, onCountPills, askPillCount = false }: {
   draft: MedicineDraft;
   onChange: (draft: MedicineDraft) => Promise<void> | void;
   disabled?: boolean;
   presets?: boolean;
   onPickerOpenChange?: (open: boolean) => void;
+  onCountPills?: () => void;
+  askPillCount?: boolean;
 }) {
   const [openSlot, setOpenSlot] = useState<string | null>(null);
+  const [pillsText, setPillsText] = useState('');
   const [picker, setPicker] = useState<{ mode: 'date' | 'time'; value: Date; save: (date: Date) => void } | null>(null);
   const today = medicineToday();
   const tomorrow = medicineEndDate(today, 2);
@@ -47,7 +51,21 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
   const pickerOpen = slot != null || picker != null;
   useLayoutEffect(() => { onPickerOpenChange?.(pickerOpen); }, [pickerOpen, onPickerOpenChange]);
   const pickDate = (value: string, save: (day: string) => void) => setPicker({ mode: 'date', value: new Date(`${value}T12:00:00`), save: (date) => save(medicineToday(date)) });
-  const days = endsOn ? courseDays(startsOn, endsOn) : 0;
+  const kind = draft.course.kind;
+  const fixedEnd = kind === 'last-day' || kind === 'days' ? endsOn : null;
+  const untilEmpty = kind === 'until-empty';
+  const askCount = untilEmpty && askPillCount;
+  const typed = (text: string) => { const pills = /^\d+$/.test(text.trim()) ? Number(text.trim()) : 0; return pills >= 1 ? pills : null; };
+  const days = fixedEnd ? courseDays(startsOn, fixedEnd) : 0;
+  const chooseUntilEmpty = () => {
+    if (untilEmpty) return;
+    if (onCountPills) onCountPills();
+    else void onChange(draft.withCourse({ kind: 'until-empty', pillsLeft: askPillCount ? typed(pillsText) : null }));
+  };
+  const typePills = (text: string) => {
+    setPillsText(text);
+    void onChange(draft.withCourse({ kind: 'until-empty', pillsLeft: typed(text) }));
+  };
   const setDays = (count: number) => { if (count >= 1) void onChange(draft.withCourse({ kind: 'last-day', on: medicineEndDate(startsOn, count) })); };
   return <View>
     {presets ? <View className="flex-row flex-wrap gap-x-2">
@@ -76,10 +94,14 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
     </Section>
     <Section title="How long">
       <View className="flex-row flex-wrap items-center gap-x-2">
-        <Chip label="Ongoing" selected={!endsOn} disabled={disabled} onPress={() => void onChange(draft.withCourse({ kind: 'ongoing' }))} />
-        <Chip label={endsOn ? `Until ${medicineDay(endsOn, today)}` : 'Until…'} accessibilityLabel={endsOn ? `Change last day, ${endsOn}` : 'Set a last day'} selected={!!endsOn} disabled={disabled} onPress={() => endsOn ? pickDate(endsOn, (day) => void onChange(draft.withCourse({ kind: 'last-day', on: day }))) : setDays(10)} />
+        <Chip label="Ongoing" selected={kind === 'ongoing'} disabled={disabled} onPress={() => void onChange(draft.withCourse({ kind: 'ongoing' }))} />
+        <Chip label={fixedEnd ? `Until ${medicineDay(fixedEnd, today)}` : 'Until…'} accessibilityLabel={fixedEnd ? `Change last day, ${fixedEnd}` : 'Set a last day'} selected={!!fixedEnd} disabled={disabled} onPress={() => fixedEnd ? pickDate(fixedEnd, (day) => void onChange(draft.withCourse({ kind: 'last-day', on: day }))) : setDays(10)} />
+        <Chip label="Until pills run out" selected={untilEmpty} disabled={disabled} onPress={chooseUntilEmpty} />
       </View>
-      {endsOn ? <View className="flex-row items-center justify-between">
+      {askCount ? <Input value={pillsText} onChangeText={typePills} keyboardType="number-pad" editable={!disabled}
+        placeholder="Pills you have" accessibilityLabel="Pills you have" className="min-h-12" /> : null}
+      {untilEmpty && endsOn ? <Text variant="subtitle">{`Last dose ${medicineDay(endsOn, today)}`}</Text> : null}
+      {fixedEnd ? <View className="flex-row items-center justify-between">
         <Text variant="subtitle">{days === 1 ? '1 day' : `${days} days`}</Text>
         <Stepper label="days" value={days} min={1} disabled={disabled} onChange={setDays} />
       </View> : null}

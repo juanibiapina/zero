@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-12: Add Until pills run out to medicines: count your pills and the medicine ends on the day the last one is due. Skipping a dose or restocking moves that day later.
+
 - 2026-10-12: Change ended medicines so you can continue them from their page: choose Ongoing or a later last day and the medicine picks up again with its history and pill count. Remove Add again.
 
 - 2026-10-11: Change Postpone 1 hour on medicine notifications to move the dose an hour later. The notification closes, the early reminder comes back before the new time, and the alarm rings at the new time. The dose-time notification keeps the pill icon.

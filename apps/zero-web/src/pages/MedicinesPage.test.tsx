@@ -69,6 +69,26 @@ it("creates a finite multi-dose course and records, undoes, and retains independ
   expect(await screen.findByRole("button", { name: "Resume reminders" })).toBeVisible();
 });
 
+it("runs a medicine until the pills you have run out", async () => {
+  const todo = createInMemoryTodoData();
+  replica = todo.replica;
+  render(<TodoDataContextProvider value={{ ...todo.data, authenticatedFeatures: false }}>
+    <MemoryRouter initialEntries={["/medicines"]}><Routes>
+      <Route path="/medicines" element={<MedicinesPage />} />
+      <Route path="/medicines/:id" element={<MedicinesPage />} />
+    </Routes></MemoryRouter>
+  </TodoDataContextProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "Add medicine" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Medicine name" }), { target: { value: "Antibiotic" } });
+  fireEvent.click(screen.getByRole("radio", { name: "Until pills run out" }));
+  expect(screen.getByLabelText("Pills you have")).toBeRequired();
+  expect(screen.queryByLabelText("Days before running out")).toBeNull();
+  fireEvent.change(screen.getByLabelText("Pills you have"), { target: { value: "3" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save medicine" }));
+  await waitFor(() => expect(replica.snapshot().medicines[0]).toMatchObject({ untilEmpty: true, supply: { pillsLeft: 3 }, endsOn: medicineEndDate(medicineToday(), 3) }));
+  expect(await screen.findByText(`Until pills run out · last dose ${medicineEndDate(medicineToday(), 3)}`, { exact: false })).toBeVisible();
+});
+
 it("shows a dose skipped on the phone, with Undo", async () => {
   const todo = createInMemoryTodoData();
   replica = todo.replica;

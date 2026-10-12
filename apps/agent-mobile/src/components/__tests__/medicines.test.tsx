@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { createTaskdoReplica, defaultToastController, MedicineDraft, medicineEndDate, medicineOccurrences, medicineToday, type MedicineInput, type Weekday } from '@zero/agent-core';
+import { createTaskdoReplica, defaultToastController, MedicineDraft, medicineDay, medicineEndDate, medicineOccurrences, medicineToday, type MedicineInput, type Weekday } from '@zero/agent-core';
 import { createMergeableStore } from 'tinybase';
 import type { ReactNode } from 'react';
 import { BackHandler } from 'react-native';
@@ -75,6 +75,18 @@ describe('Adding a medicine', () => {
       instructions: 'After food', weekdays: [1, 3, 5], startsOn: medicineToday(), endsOn: medicineEndDate(medicineToday(), 10),
       doses: [expect.objectContaining({ alarmAt: '20:00', amount: 2 })],
     });
+  });
+  it('runs a new medicine until the pills you have run out', async () => {
+    const screen = await openScreen(<MedicinesList />);
+    await fireEvent.press(screen.getByLabelText('Add medicine'));
+    await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Antibiotic');
+    await fireEvent.press(screen.getByLabelText('2 times a day'));
+    await fireEvent.press(screen.getByText('Until pills run out'));
+    await fireEvent.changeText(screen.getByLabelText('Pills you have'), '6');
+    expect(screen.getByText(`Last dose ${medicineDay(medicineEndDate(medicineToday(), 3), medicineToday())}`)).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Add medicine'));
+    await waitFor(() => expect(screen.data.replica!.snapshot().medicines).toHaveLength(1));
+    expect(screen.data.replica!.snapshot().medicines[0]).toMatchObject({ untilEmpty: true, supply: { pillsLeft: 6 } });
   });
   it('keeps the draft visible until persistence succeeds and retries the same Medicine after failure', async () => {
     let fail = true;
@@ -318,6 +330,15 @@ describe('Medicine supply', () => {
     expect(data.replica!.snapshot().medicines[0].supply?.pillsLeft).toBe(4);
   });
 
+  it('asks for the pill count when an uncounted medicine runs until its pills run out', async () => {
+    const { screen, data } = await openMedicine();
+    await fireEvent.press(screen.getByText('Until pills run out'));
+    await fireEvent.changeText(screen.getByLabelText('How many pills do you have now?'), '3');
+    await fireEvent.press(screen.getByLabelText('Save'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0]).toMatchObject({ untilEmpty: true, supply: { pillsLeft: 3 } }));
+    expect(screen.getByText(/^Last dose /)).toBeTruthy();
+    expect(screen.queryByText('Remind me to buy more')).toBeNull();
+  });
   it('counts pills and chooses when to buy more from the Medicine page', async () => {
     const data = createInMemoryTodoData();
     const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());

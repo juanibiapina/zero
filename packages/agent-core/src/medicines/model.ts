@@ -3,7 +3,7 @@ import type { MergeableStore } from "tinybase";
 import { addDays, nextOccurrence, occursOn } from "../notifications/recurrence";
 import type { Recurrence, Weekday } from "../notifications/schedule";
 import { TodoModel } from "../taskdo/model";
-import { DEFAULT_LEAD_DAYS, supplyIsLow } from "./supply";
+import { DEFAULT_LEAD_DAYS, lastPillDay, supplyIsLow } from "./supply";
 
 export type { Weekday };
 export type MedicineSlot = { id: string; remindAt: string; alarmAt: string; amount: number };
@@ -11,7 +11,7 @@ export type MedicineSupply = { pillsLeft: number; leadDays: number; refill: numb
 export const EVERY_DAY: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
 export type Medicine = {
   id: string; name: string; instructions: string | null;
-  startsOn: string; endsOn: string | null; paused: boolean;
+  startsOn: string; endsOn: string | null; untilEmpty?: boolean; paused: boolean;
   weekdays: Weekday[];
   doses: MedicineSlot[]; createdAt: string;
   supply: MedicineSupply | null;
@@ -80,8 +80,8 @@ function parse<T>(value: unknown): T | null {
 }
 export function validateMedicine(input: MedicineInput): void {
   if (!input.name?.trim()) throw new Error("Enter a medicine name");
-  if (!validDay(input.startsOn) || (input.endsOn !== null && (!validDay(input.endsOn) || input.endsOn < input.startsOn))) throw new Error("The last day must be on or after the start date");
-  if (typeof input.paused !== "boolean" || (input.instructions !== null && typeof input.instructions !== "string")) throw new Error("Invalid medicine details");
+  if (!validDay(input.startsOn) || (!input.untilEmpty && input.endsOn !== null && (!validDay(input.endsOn) || input.endsOn < input.startsOn))) throw new Error("The last day must be on or after the start date");
+  if (typeof input.paused !== "boolean" || (input.untilEmpty !== undefined && typeof input.untilEmpty !== "boolean") || (input.instructions !== null && typeof input.instructions !== "string")) throw new Error("Invalid medicine details");
   if (!Array.isArray(input.weekdays) || !input.weekdays.length || input.weekdays.some((day, index) => !Number.isInteger(day) || day < 1 || day > 7 || (index > 0 && day <= input.weekdays[index - 1]))) throw new Error("Choose at least one day of the week");
   if (!Array.isArray(input.doses) || !input.doses.length || input.doses.length > 24) throw new Error("Add between 1 and 24 daily dose times");
   const ids = new Set<string>(); const times = new Set<string>();
@@ -107,7 +107,7 @@ export function medicineOccurrences(medicine: Medicine, on = medicineToday()): D
 const count = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
 function storedDetails(input: MedicineInput): string {
   const { name, instructions, startsOn, endsOn, paused, weekdays, doses } = input;
-  return JSON.stringify({ name: name.trim(), instructions, startsOn, endsOn, paused, weekdays,
+  return JSON.stringify({ name: name.trim(), instructions, startsOn, endsOn, untilEmpty: input.untilEmpty === true, paused, weekdays,
     doses: doses.map(({ id, remindAt, alarmAt, amount }) => ({ id, remindAt, alarmAt, amount })) });
 }
 
@@ -140,7 +140,30 @@ export class MedicineModel {
       ? { pillsLeft: row.pillsLeft, leadDays: count(row.leadDays) ? row.leadDays : DEFAULT_LEAD_DAYS,
           refill: count(row.refill) && row.refill > 0 ? row.refill : null }
       : null;
-    return { ...details, id, name: details.name.trim(), createdAt: row.createdAt, supply };
+    return { ...details, id, name: details.name.trim(), untilEmpty: details.untilEmpty === true, createdAt: row.createdAt, supply };
+  }
+
+  private settleCourse(id: string): void {
+    const medicine = this.get(id);
+    if (!medicine?.untilEmpty || !medicine.supply) return;
+    const today = medicineToday(this.now());
+    const settled = new Set(medicine.doses.filter((slot) => {
+      const dose = this.getDose(doseId(id, slot.id, today));
+      return !!(dose?.takenAt || dose?.skippedAt);
+    }).map((slot) => slot.id));
+    const endsOn = lastPillDay(medicine, medicine.supply.pillsLeft, settled, today);
+    if (endsOn !== medicine.endsOn) this.store.setCell("medicines", id, "details", storedDetails({ ...medicine, endsOn }));
+  }
+
+  private setCount(id: string, pillsLeft: number | undefined): void {
+    if (pillsLeft === undefined) return;
+    if (!this.store.hasCell("medicines", id, "leadDays")) this.store.setCell("medicines", id, "leadDays", DEFAULT_LEAD_DAYS);
+    this.store.setCell("medicines", id, "pillsLeft", pillsLeft);
+  }
+
+  private checkCount(input: MedicineInput, counted: boolean, pillsLeft: number | undefined): void {
+    if (pillsLeft !== undefined && !count(pillsLeft)) throw new Error("Enter the number of pills you have");
+    if (input.untilEmpty && !counted && pillsLeft === undefined) throw new Error("Count your pills first");
   }
 
   private watchSupply(id: string, write: () => void): void {
@@ -149,6 +172,7 @@ export class MedicineModel {
       const before = this.get(id);
       const wasLow = before ? supplyIsLow(before, today) : false;
       write();
+      this.settleCourse(id);
       const after = this.get(id);
       if (!after || wasLow || !supplyIsLow(after, today)) return;
       this.todo.createTask({ id: this.newId(), text: `Buy ${after.name}`, parent: { kind: "medicine", medicineId: id, role: "restock" } });
@@ -176,8 +200,10 @@ export class MedicineModel {
   }
 
   clearSupply(id: string): void {
-    if (!this.get(id)) return;
+    const medicine = this.get(id);
+    if (!medicine) return;
     this.store.transaction(() => {
+      if (medicine.untilEmpty) this.store.setCell("medicines", id, "details", storedDetails({ ...medicine, untilEmpty: false }));
       for (const cell of ["pillsLeft", "leadDays", "refill"]) this.store.delCell("medicines", id, cell);
     });
   }
@@ -192,6 +218,7 @@ export class MedicineModel {
       if (!medicine.supply) this.store.setCell("medicines", id, "leadDays", DEFAULT_LEAD_DAYS);
       this.store.setCell("medicines", id, "refill", amount);
       if (taskId) this.todo.completeTask(taskId);
+      this.settleCourse(id);
     });
     return undo;
   }
@@ -203,6 +230,7 @@ export class MedicineModel {
       if (restock.refill === null) this.store.delCell("medicines", id, "refill");
       else this.store.setCell("medicines", id, "refill", restock.refill);
       if (taskId) this.todo.reopenTask(taskId);
+      this.settleCourse(id);
     });
   }
 
@@ -226,16 +254,25 @@ export class MedicineModel {
     return { medicines, doses, recoveries };
   }
 
-  add(id: string, input: MedicineInput): Medicine {
+  add(id: string, input: MedicineInput, pillsLeft?: number): Medicine {
     if (this.store.hasRow("medicines", id)) throw new Error("Medicine already exists");
     validateMedicine(input);
-    this.store.setRow("medicines", id, { details: storedDetails(input), createdAt: this.now().toISOString() });
+    this.checkCount(input, false, pillsLeft);
+    this.watchSupply(id, () => {
+      this.store.setRow("medicines", id, { details: storedDetails(input), createdAt: this.now().toISOString() });
+      this.setCount(id, pillsLeft);
+    });
     return this.get(id)!;
   }
-  edit(id: string, input: MedicineInput): void {
-    if (!this.get(id)) throw new Error("Medicine was deleted or is not on this device");
+  edit(id: string, input: MedicineInput, pillsLeft?: number): void {
+    const medicine = this.get(id);
+    if (!medicine) throw new Error("Medicine was deleted or is not on this device");
     validateMedicine(input);
-    this.watchSupply(id, () => { this.store.setCell("medicines", id, "details", storedDetails(input)); });
+    this.checkCount(input, !!medicine.supply, pillsLeft);
+    this.watchSupply(id, () => {
+      this.store.setCell("medicines", id, "details", storedDetails(input));
+      this.setCount(id, pillsLeft);
+    });
   }
   remove(id: string): void {
     if (!this.get(id)) return;
@@ -284,7 +321,10 @@ export class MedicineModel {
     if (!this.get(dose.medicineId)) return;
     const existing = this.getDose(dose.id);
     if (existing?.takenAt || existing?.skippedAt) return;
-    this.store.setCell("doses", dose.id, "confirmation", JSON.stringify({ actionId, takenAt: null, skippedAt, scheduledAt: dose.scheduledAt }));
+    this.store.transaction(() => {
+      this.store.setCell("doses", dose.id, "confirmation", JSON.stringify({ actionId, takenAt: null, skippedAt, scheduledAt: dose.scheduledAt }));
+      this.settleCourse(dose.medicineId);
+    });
   }
   undo(id: string, actionId: string): void {
     const dose = this.getDose(id);
@@ -292,6 +332,7 @@ export class MedicineModel {
     this.store.transaction(() => {
       this.store.setCell("doses", id, "confirmation", JSON.stringify({ actionId, takenAt: null, scheduledAt: dose.scheduledAt }));
       if (dose.takenAt) this.changePills(dose.medicineId, this.slotAmount(dose.medicineId, dose.slotId));
+      this.settleCourse(dose.medicineId);
     });
   }
   applyReceipts(receipts: MedicineReceipt[], deviceId: string): void {

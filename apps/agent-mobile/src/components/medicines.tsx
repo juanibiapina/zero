@@ -155,7 +155,7 @@ export function MedicineDetail() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [undoing, setUndoing] = useState<Dose | null>(null);
   const [skipping, setSkipping] = useState<Dose | null>(null);
-  const [counting, setCounting] = useState<'restock' | 'count' | null>(null);
+  const [counting, setCounting] = useState<'restock' | 'count' | 'course' | null>(null);
   const actionPending = useRef(false);
   const latestMedicine = useRef(medicine);
   useLayoutEffect(() => { latestMedicine.current = medicine; });
@@ -208,7 +208,7 @@ export function MedicineDetail() {
         })}
       </View> : null}
       <SectionTitle>Schedule</SectionTitle>
-      <MedicineSchedule draft={draft} onChange={apply} disabled={busy} />
+      <MedicineSchedule draft={draft} onChange={apply} disabled={busy} onCountPills={supply ? undefined : () => setCounting('course')} />
       <SectionTitle>Pills</SectionTitle>
       <View className="flex-row flex-wrap items-center justify-between gap-x-4">
         <Text className="min-w-0 flex-1" style={{ fontVariant: ['tabular-nums'] }}>{supplyLabel(medicine) ?? 'Not counted yet'}</Text>
@@ -217,7 +217,7 @@ export function MedicineDetail() {
           <Action label={supply ? 'Recount' : 'Count pills'} disabled={busy} onPress={() => setCounting('count')} />
         </View>
       </View>
-      {supply ? <View className="pt-1">
+      {supply && !medicine.untilEmpty ? <View className="pt-1">
         <Text variant="subtitle">Remind me to buy more</Text>
         <View className="flex-row flex-wrap gap-x-2">
           {buyLeads.map((lead) => <Chip key={lead.days} label={`${lead.label} before`} accessibilityLabel={`Remind me to buy ${lead.label} before they run out`} selected={lead.days === supply.leadDays} disabled={busy}
@@ -230,6 +230,7 @@ export function MedicineDetail() {
     {skipping ? <ConfirmDialog title={`Skip ${time(skipping.scheduledAt)} dose?`} message="Its reminder stops until the next dose." cancelLabel="Cancel" confirmLabel="Skip" onCancel={() => setSkipping(null)} onConfirm={() => { const dose = skipping; setSkipping(null); void run(() => replica.medicines.skip(dose)); }} /> : null}
     {undoing ? <ConfirmDialog title={`Mark ${time(undoing.scheduledAt)} dose as not ${undoing.skippedAt ? 'skipped' : 'taken'}?`} message="It will show as pending again." cancelLabel="Cancel" confirmLabel="Undo" onCancel={() => setUndoing(null)} onConfirm={() => { const dose = undoing; setUndoing(null); void run(() => replica.medicines.undo(dose.id)); }} /> : null}
     <PillCountSheet open={counting === 'restock'} title="How many pills did you get?" initial={supply?.refill ?? null} onClose={() => setCounting(null)} onSave={(amount) => { setCounting(null); void restockWithUndo({ replica, medicineId: medicine.id, amount, onError: setError }); }} />
+    <PillCountSheet open={counting === 'course'} title="How many pills do you have now?" initial={null} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.edit(medicine.id, draft.withCourse({ kind: 'until-empty', pillsLeft }).commit(), pillsLeft)); }} />
     <PillCountSheet open={counting === 'count'} title="How many pills do you have now?" initial={supply?.pillsLeft ?? null} min={0} onClose={() => setCounting(null)} onSave={(pillsLeft) => { setCounting(null); void run(() => replica.medicines.setSupply(medicine.id, { pillsLeft, leadDays: supply?.leadDays ?? DEFAULT_LEAD_DAYS })); }} />
   </View>;
 }
@@ -297,7 +298,7 @@ function MedicineDrawer({ open, onOpen, onClose, onSaved }: { open: boolean; onO
     try { input = draft.commit(); } catch (cause) { setError(errorText(cause)); return; }
     pending.current = true; setBusy(true);
     try {
-      onSaved((await replica.medicines.add(input, creationId)).id);
+      onSaved((await replica.medicines.add(input, creationId, draft.pillsLeft)).id);
     } catch (cause) { setError(errorText(cause)); }
     finally { pending.current = false; setBusy(false); }
   };
@@ -311,7 +312,7 @@ function MedicineDrawer({ open, onOpen, onClose, onSaved }: { open: boolean; onO
         value={draft.input.instructions ?? ''} onChangeText={(instructions) => change(draft.change({ instructions }))}
         className="min-h-12 px-screen-x py-3"
       /> : <Pressable accessibilityRole="button" accessibilityLabel="Add description" disabled={busy} onPress={() => setNotesOpen(true)} className="min-h-12 justify-center px-screen-x"><Text variant="subtitle">Add notes</Text></Pressable>}
-      <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets onPickerOpenChange={setPickerOpen} /></View>
+      <View className="px-screen-x pb-3"><MedicineSchedule draft={draft} onChange={change} disabled={busy} presets askPillCount onPickerOpenChange={setPickerOpen} /></View>
       {error ? <Text variant="error" selectable className="px-screen-x pb-3">{error}</Text> : null}
     </View>}
     overlay={discard ? <ConfirmDialog title="Discard changes?" message="The changes you've made will not be saved." cancelLabel="Cancel" confirmLabel="Discard" destructive onCancel={() => setDiscard(false)} onConfirm={() => { setDiscard(false); onClose(); }} /> : null}

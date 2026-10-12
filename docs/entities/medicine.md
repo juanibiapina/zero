@@ -3,8 +3,8 @@
 ## What it is
 
 A Medicine is a routine: a name, optional instructions, one or more dose times,
-the days of the week it is taken (every day by default), a start day, and an
-optional last day. "Vitamin D at 08:00", "Antibiotic at 08:00, 14:00, and 20:00
+the days of the week it is taken (every day by default), a start day, and how
+long it runs: ongoing, until a last day, or until the pills run out. "Vitamin D at 08:00", "Antibiotic at 08:00, 14:00, and 20:00
 for ten days", and "Before breakfast at 07:30 on Monday, Wednesday, and Friday"
 are Medicines.
 
@@ -37,6 +37,15 @@ only what comes next.
   reminders like Taken but leaves the supply unchanged. Undo makes a skipped
   Dose pending again.
 - A course ends on its last day. Pausing and missed doses do not extend it.
+- A course that runs until the pills run out needs a pill count. Its last day
+  is the day of the last dose the pills cover, counting each chosen day's
+  doses in clock order from today and leaving out today's taken and skipped
+  doses. Zero sets it again whenever you take, skip or undo a dose, count or
+  restock, or change the schedule: Taken keeps it, Skip and Undo of a Taken
+  move it later, Restock moves it later or continues an ended course, and a
+  count of 0 ends it. A missed dose keeps its pill, so the next of these moves
+  the last day later; time alone changes nothing. Resume recalculates from
+  that day. Clearing the count keeps the last day as a fixed one.
 - A day of the week that is not chosen has no Doses and no reminders. The first
   Dose is on the first chosen day on or after the start day. Pausing and missed
   doses do not move the chosen days.
@@ -49,8 +58,9 @@ only what comes next.
   arrives again, subtracts once. The count never goes below zero.
 - The supply is low when the pills left are at or below what the schedule uses
   in the chosen number of days: chosen weekdays × pills per day × days ÷ 7,
-  rounded up. A paused or ended Medicine, or a course whose remaining doses
-  need no more pills than you have, is never low.
+  rounded up. A paused or ended Medicine, a course whose remaining doses
+  need no more pills than you have, or one that runs until the pills run out,
+  is never low.
 - When a Taken, a new count, or a schedule change makes the supply low, Zero
   adds one restock Task "Buy <name>" to Home. A recount while already low adds
   nothing. Time alone never makes the supply low.
@@ -73,9 +83,14 @@ them; a cleared name keeps the old one. Today's doses are tiles: tap one to
 record it as taken, with Undo in the toast; long-press a pending one to skip it
 after a confirmation, and long-press a taken or skipped one to undo it later. A chip per dose opens its exact time, its pills, how early to remind,
 and Remove; "+ Time" adds a dose. Weekdays, the start day (Starts: Today,
-Tomorrow, or a picked day; "Started" once it is past), Ongoing or a last day,
-and when to remind you to buy more (1 week, 2 weeks, 1 month) are chips on the
-same page. The add sheet opens with the keyboard on the name and asks for the
+Tomorrow, or a picked day; "Started" once it is past), Ongoing, a last day or
+Until pills run out ("Last dose Friday"), and when to remind you to buy more
+(1 week, 2 weeks, 1 month) are chips on the same page. Until pills run out on
+an uncounted Medicine first asks how many pills you have, and the add sheet
+asks in a field under the chip. A course that runs until the pills run out
+does not offer when to buy more. On the web it is a fourth Ends option that
+makes Pills you have required, and the page reads "Until pills run out · last
+dose <date>". The add sheet opens with the keyboard on the name and asks for the
 name, optional notes, and the same schedule, with 1× to 4× a day presets.
 
 On Android, a normal notification arrives at the early reminder and again at
@@ -149,6 +164,9 @@ restriction.
 - Two different doses taken on two phones before they sync each subtract from
   the same count, so one subtraction is lost. Recount fixes it.
 - Medicine in global quick add, which offers only Task and Project.
+- A Skip pressed on the notification moves the last day of a course that runs
+  until the pills run out only when the app next opens. Until then the phone
+  keeps the old last day.
 
 ## Ideas
 
