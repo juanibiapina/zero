@@ -627,13 +627,12 @@ export function useTaskDetail({
       <TaskEditorSheet
         open={selected != null}
         onClose={dismissDetail}
-        dismissLabel="Close task"
         draft={draftView.text}
         onChangeDraft={(text) => setDraft((current) => current.change(text))}
-        highlightRanges={draftView.ranges}
+        highlights={draftView.ranges}
         onDismissHighlight={(range) => setDraft((current) => current.dismiss(range))}
         onSubmit={commitAndClose}
-        autoFocus={false}
+        inputAccessibilityLabel="Task text"
         leading={
           <CheckCircle label="Complete task" onPress={completeFromSheet} />
         }

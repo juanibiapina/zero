@@ -341,7 +341,7 @@ export function useQuickAdd({
         dismissLabel="Dismiss quick add"
         draft={text}
         onChangeDraft={setText}
-        highlightRanges={mode === 'task' ? taskView.ranges : undefined}
+        highlights={mode === 'task' ? taskView.ranges : undefined}
         onDismissHighlight={(range) => setTaskDraft((current) => current.dismiss(range))}
         onSubmit={onAdd}
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
@@ -352,7 +352,7 @@ export function useQuickAdd({
         onOpen={showFab ? () => open() : undefined}
         collapsedFabLabel="Add"
         inputRef={inputRef}
-        inputAccessibilityLabel={mode === 'waiting' ? 'Waiting on' : undefined}
+        inputAccessibilityLabel={mode === 'waiting' ? 'Waiting on' : 'New item text'}
         leading={
           mode === 'project' ? (
             <Pressable

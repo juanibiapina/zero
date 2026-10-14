@@ -15,11 +15,14 @@ import { extendTailwindMerge } from 'tailwind-merge';
 // later explicit size (`text-[20px]`) still overrides the variant's size. This
 // is the fix the Tailwind maintainers point to for custom theme text tokens
 // (tailwindlabs/tailwindcss discussion #18999); it is a documented
-// tailwind-merge limitation (dcastil/tailwind-merge issue #368).
+// tailwind-merge limitation (dcastil/tailwind-merge issue #368). The named
+// spacing steps (`px-screen-x`, `py-row-y`) are registered the same way, so they
+// replace an earlier padding class instead of being kept beside it.
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
       text: ['title', 'section', 'body', 'editor', 'subtitle', 'caption'],
+      spacing: ['screen-x', 'row-y'],
     },
   },
 });

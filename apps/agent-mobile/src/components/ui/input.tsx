@@ -57,6 +57,8 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
     onScroll,
     onFocus,
     onBlur,
+    cursorColor,
+    selectionColor,
     style,
     ...props
   },
@@ -70,25 +72,23 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
     setText(value);
   }
   const [scrollY, setScrollY] = useState(0);
+  const accent = useColor('--color-accent');
   const foreground = useColor('--color-foreground');
   const scheduleHighlight = useColor('--color-schedule-highlight');
   const onScheduleHighlight = useColor('--color-on-schedule-highlight');
-  const textStyle = useResolveClassNames(
-    variant === 'editor' ? 'text-editor' : 'text-body',
-  );
+  const typography = variant === 'editor' ? 'text-editor' : 'text-body';
+  const textStyle = useResolveClassNames(typography);
   const ranges = highlights ?? [];
   const highlighted = ranges.length > 0 && (text ?? '').length > 0;
 
   const input = (
     <TextInput
       ref={ref}
-      className={cn(
-        variant === 'editor' ? 'text-editor' : 'text-body',
-        'text-foreground',
-        !highlights && className,
-      )}
+      className={cn('px-0 py-0', typography, 'text-foreground', !highlights && className)}
       placeholderTextColorClassName="text-placeholder"
       {...props}
+      cursorColor={cursorColor ?? accent}
+      selectionColor={selectionColor ?? accent}
       value={value === undefined ? undefined : text}
       onChangeText={(next) => {
         setText(next);

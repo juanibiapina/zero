@@ -6,6 +6,7 @@ import { AddModeSelector, TaskEditorSheet } from '../task-editor-sheet';
 const base = {
   open: true,
   dismissLabel: 'Close task',
+  inputAccessibilityLabel: 'Task text',
   draft: 'Write proposal',
   onChangeDraft: jest.fn(),
   onSubmit: jest.fn(),
@@ -186,7 +187,7 @@ describe('TaskEditorSheet', () => {
       <TaskEditorSheet
         {...base}
         draft="Stand up every day"
-        highlightRanges={[{ start: 9, end: 18, text: 'every day' }]}
+        highlights={[{ start: 9, end: 18, text: 'every day' }]}
         onDismissHighlight={dismiss}
       />,
     );

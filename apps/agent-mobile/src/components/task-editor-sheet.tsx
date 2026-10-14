@@ -173,13 +173,13 @@ export function AddModeSelector({
 export function TaskEditorSheet({
   open, onClose, dismissLabel, draft, onChangeDraft, onSubmit,
   placeholder = 'Task', autoFocus = false, inline = false, inputRef, inputAccessibilityLabel,
-  leading, modeSelector, context, editorContent, secondaryContent, trailing, inputEditable = true, selectTextOnFocus = false,
-  scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
+  leading, modeSelector, context, editorContent, secondaryContent, trailing, inputEditable = true,
+  scheduleAction, projectAction, overlay, highlights = [], onDismissHighlight,
   onOpen, onKeyboardWillHide, collapsedFabLabel, holdPosition = false,
 }: {
   open: boolean;
   onClose: () => void | false;
-  dismissLabel: string;
+  dismissLabel?: string;
   draft: string;
   onChangeDraft: (text: string) => void;
   onSubmit: () => void;
@@ -187,19 +187,18 @@ export function TaskEditorSheet({
   autoFocus?: boolean;
   inline?: boolean;
   inputRef?: Ref<{ focus: () => void }>;
-  inputAccessibilityLabel?: string;
+  inputAccessibilityLabel: string;
   leading?: ReactNode;
   modeSelector?: ReactNode;
   context?: ReactNode;
   editorContent?: ReactNode;
   secondaryContent?: ReactNode;
   inputEditable?: boolean;
-  selectTextOnFocus?: boolean;
   trailing?: ReactNode;
   scheduleAction?: EditorAction;
   projectAction?: EditorAction;
   overlay?: ReactNode;
-  highlightRanges?: TextRange[];
+  highlights?: TextRange[];
   onDismissHighlight?: (range: TextRange) => void;
   onOpen?: () => void;
   onKeyboardWillHide?: () => void;
@@ -325,9 +324,8 @@ export function TaskEditorSheet({
           <Input
             ref={field}
             editable={inputEditable}
-            selectTextOnFocus={selectTextOnFocus}
             value={draft}
-            highlights={highlightRanges}
+            highlights={highlights}
             onDismissHighlight={onDismissHighlight}
             onChangeText={onChangeDraft}
             onSubmitEditing={onSubmit}
@@ -335,14 +333,9 @@ export function TaskEditorSheet({
             blurOnSubmit
             multiline
             placeholder={placeholder}
-            accessibilityLabel={
-              inputAccessibilityLabel ??
-              (autoFocus ? 'New item text' : 'Task text')
-            }
+            accessibilityLabel={inputAccessibilityLabel}
             autoFocus={inline && open && autoFocus}
-            selectionColor={accent}
-            cursorColor={accent}
-            style={{ padding: 0, maxHeight: 120 }}
+            style={{ maxHeight: 120 }}
             variant="editor"
             className="flex-1"
             testID="task-edit-input"
@@ -355,10 +348,10 @@ export function TaskEditorSheet({
         <View className="border-t border-divider">
           {scheduleAction ? (
             <EditorActionRow {...scheduleAction}
-              trailingAction={highlightRanges?.[0] && onDismissHighlight ? {
+              trailingAction={highlights[0] && onDismissHighlight ? {
                 icon: <Text className="text-[20px]">×</Text>,
                 accessibilityLabel: 'Keep schedule words in task title',
-                onPress: () => onDismissHighlight(highlightRanges[0]),
+                onPress: () => onDismissHighlight(highlights[0]),
                 testID: inline ? 'quick-add-unrecognize-schedule' : undefined,
               } : scheduleAction.trailingAction}
             />

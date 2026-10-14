@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-14: Change every text field to show the accent-colored cursor.
+
 - 2026-10-14: Fix editing a task's text so deleting or typing in the middle of it no longer changes the wrong characters.
 
 - 2026-10-12: Add Until pills run out to medicines: count your pills and the medicine ends on the day the last one is due. Skipping a dose or restocking moves that day later.
