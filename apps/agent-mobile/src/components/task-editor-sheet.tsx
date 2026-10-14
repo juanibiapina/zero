@@ -25,7 +25,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useResolveClassNames } from 'uniwind';
 
-import { ScheduleHighlightInput } from '@/components/schedule-highlight-input';
 import { Input } from '@/components/ui/input';
 import { KeyboardDock } from '@/components/ui/keyboard-dock';
 import { Sheet, SheetScrollView } from '@/components/ui/sheet';
@@ -323,51 +322,31 @@ export function TaskEditorSheet({
       {editorContent ?? (
         <View className="min-h-16 flex-row items-center gap-3 px-screen-x py-4">
           {leading}
-          {highlightRanges ? (
-            <ScheduleHighlightInput
-              ref={field}
-              value={draft}
-              ranges={highlightRanges}
-              onDismissRange={onDismissHighlight}
-              onChangeText={onChangeDraft}
-              onSubmitEditing={onSubmit}
-              returnKeyType="done"
-              blurOnSubmit
-              multiline
-              placeholder={placeholder}
-              accessibilityLabel={
-                inputAccessibilityLabel ??
-                (autoFocus ? 'New item text' : 'Task text')
-              }
-              autoFocus={inline && open && autoFocus}
-              style={{ padding: 0, maxHeight: 120 }}
-              variant="editor"
-              className="flex-1"
-              testID="task-edit-input"
-            />
-          ) : (
-            <Input
-              ref={field}
-              editable={inputEditable}
-              selectTextOnFocus={selectTextOnFocus}
-              value={draft}
-              onChangeText={onChangeDraft}
-              onSubmitEditing={onSubmit}
-              returnKeyType="done"
-              blurOnSubmit
-              multiline
-              placeholder={placeholder}
-              accessibilityLabel={
-                inputAccessibilityLabel ??
-                (autoFocus ? 'New item text' : 'Task text')
-              }
-              autoFocus={inline && open && autoFocus}
-              style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
-              variant="editor"
-              className="flex-1"
-              testID="task-edit-input"
-            />
-          )}
+          <Input
+            ref={field}
+            editable={inputEditable}
+            selectTextOnFocus={selectTextOnFocus}
+            value={draft}
+            highlights={highlightRanges}
+            onDismissHighlight={onDismissHighlight}
+            onChangeText={onChangeDraft}
+            onSubmitEditing={onSubmit}
+            returnKeyType="done"
+            blurOnSubmit
+            multiline
+            placeholder={placeholder}
+            accessibilityLabel={
+              inputAccessibilityLabel ??
+              (autoFocus ? 'New item text' : 'Task text')
+            }
+            autoFocus={inline && open && autoFocus}
+            selectionColor={accent}
+            cursorColor={accent}
+            style={{ padding: 0, maxHeight: 120 }}
+            variant="editor"
+            className="flex-1"
+            testID="task-edit-input"
+          />
           {trailing}
         </View>
       )}

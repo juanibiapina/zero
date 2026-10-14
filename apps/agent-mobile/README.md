@@ -119,8 +119,11 @@ back only where the native component does not fit.
   and `BackHandler` asks the newest listener first, so a screen's own Back
   handler must return `false` for anything a sheet shows.
   Gorhom moves a sheet for the keyboard only while a field it knows about has
-  focus: `Input` and `ScheduleHighlightInput` register through
-  `useSheetInputFocus`. Scrolling content uses `SheetScrollView` or
+  focus: `Input` registers through `useSheetInputFocus`. Sheet content reaches
+  the screen one render after its owner, so a controlled field there would get
+  its `value` late and React Native would write the old text back over the
+  typing. `Input` keeps the text it shows and takes `value` again whenever the
+  owner changes it. Scrolling content uses `SheetScrollView` or
   `SheetSectionList`, so scrolling and dragging share one gesture; a `fit`
   sheet already scrolls, so its content needs neither. Gorhom's scroll views
   are not Uniwind-mapped, so give them `style`, not `className`.

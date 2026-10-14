@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-14: Fix editing a task's text so deleting or typing in the middle of it no longer changes the wrong characters.
+
 - 2026-10-12: Add Until pills run out to medicines: count your pills and the medicine ends on the day the last one is due. Skipping a dose or restocking moves that day later.
 
 - 2026-10-12: Change ended medicines so you can continue them from their page: choose Ongoing or a later last day and the medicine picks up again with its history and pill count. Remove Add again.
