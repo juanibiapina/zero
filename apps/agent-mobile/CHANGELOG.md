@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-15: Keep a task's drawer open when you change its date or project, so you can keep editing. The drawer shows the new date or project.
+
 - 2026-10-15: Add Archive to ended medicines when you hold them in your medicines list, with Undo.
 
 - 2026-10-15: Fix choosing Until pills run out, which failed with "Count your pills first" even after you entered your pills.

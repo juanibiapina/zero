@@ -28,7 +28,6 @@ import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
 import { useColor } from '@/lib/theme';
-import { showTaskDestination } from '@/lib/task-feedback';
 
 const OPEN_PROJECT_ICON = Icon.select({
   ios: 'arrow.up.right',
@@ -580,7 +579,6 @@ export function useTaskDetail({
         onError(null);
         const tx = api.reschedule(selected.id, date);
         tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-        setSelectedId(null);
       }
       setScheduling(false);
     },
@@ -614,12 +612,10 @@ export function useTaskDetail({
         onError(null);
         const tx = api.moveToProject(selected.id, projectId);
         tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-        setSelectedId(null);
-        showTaskDestination({ showUpDate: selected.showUpDate, projectId }, projects, 'moved');
       }
       setPicking(false);
     },
-    [api, selected, projects, onError],
+    [api, selected, onError],
   );
 
   const sheets = (

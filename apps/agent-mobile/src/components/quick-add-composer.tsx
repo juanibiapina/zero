@@ -255,7 +255,6 @@ export function useQuickAdd({
         showTaskDestination(
           { showUpDate: effectiveDate, projectId: addProjectId },
           projects,
-          'created',
         );
       }
       closeAdd();

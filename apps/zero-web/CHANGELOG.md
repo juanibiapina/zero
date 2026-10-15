@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-15: Keep a task's drawer open when you change its date or project, so you can keep editing. The drawer shows the new date or project.
+
 - 2026-10-14: Fix medicines that run until the pills run out: the last pill now ends the medicine, with no dose left after it, and the page shows the time of the last dose.
 
 - 2026-10-14: Add Archive for ended medicines: they leave your medicines list and stay under Archived with their history, ready to unarchive.

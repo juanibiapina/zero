@@ -441,7 +441,7 @@ describe("HomePage", () => {
     );
   });
 
-  it("schedules a task to tomorrow from the detail sheet", async () => {
+  it("schedules a task to tomorrow and keeps the detail sheet open", async () => {
     setApi([taskRow("1", "buy milk")]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
@@ -456,6 +456,7 @@ describe("HomePage", () => {
     await waitFor(() => expect(rescheduled.length).toBe(1));
     expect(rescheduled[0].id).toBe("1");
     expect(rescheduled[0].showUpDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(screen.getByRole("textbox", { name: "Task text" })).toHaveValue("buy milk");
   });
 
   it("postpones a task to tomorrow from the row button", async () => {
@@ -497,7 +498,7 @@ describe("HomePage", () => {
     expect(screen.getByRole('button', { name: 'backlog 5' })).toBeInTheDocument();
   });
 
-  it("moves a loose task into a project from the detail sheet", async () => {
+  it("moves a loose task into a project and keeps the detail sheet open", async () => {
     setApi(
       [taskRow("1", "buy milk")],
       [projectRow("p", { title: "Groceries" })],
@@ -515,6 +516,9 @@ describe("HomePage", () => {
 
     await waitFor(() => expect(moved.length).toBe(1));
     expect(moved[0]).toEqual({ id: "1", projectId: "p" });
+    expect(await screen.findByRole("button", { name: "Open project Groceries" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Task text" })).toHaveValue("buy milk");
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 });
 

@@ -126,8 +126,11 @@ describe("web todo parity", () => {
     await rename("Original", "Water plants every day starting tomorrow");
     fireEvent.click(screen.getByRole("button", { name: "every day" }));
     fireEvent.click(screen.getByRole("button", { name: /^Today/ }));
+    const expected = { text: "Water plants", showUpDate: localToday(), recurrenceDate: tomorrow(localToday()), recurrence: { origin: tomorrow(localToday()) } };
+    await waitFor(() => expect(replica.snapshot().tasks[0]).toMatchObject(expected));
+    fireEvent.submit(screen.getByRole("textbox", { name: "Task text" }).closest("form")!);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water plants", showUpDate: localToday(), recurrenceDate: tomorrow(localToday()), recurrence: { origin: tomorrow(localToday()) } });
+    expect(replica.snapshot().tasks[0]).toMatchObject(expected);
   });
 
   it("stops a newly typed recurrence without reapplying it on close", async () => {
@@ -144,8 +147,12 @@ describe("web todo parity", () => {
     await rename("Original", "Edited before scheduling");
     fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
     fireEvent.click(screen.getByRole("button", { name: /^Tomorrow/ }));
+    const expected = { text: "Edited before scheduling", showUpDate: tomorrow(localToday()) };
+    await waitFor(() => expect(replica.snapshot().tasks[0]).toMatchObject(expected));
+    expect(screen.getByRole("textbox", { name: "Task text" })).toHaveValue("Edited before scheduling");
+    fireEvent.submit(screen.getByRole("textbox", { name: "Task text" }).closest("form")!);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Edited before scheduling", showUpDate: tomorrow(localToday()) });
+    expect(replica.snapshot().tasks[0]).toMatchObject(expected);
   });
 
   it.each(["/home", "/upcoming", "/projects/p"])("keeps edited titles through completion and Undo from %s", async (path) => {

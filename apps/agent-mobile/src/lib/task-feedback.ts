@@ -2,26 +2,20 @@ import { localToday, toast, type Project } from '@zero/agent-core';
 import { router } from 'expo-router';
 
 export function showTaskDestination(
-  task: { showUpDate: string | null; projectId: string | null },
+  task: { showUpDate: string | null; projectId: string },
   projects: Project[],
-  action: 'moved' | 'created',
 ) {
   const today = localToday();
   const project = projects.find((p) => p.id === task.projectId);
   const future = task.showUpDate != null && task.showUpDate > today;
-  const message = action === 'moved'
-    ? (task.projectId ? 'Moved to project' : 'Removed from project')
-    : 'Filed to project';
-  toast(message, {
+  toast('Filed to project', {
     id: 'task-destination',
-    description: future ? 'Upcoming' : project ? `${project.icon} ${project.title}` : task.projectId ? undefined : 'Home',
+    description: future ? 'Upcoming' : project ? `${project.icon} ${project.title}` : undefined,
     action: {
       label: 'View',
       onPress: () => future
         ? router.navigate('/browse/upcoming', { withAnchor: true })
-        : task.projectId
-          ? router.navigate(`/projects/${task.projectId}`, { withAnchor: true })
-          : router.navigate('/'),
+        : router.navigate(`/projects/${task.projectId}`, { withAnchor: true }),
     },
   });
 }

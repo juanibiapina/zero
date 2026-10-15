@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { MEDICINE_TASK_ICON, TaskDraft, messageOf, taskMedicineId, taskProjectId, toast, undoableAction, type Project, type Task, type TaskdoReplica, type WaitingCondition } from "@zero/agent-core";
+import { MEDICINE_TASK_ICON, TaskDraft, messageOf, taskMedicineId, taskProjectId, undoableAction, type Project, type Task, type TaskdoReplica, type WaitingCondition } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { TaskFields } from "@/components/task-fields";
@@ -60,16 +60,7 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
   const move = (projectId: string | null) => {
     const task = commitDraft();
     if (!task || projectId === taskProjectId(task)) return;
-    const tx = replica.tasks.moveToProject(task.id, projectId);
-    setSelectedId(null);
-    void tx.isPersisted.promise.then(() => {
-      const project = projects.find((item) => item.id === projectId);
-      const future = task.showUpDate != null && task.showUpDate > today;
-      toast(projectId ? "Moved to project" : "Removed from project", {
-        description: future ? "Upcoming" : project ? `${project.icon} ${project.title}` : "Home",
-        action: { label: "View", onPress: () => void navigate(future ? "/upcoming" : projectId ? `/projects/${projectId}` : "/home") },
-      });
-    }, fail);
+    replica.tasks.moveToProject(task.id, projectId).isPersisted.promise.catch(fail);
   };
 
   return {
@@ -89,7 +80,6 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
                 const task = commitDraft();
                 if (!task || task.showUpDate === date) return;
                 replica.tasks.reschedule(task.id, date).isPersisted.promise.catch(fail);
-                setSelectedId(null);
               },
               onStopRecurrence: selected.recurrence ? () => {
                 const task = commitDraft();

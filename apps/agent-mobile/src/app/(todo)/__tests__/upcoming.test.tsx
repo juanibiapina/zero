@@ -138,15 +138,33 @@ describe('UpcomingScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/projects/p', { withAnchor: true });
   });
 
-  it('clears a schedule and moves the task back to Home', async () => {
+  it('clears a schedule and keeps the task drawer open', async () => {
     const screen = await renderScreen({ tasks: [task('later', 'ship the release', '2099-01-01')] });
     await waitFor(() => expect(screen.getByText('ship the release')).toBeTruthy());
     await fireEvent.press(screen.getByLabelText('Edit "ship the release"'));
     await fireEvent.press(screen.getByLabelText('Set schedule'));
     await fireEvent.press(screen.getByLabelText('No date'));
 
-    await waitFor(() => expect(screen.queryByText('ship the release')).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText('Edit "ship the release"')).toBeNull());
     expect(screen.data.replica!.tasks.collection.get('later')?.showUpDate).toBeNull();
+    expect(screen.getByDisplayValue('ship the release')).toBeTruthy();
+    expect(screen.getByText('No date')).toBeTruthy();
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+  });
+
+  it('moves a task to a project and keeps the task drawer open', async () => {
+    const screen = await renderScreen({
+      projects: [project('p')],
+      tasks: [task('later', 'ship the release', '2099-01-01')],
+    });
+    await waitFor(() => expect(screen.getByText('ship the release')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Edit "ship the release"'));
+    await fireEvent.press(screen.getByLabelText('Set project'));
+    await fireEvent.press(screen.getByLabelText('Diploma'));
+
+    await waitFor(() => expect(screen.getByLabelText('Open project Diploma')).toBeTruthy());
+    expect(screen.data.replica!.tasks.collection.get('later')?.parent).toEqual(projectParent('p'));
+    expect(screen.getByDisplayValue('ship the release')).toBeTruthy();
     expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 });
