@@ -13,6 +13,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
+import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
 import { useMedicineReminderNotice } from '@/lib/medicine-reminders';
@@ -81,8 +82,19 @@ function MedicineListContent({ snapshot, today }: {
   today: string;
 }) {
   const insets = useSafeAreaInsets();
+  const replica = useTodoReplica();
+  const ripple = useColor('--color-ripple');
   const [adding, setAdding] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [holding, setHolding] = useState<Medicine | null>(null);
+  const archive = (medicine: Medicine) => {
+    setHolding(null);
+    if (!replica) return;
+    const showError = (cause: unknown) => toast(errorText(cause));
+    replica.medicines.archive(medicine.id).then(() => {
+      toast(`${medicine.name} archived`, { id: 'undo', action: { label: 'Undo', onPress: () => { replica.medicines.unarchive(medicine.id).catch(showError); } } });
+    }, showError);
+  };
   const medicines = snapshot.medicines.filter((medicine) => !medicine.archivedAt).sort((a, b) => {
     const order = { active: 0, scheduled: 1, paused: 2, ended: 3 };
     return order[medicineState(a, today)] - order[medicineState(b, today)] || a.name.localeCompare(b.name);
@@ -94,7 +106,12 @@ function MedicineListContent({ snapshot, today }: {
       contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingBottom: insets.bottom + 96, flexGrow: 1 }}
       ListHeaderComponent={<View className="px-screen-x"><ReminderNotice />{snapshot.recoveries.filter((entry) => entry.table === 'medicines' || entry.table === 'doses').map((entry) => <Text key={`${entry.table}-${entry.id}`} variant="error">{entry.reason} ({entry.id})</Text>)}</View>}
       ListEmptyComponent={<View className="gap-2 px-screen-x py-8"><Text variant="section">Your medicines, at a glance</Text><Text variant="subtitle">Tap + to add a medicine. Choose how often, and we’ll suggest the times.</Text></View>}
-      renderItem={({ item: medicine }) => <MedicineRow medicine={medicine} status={listStatus(medicine, today, snapshot.doses)} />}
+      renderItem={({ item: medicine }) => {
+        const status = listStatus(medicine, today, snapshot.doses);
+        return status === 'Ended' ? <MedicineRow medicine={medicine} status={status} onLongPress={() => setHolding(medicine)}
+          accessibilityActions={[{ name: 'archive', label: 'Archive medicine' }]} onAccessibilityAction={(name) => { if (name === 'archive') archive(medicine); }} />
+          : <MedicineRow medicine={medicine} status={status} />;
+      }}
       ListFooterComponent={archived.length ? <View>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: archiveOpen }} onPress={() => setArchiveOpen((open) => !open)} className="min-h-14 flex-row items-center justify-between gap-3 px-screen-x pt-4">
           <Text variant="section">{`Archived (${archived.length})`}</Text><MedicineGlyph name={archiveOpen ? 'collapse' : 'expand'} />
@@ -102,12 +119,25 @@ function MedicineListContent({ snapshot, today }: {
         {archiveOpen ? archived.map((medicine) => <MedicineRow key={medicine.id} medicine={medicine} status={null} />) : null}
       </View> : null}
     />
+    <Sheet open={!!holding} onClose={() => setHolding(null)} contextBridge={null}>
+      <View className="pb-4">
+        <Text className="px-screen-x pb-2 text-[20px] font-semibold">{holding?.name}</Text>
+        <Pressable accessibilityRole="button" android_ripple={{ color: ripple }} onPress={() => { if (holding) archive(holding); }} className="min-h-14 justify-center px-screen-x">
+          <Text className="text-[16px]">Archive medicine</Text>
+        </Pressable>
+      </View>
+    </Sheet>
     <MedicineDrawer open={adding} onOpen={() => setAdding(true)} onClose={() => setAdding(false)} onSaved={(id) => { setAdding(false); router.push(`/browse/medicines/${id}`); }} />
   </View>;
 }
-function MedicineRow({ medicine, status }: { medicine: Medicine; status: string | null }) {
+function MedicineRow({ medicine, status, onLongPress, accessibilityActions, onAccessibilityAction }: {
+  medicine: Medicine; status: string | null; onLongPress?: () => void;
+  accessibilityActions?: { name: string; label: string }[]; onAccessibilityAction?: (name: string) => void;
+}) {
   const ripple = useColor('--color-ripple');
-  return <Pressable accessibilityRole="button" accessibilityLabel={`Open ${medicine.name}`} onPress={() => router.push(`/browse/medicines/${medicine.id}`)} android_ripple={{ color: ripple }} className="min-h-16 gap-1 border-b border-divider px-screen-x py-3">
+  return <Pressable accessibilityRole="button" accessibilityLabel={`Open ${medicine.name}`} accessibilityHint={onLongPress ? 'Long press for options' : undefined}
+    accessibilityActions={accessibilityActions} onAccessibilityAction={(event) => onAccessibilityAction?.(event.nativeEvent.actionName)}
+    onPress={() => router.push(`/browse/medicines/${medicine.id}`)} onLongPress={onLongPress} android_ripple={{ color: ripple }} className="min-h-16 gap-1 border-b border-divider px-screen-x py-3">
     <View className="flex-row flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><Text className="min-w-0 flex-1 font-semibold">{medicine.name}</Text>{status ? <Text variant="caption">{status}</Text> : null}</View>
     <DoseTimes medicine={medicine} />
     {medicine.instructions ? <Text variant="caption" numberOfLines={1}>{medicine.instructions}</Text> : null}

@@ -300,6 +300,27 @@ describe('A medicine page', () => {
     await waitFor(() => expect(data.replica!.snapshot().medicines[0].archivedAt).toBeNull());
     expect(page.getByText(/^Ended /)).toBeTruthy();
   });
+  it('archives an ended medicine by holding its row in the list, with Undo', async () => {
+    const daysAgo = (days: number) => { const date = new Date(); date.setDate(date.getDate() - days); return medicineToday(date); };
+    const data = createInMemoryTodoData();
+    await data.replica!.medicines.add({ ...MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit(), startsOn: daysAgo(5), endsOn: daysAgo(1) });
+    const list = await openScreen(<MedicinesList />, data);
+    await fireEvent(list.getByLabelText('Open Vitamin D'), 'longPress');
+    await fireEvent.press(list.getByText('Archive medicine'));
+    await waitFor(() => expect(list.getByText('Archived (1)')).toBeTruthy());
+    expect(list.queryByLabelText('Open Vitamin D')).toBeNull();
+    expect(takenToast()?.message).toBe('Vitamin D archived');
+    await act(async () => { takenToast()!.action!.onPress(); });
+    await waitFor(() => expect(list.getByLabelText('Open Vitamin D')).toBeTruthy());
+    expect(list.queryByText('Archived (1)')).toBeNull();
+  });
+  it('offers no archive when holding a running medicine in the list', async () => {
+    const data = createInMemoryTodoData();
+    await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
+    const list = await openScreen(<MedicinesList />, data);
+    await fireEvent(list.getByLabelText('Open Vitamin D'), 'longPress');
+    expect(list.queryByText('Archive medicine')).toBeNull();
+  });
   it('pauses and resumes reminders from Medicine options', async () => {
     const { screen, data } = await openMedicine();
     await fireEvent.press(screen.getByLabelText('Medicine options'));

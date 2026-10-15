@@ -102,7 +102,8 @@ name, optional notes, and the same schedule, with 1× to 4× a day presets.
 Taking the last pill of a course that runs until the pills run out shows "Last
 <name> dose taken. Course finished." with Undo, and the page reads "Ended". An
 ended Medicine offers Archive medicine in its options on mobile and as a button
-on the web. Archived Medicines sit under "Archived (N)" at the bottom of the
+on the web; on mobile, holding its row in the list also offers it, with Undo in
+the toast. Archived Medicines sit under "Archived (N)" at the bottom of the
 list; an archived Medicine's page shows its history and Unarchive.
 
 On Android, a normal notification arrives at the early reminder and again at
