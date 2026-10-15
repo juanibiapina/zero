@@ -127,3 +127,19 @@ describe('Medicine reminder notice', () => {
     expect(screen.queryByText('Reminders are off on this phone.')).toBeNull();
   });
 });
+
+describe('A phone with medicine reminders', () => {
+  it('runs a medicine until its pills run out', async () => {
+    const data = createInMemoryTodoData();
+    replica = await attachMedicineReminders(data.replica!, 'medicine-course-test');
+    const draft = MedicineDraft.create(medicineToday()).change({ name: 'Antibiotic' }).withCourse({ kind: 'until-empty', pillsLeft: 3 });
+    const added = await replica.medicines.add(draft.commit(), undefined, draft.pillsLeft);
+    expect(replica.snapshot().medicines[0].supply?.pillsLeft).toBe(3);
+    const ongoing = MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' });
+    const other = await replica.medicines.add(ongoing.commit());
+    const counted = ongoing.withCourse({ kind: 'until-empty', pillsLeft: 5 });
+    await replica.medicines.edit(other.id, counted.commit(), counted.pillsLeft);
+    expect(replica.snapshot().medicines.find((medicine) => medicine.id === other.id)?.supply?.pillsLeft).toBe(5);
+    expect(added.untilEmpty).toBe(true);
+  });
+});

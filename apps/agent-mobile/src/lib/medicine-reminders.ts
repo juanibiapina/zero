@@ -32,14 +32,14 @@ export async function attachMedicineReminders(replica: TaskdoReplica, workspace:
       take: (dose) => reminders.take(dose),
       skip: (dose) => reminders.skip(dose),
       undo: (id) => reminders.undo(id),
-      async add(input, creationId) {
-        const result = await replica.medicines.add(input, creationId);
+      async add(input, creationId, pillsLeft) {
+        const result = await replica.medicines.add(input, creationId, pillsLeft);
         // A saved routine still opens its detail if only delivery setup fails.
         // The controller exposes that failure there without creating a duplicate.
         await reminders.refresh().catch(() => {});
         return result;
       },
-      async edit(id, input) { await replica.medicines.edit(id, input); await reminders.refresh(); },
+      async edit(id, input, pillsLeft) { await replica.medicines.edit(id, input, pillsLeft); await reminders.refresh(); },
       async remove(id) { await replica.medicines.remove(id); await reminders.refresh(); },
     },
     async checkpoint() {

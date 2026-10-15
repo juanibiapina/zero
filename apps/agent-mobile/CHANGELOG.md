@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-15: Fix choosing Until pills run out, which failed with "Count your pills first" even after you entered your pills.
+
 - 2026-10-14: Fix medicines that run until the pills run out: the last pill now ends the medicine, so no dose or alarm is left for pills you no longer have. Taking the last pill says the course is finished, and its page shows the time of the last dose.
 
 - 2026-10-14: Add Archive for ended medicines: they leave your medicines list and stay under Archived with their history, ready to unarchive.
