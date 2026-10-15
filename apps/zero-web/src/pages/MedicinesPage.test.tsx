@@ -125,3 +125,27 @@ it("saves chosen weekdays and shows the next dose on a day off", async () => {
   expect(await screen.findByRole("heading", { name: /^Next dose / })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /^Taken / })).toBeNull();
 });
+
+it("archives an ended medicine out of the list and brings it back", async () => {
+  const todo = createInMemoryTodoData();
+  replica = todo.replica;
+  const daysAgo = (days: number) => { const date = new Date(); date.setDate(date.getDate() - days); return medicineToday(date); };
+  const medicine = await replica.medicines.add({ ...MedicineDraft.create(medicineToday()).change({ name: "Antibiotic" }).commit(), startsOn: daysAgo(5), endsOn: daysAgo(1) });
+  render(<TodoDataContextProvider value={{ ...todo.data, authenticatedFeatures: false }}>
+    <MemoryRouter initialEntries={[`/medicines/${medicine.id}`]}><Routes>
+      <Route path="/medicines" element={<MedicinesPage />} />
+      <Route path="/medicines/:id" element={<MedicinesPage />} />
+    </Routes></MemoryRouter>
+  </TodoDataContextProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Archive medicine" }));
+  await waitFor(() => expect(replica.snapshot().medicines[0].archivedAt).not.toBeNull());
+  expect(screen.queryByRole("button", { name: "Edit medicine" })).toBeNull();
+  fireEvent.click(screen.getByRole("link", { name: "Back to medicines" }));
+  expect(await screen.findByRole("button", { name: "Archived (1)" })).toBeVisible();
+  expect(screen.queryByRole("link", { name: /Antibiotic/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Archived (1)" }));
+  fireEvent.click(screen.getByRole("link", { name: /Antibiotic/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "Unarchive" }));
+  await waitFor(() => expect(replica.snapshot().medicines[0].archivedAt).toBeNull());
+  expect(await screen.findByRole("button", { name: "Archive medicine" })).toBeVisible();
+});

@@ -33,21 +33,29 @@ function courseFitsIn(medicine: Medicine, pillsLeft: number, today: string): boo
 
 const COURSE_LIMIT_DAYS = 36500;
 
-export function lastPillDay(medicine: Pick<Medicine, "startsOn" | "weekdays" | "doses">, pillsLeft: number, settledToday: ReadonlySet<string>, today: string): string {
+export type CourseEnd = { endsOn: string; endsBefore: string | null };
+
+export function lastPillDay(medicine: Pick<Medicine, "startsOn" | "weekdays" | "doses">, pillsLeft: number, settledToday: ReadonlySet<string>, today: string): CourseEnd {
   const recurrence = { from: medicine.startsOn, until: null, weekdays: medicine.weekdays };
   const slots = [...medicine.doses].sort((a, b) => a.alarmAt.localeCompare(b.alarmAt));
   const weekly = weeklyPills(medicine);
   let pills = pillsLeft;
   let last: string | null = null;
+  let cut = null as CourseEnd | null;
   let day = today < medicine.startsOn ? medicine.startsOn : today;
   const walk = (days: number): boolean => {
     for (let step = 0; step < days; step += 1, day = addDays(day, 1)) {
       if (!occursOn(recurrence, day)) continue;
+      let earlier = false;
       for (const slot of slots) {
-        if (day === today && settledToday.has(slot.id)) continue;
-        if (pills < slot.amount) return false;
+        if (day === today && settledToday.has(slot.id)) { earlier = true; continue; }
+        if (pills < slot.amount) {
+          if (earlier) cut = { endsOn: day, endsBefore: slot.alarmAt };
+          return false;
+        }
         pills -= slot.amount;
         last = day;
+        earlier = true;
       }
     }
     return true;
@@ -63,8 +71,9 @@ export function lastPillDay(medicine: Pick<Medicine, "startsOn" | "weekdays" | "
     }
     walk(7);
   }
+  if (cut) return cut;
   const end = last ?? (today >= medicine.startsOn && settledToday.size ? today : addDays(today, -1));
-  return end < medicine.startsOn ? medicine.startsOn : end;
+  return { endsOn: end < medicine.startsOn ? medicine.startsOn : end, endsBefore: null };
 }
 
 export function supplyIsLow(medicine: Medicine, today: string): boolean {

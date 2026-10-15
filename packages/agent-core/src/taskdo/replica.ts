@@ -87,6 +87,8 @@ export type TodoMedicines = {
   clearSupply: (id: string) => Promise<void>;
   restock: (id: string, amount: number, taskId?: string) => Promise<MedicineRestock>;
   undoRestock: (id: string, restock: MedicineRestock, taskId?: string) => Promise<void>;
+  archive: (id: string) => Promise<void>;
+  unarchive: (id: string) => Promise<void>;
 };
 
 export type TaskdoReplica = {
@@ -430,6 +432,8 @@ export function createTaskdoReplica({
         return result;
       },
       undoRestock: (id, restock, taskId) => write(() => { medicineModel.undoRestock(id, restock, taskId); }),
+      archive: (id) => write(() => { medicineModel.archive(id); }),
+      unarchive: (id) => write(() => { medicineModel.unarchive(id); }),
     },
     snapshot: () => snapshot,
     subscribe(listener) {

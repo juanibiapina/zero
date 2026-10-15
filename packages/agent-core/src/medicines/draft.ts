@@ -1,6 +1,6 @@
 import { safeRandomUUID } from "@tanstack/db";
 import { EVERY_DAY, medicineEndDate, medicineLead, validateMedicine, type MedicineInput, type MedicineSlot, type Weekday } from "./model";
-import { lastPillDay } from "./supply";
+import { lastPillDay, type CourseEnd } from "./supply";
 
 const DAILY_TIMES: Record<number, string[]> = {
   1: ["20:00"],
@@ -105,25 +105,37 @@ export class MedicineDraft {
     return this.course.kind === "until-empty" && this.course.pillsLeft !== null ? this.course.pillsLeft : undefined;
   }
 
-  get endsOn(): string | null {
-    if (this.course.kind === "ongoing") return null;
-    if (this.course.kind === "last-day") return this.course.on;
+  private get end(): { endsOn: string | null; endsBefore: CourseEnd["endsBefore"] } {
+    if (this.course.kind === "ongoing") return { endsOn: null, endsBefore: null };
+    if (this.course.kind === "last-day") return { endsOn: this.course.on, endsBefore: null };
     if (this.course.kind === "until-empty") {
-      return this.course.pillsLeft === null ? this.input.endsOn : lastPillDay(this.input, this.course.pillsLeft, new Set(), this.today);
+      return this.course.pillsLeft === null ? { endsOn: this.input.endsOn, endsBefore: this.input.endsBefore ?? null }
+        : lastPillDay(this.input, this.course.pillsLeft, new Set(), this.today);
     }
-    return medicineEndDate(this.input.startsOn, Number(this.course.days));
+    return { endsOn: medicineEndDate(this.input.startsOn, Number(this.course.days)), endsBefore: null };
+  }
+
+  get endsOn(): string | null {
+    return this.end.endsOn;
+  }
+
+  get endsBefore(): string | null {
+    return this.end.endsBefore;
   }
 
   commit(): MedicineInput {
-    const input = {
+    const { endsOn, endsBefore } = this.end;
+    const input: MedicineInput = {
       ...this.input, name: this.input.name.trim(),
       instructions: this.input.instructions?.trim() || null,
-      endsOn: this.endsOn,
+      endsOn,
       weekdays: [...this.input.weekdays],
       doses: this.input.doses.map((slot) => ({ ...slot })),
     };
     if (this.course.kind === "until-empty") input.untilEmpty = true;
     else delete input.untilEmpty;
+    if (this.course.kind === "until-empty" && endsBefore) input.endsBefore = endsBefore;
+    else delete input.endsBefore;
     validateMedicine(input);
     return input;
   }

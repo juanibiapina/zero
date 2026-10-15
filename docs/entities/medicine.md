@@ -37,10 +37,12 @@ only what comes next.
   reminders like Taken but leaves the supply unchanged. Undo makes a skipped
   Dose pending again.
 - A course ends on its last day. Pausing and missed doses do not extend it.
-- A course that runs until the pills run out needs a pill count. Its last day
-  is the day of the last dose the pills cover, counting each chosen day's
-  doses in clock order from today and leaving out today's taken and skipped
-  doses. Zero sets it again whenever you take, skip or undo a dose, count or
+- A course that runs until the pills run out needs a pill count. It ends on
+  the last dose the pills cover, counting each chosen day's doses in clock
+  order from today and leaving out today's taken and skipped doses. Later
+  doses on that last day have no Dose and no reminder. When the pills reach 0
+  the course ends at once; that day's taken and skipped doses can still be
+  undone, and an Undo of a Taken gives the pill back and continues it. Zero sets it again whenever you take, skip or undo a dose, count or
   restock, or change the schedule: Taken keeps it, Skip and Undo of a Taken
   move it later, Restock moves it later or continues an ended course, and a
   count of 0 ends it. A missed dose keeps its pill, so the next of these moves
@@ -53,6 +55,10 @@ only what comes next.
 - An ended routine keeps its history. Choosing Ongoing or a later last day
   continues the same routine with its history and pill count. Days between
   the end and the restart have no Doses on record.
+- An ended Medicine can be archived. Archiving hides it from the Medicines
+  list and keeps it with its history; Unarchive brings it back as ended.
+  An archived Medicine has no reminders and cannot be changed until it is
+  unarchived.
 - Supply is a count you set. Every Taken subtracts that dose time's pills, and
   Undo adds them back. Skip changes nothing. Taking a dose twice, or a notification Taken that
   arrives again, subtracts once. The count never goes below zero.
@@ -84,14 +90,20 @@ record it as taken, with Undo in the toast; long-press a pending one to skip it
 after a confirmation, and long-press a taken or skipped one to undo it later. A chip per dose opens its exact time, its pills, how early to remind,
 and Remove; "+ Time" adds a dose. Weekdays, the start day (Starts: Today,
 Tomorrow, or a picked day; "Started" once it is past), Ongoing, a last day or
-Until pills run out ("Last dose Friday"), and when to remind you to buy more
+Until pills run out ("Last dose Friday at 14:00"), and when to remind you to buy more
 (1 week, 2 weeks, 1 month) are chips on the same page. Until pills run out on
 an uncounted Medicine first asks how many pills you have, and the add sheet
 asks in a field under the chip. A course that runs until the pills run out
 does not offer when to buy more. On the web it is a fourth Ends option that
 makes Pills you have required, and the page reads "Until pills run out · last
-dose <date>". The add sheet opens with the keyboard on the name and asks for the
+dose <date> at <time>". The add sheet opens with the keyboard on the name and asks for the
 name, optional notes, and the same schedule, with 1× to 4× a day presets.
+
+Taking the last pill of a course that runs until the pills run out shows "Last
+<name> dose taken. Course finished." with Undo, and the page reads "Ended". An
+ended Medicine offers Archive medicine in its options on mobile and as a button
+on the web. Archived Medicines sit under "Archived (N)" at the bottom of the
+list; an archived Medicine's page shows its history and Unarchive.
 
 On Android, a normal notification arrives at the early reminder and again at
 the dose time, with Taken, Postpone 1 hour and Skip. Both say how many pills to
@@ -167,6 +179,10 @@ restriction.
 - A Skip pressed on the notification moves the last day of a course that runs
   until the pills run out only when the app next opens. Until then the phone
   keeps the old last day.
+- A notification that a course finished when its last pill is taken from the
+  notification. The list shows the Medicine as Ended the next time the app
+  opens.
+- Archiving a Medicine that has not ended.
 
 ## Ideas
 

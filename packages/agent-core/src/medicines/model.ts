@@ -12,11 +12,13 @@ export const EVERY_DAY: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
 export type Medicine = {
   id: string; name: string; instructions: string | null;
   startsOn: string; endsOn: string | null; untilEmpty?: boolean; paused: boolean;
+  endsBefore?: string | null;
   weekdays: Weekday[];
   doses: MedicineSlot[]; createdAt: string;
   supply: MedicineSupply | null;
+  archivedAt: string | null;
 };
-export type MedicineInput = Omit<Medicine, "id" | "createdAt" | "supply">;
+export type MedicineInput = Omit<Medicine, "id" | "createdAt" | "supply" | "archivedAt">;
 export type MedicineRestock = { amount: number; refill: number | null };
 export type Dose = {
   id: string; medicineId: string; slotId: string; on: string;
@@ -41,6 +43,19 @@ export function medicineRecurrence(medicine: Pick<Medicine, "startsOn" | "endsOn
 }
 export function medicineDueOn(medicine: Medicine, on: string): boolean {
   return !medicine.paused && occursOn(medicineRecurrence(medicine), on);
+}
+export function medicineSlotRecurrence(medicine: Pick<Medicine, "startsOn" | "endsOn" | "endsBefore" | "weekdays">, slot: Pick<MedicineSlot, "alarmAt">): Recurrence {
+  const recurrence = medicineRecurrence(medicine);
+  if (!medicine.endsOn || !medicine.endsBefore || slot.alarmAt < medicine.endsBefore) return recurrence;
+  return { ...recurrence, until: addDays(medicine.endsOn, -1) };
+}
+export function medicineLastDoseAt(medicine: Pick<Medicine, "endsBefore" | "doses">): string {
+  const times = medicine.doses.map((slot) => slot.alarmAt).filter((at) => !medicine.endsBefore || at < medicine.endsBefore).sort();
+  return times[times.length - 1] ?? medicine.doses.map((slot) => slot.alarmAt).sort()[0];
+}
+export function finishesCourse(medicine: Medicine, slotId: string): boolean {
+  const slot = medicine.doses.find((item) => item.id === slotId);
+  return !!medicine.untilEmpty && !!medicine.supply && !!slot && medicine.supply.pillsLeft <= slot.amount;
 }
 export function medicineNextDay(medicine: Medicine, from: string): string | null {
   return nextOccurrence(medicineRecurrence(medicine), from);
@@ -81,6 +96,7 @@ function parse<T>(value: unknown): T | null {
 export function validateMedicine(input: MedicineInput): void {
   if (!input.name?.trim()) throw new Error("Enter a medicine name");
   if (!validDay(input.startsOn) || (!input.untilEmpty && input.endsOn !== null && (!validDay(input.endsOn) || input.endsOn < input.startsOn))) throw new Error("The last day must be on or after the start date");
+  if (input.endsBefore != null && !validTime(input.endsBefore)) throw new Error("Invalid medicine details");
   if (typeof input.paused !== "boolean" || (input.untilEmpty !== undefined && typeof input.untilEmpty !== "boolean") || (input.instructions !== null && typeof input.instructions !== "string")) throw new Error("Invalid medicine details");
   if (!Array.isArray(input.weekdays) || !input.weekdays.length || input.weekdays.some((day, index) => !Number.isInteger(day) || day < 1 || day > 7 || (index > 0 && day <= input.weekdays[index - 1]))) throw new Error("Choose at least one day of the week");
   if (!Array.isArray(input.doses) || !input.doses.length || input.doses.length > 24) throw new Error("Add between 1 and 24 daily dose times");
@@ -95,19 +111,21 @@ export function validateMedicine(input: MedicineInput): void {
 }
 export function medicineState(medicine: Medicine, on = medicineToday()): "scheduled" | "active" | "paused" | "ended" {
   if (medicine.endsOn && on > medicine.endsOn) return "ended";
+  if (medicine.untilEmpty && medicine.supply?.pillsLeft === 0) return "ended";
   if (medicine.paused) return "paused";
   return on < medicine.startsOn ? "scheduled" : "active";
 }
 export function medicineOccurrences(medicine: Medicine, on = medicineToday()): Dose[] {
-  if (!medicineDueOn(medicine, on)) return [];
-  return medicine.doses.map((slot) => ({ id: doseId(medicine.id, slot.id, on), medicineId: medicine.id, slotId: slot.id, on,
+  if (medicine.paused) return [];
+  return medicine.doses.filter((slot) => occursOn(medicineSlotRecurrence(medicine, slot), on)).map((slot) => ({ id: doseId(medicine.id, slot.id, on), medicineId: medicine.id, slotId: slot.id, on,
     scheduledAt: new Date(`${on}T${slot.alarmAt}:00`).toISOString(), takenAt: null, skippedAt: null }));
 }
 
 const count = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
 function storedDetails(input: MedicineInput): string {
   const { name, instructions, startsOn, endsOn, paused, weekdays, doses } = input;
-  return JSON.stringify({ name: name.trim(), instructions, startsOn, endsOn, untilEmpty: input.untilEmpty === true, paused, weekdays,
+  const endsBefore = input.untilEmpty && endsOn && input.endsBefore ? { endsBefore: input.endsBefore } : {};
+  return JSON.stringify({ name: name.trim(), instructions, startsOn, endsOn, ...endsBefore, untilEmpty: input.untilEmpty === true, paused, weekdays,
     doses: doses.map(({ id, remindAt, alarmAt, amount }) => ({ id, remindAt, alarmAt, amount })) });
 }
 
@@ -140,7 +158,9 @@ export class MedicineModel {
       ? { pillsLeft: row.pillsLeft, leadDays: count(row.leadDays) ? row.leadDays : DEFAULT_LEAD_DAYS,
           refill: count(row.refill) && row.refill > 0 ? row.refill : null }
       : null;
-    return { ...details, id, name: details.name.trim(), untilEmpty: details.untilEmpty === true, createdAt: row.createdAt, supply };
+    const untilEmpty = details.untilEmpty === true;
+    return { ...details, id, name: details.name.trim(), untilEmpty, endsBefore: untilEmpty && details.endsOn ? details.endsBefore ?? null : null,
+      createdAt: row.createdAt, supply, archivedAt: validInstant(row.archivedAt) ? row.archivedAt : null };
   }
 
   private settleCourse(id: string): void {
@@ -151,8 +171,19 @@ export class MedicineModel {
       const dose = this.getDose(doseId(id, slot.id, today));
       return !!(dose?.takenAt || dose?.skippedAt);
     }).map((slot) => slot.id));
-    const endsOn = lastPillDay(medicine, medicine.supply.pillsLeft, settled, today);
-    if (endsOn !== medicine.endsOn) this.store.setCell("medicines", id, "details", storedDetails({ ...medicine, endsOn }));
+    const { endsOn, endsBefore } = lastPillDay(medicine, medicine.supply.pillsLeft, settled, today);
+    if (endsOn !== medicine.endsOn || endsBefore !== medicine.endsBefore) this.store.setCell("medicines", id, "details", storedDetails({ ...medicine, endsOn, endsBefore }));
+  }
+
+  archive(id: string): void {
+    const medicine = this.get(id);
+    if (!medicine) throw new Error("Medicine was deleted or is not on this device");
+    if (medicineState(medicine, medicineToday(this.now())) !== "ended") throw new Error("Only an ended medicine can be archived");
+    if (!medicine.archivedAt) this.store.setCell("medicines", id, "archivedAt", this.now().toISOString());
+  }
+
+  unarchive(id: string): void {
+    if (this.get(id)) this.store.delCell("medicines", id, "archivedAt");
   }
 
   private setCount(id: string, pillsLeft: number | undefined): void {

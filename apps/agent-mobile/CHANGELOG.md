@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-14: Fix medicines that run until the pills run out: the last pill now ends the medicine, so no dose or alarm is left for pills you no longer have. Taking the last pill says the course is finished, and its page shows the time of the last dose.
+
+- 2026-10-14: Add Archive for ended medicines: they leave your medicines list and stay under Archived with their history, ready to unarchive.
+
 - 2026-10-14: Change every text field to show the accent-colored cursor.
 
 - 2026-10-14: Fix editing a task's text so deleting or typing in the middle of it no longer changes the wrong characters.

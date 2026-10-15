@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { DEFAULT_LEAD_DAYS, MedicineDraft, medicineCadence, restockWithUndo, supplyLabel, medicineEndDate, medicineDay, medicineNextDay, medicineOccurrences, pillCount, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose, type Weekday } from "@zero/agent-core";
+import { DEFAULT_LEAD_DAYS, MedicineDraft, medicineCadence, restockWithUndo, supplyLabel, medicineEndDate, medicineDay, medicineLastDoseAt, medicineNextDay, medicineOccurrences, pillCount, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose, type Weekday } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
@@ -78,24 +78,34 @@ export function MedicinesPage() {
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   const [undo, setUndo] = useState<string | null>(null); const [confirmDelete, setConfirmDelete] = useState(false);
   const [counting, setCounting] = useState<"restock" | "count" | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const run = async (operation: () => Promise<void>) => { setError(null); setBusy(true); try { await operation(); } catch (cause) { setError(message(cause)); } finally { setBusy(false); } };
   const take = (dose: Dose) => void run(async () => { await replica!.medicines.take(dose); setUndo(dose.id); });
   if (!replica || !snapshot) return <p className="p-6">Opening medicines…</p>;
+  const archived = !!medicine?.archivedAt;
+  const listed = snapshot.medicines.filter((item) => !item.archivedAt);
+  const archivedList = snapshot.medicines.filter((item) => item.archivedAt);
+  const row = (item: Medicine) => {
+    const expected = medicineOccurrences(item, today); const taken = expected.filter((dose) => snapshot.doses.some((entry) => entry.id === dose.id && entry.takenAt)).length;
+    const state = medicineState(item, today); const next = state === "active" && !expected.length ? medicineNextDay(item, today) : null;
+    return <Link key={item.id} to={`/medicines/${item.id}`} className="flex min-h-12 flex-col gap-1 border-b py-3"><span className="font-semibold">{item.name}</span><span className="text-sm text-muted-foreground">{[...item.doses].sort((a, b) => a.alarmAt.localeCompare(b.alarmAt)).map((dose) => `${dose.alarmAt} (${pillCount(dose.amount)})`).join(" · ")} · {next ? `Next dose ${medicineDay(next, today)}` : state === "active" && !expected.length ? "No more doses" : state === "active" ? `${taken} of ${expected.length} taken` : state}</span></Link>;
+  };
   return <main className="mx-auto flex max-w-2xl flex-col gap-5 px-4 py-6 sm:px-6">
-    <header className="flex items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{medicine?.name ?? "Medicines"}</h1><Button variant="outline" onClick={() => setEditor(medicine ? "edit" : "new")}>{medicine ? "Edit medicine" : "Add medicine"}</Button></header>
+    <header className="flex items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{medicine?.name ?? "Medicines"}</h1>{archived ? null : <Button variant="outline" onClick={() => setEditor(medicine ? "edit" : "new")}>{medicine ? "Edit medicine" : "Add medicine"}</Button>}</header>
     {snapshot.recoveries.filter((entry) => entry.table === "medicines" || entry.table === "doses").map((entry) => <p key={`${entry.table}-${entry.id}`} role="alert" className="text-destructive">{entry.reason} ({entry.id})</p>)}
     {error ? <p role="alert" className="text-destructive">{error}</p> : null}
     {id && !medicine ? <p>This medicine is no longer available. <Link className="underline" to="/medicines">Back to medicines</Link></p> : null}
     {!id ? <>
       {!snapshot.medicines.length ? <p>Add a medicine with one or more daily dose times.</p> : null}
-      {snapshot.medicines.map((item) => {
-        const expected = medicineOccurrences(item, today); const taken = expected.filter((dose) => snapshot.doses.some((row) => row.id === dose.id && row.takenAt)).length;
-        const state = medicineState(item, today); const next = state === "active" && !expected.length ? medicineNextDay(item, today) : null;
-        return <Link key={item.id} to={`/medicines/${item.id}`} className="flex min-h-12 flex-col gap-1 border-b py-3"><span className="font-semibold">{item.name}</span><span className="text-sm text-muted-foreground">{[...item.doses].sort((a, b) => a.alarmAt.localeCompare(b.alarmAt)).map((dose) => `${dose.alarmAt} (${pillCount(dose.amount)})`).join(" · ")} · {next ? `Next dose ${medicineDay(next, today)}` : state === "active" && !expected.length ? "No more doses" : state === "active" ? `${taken} of ${expected.length} taken` : state}</span></Link>;
-      })}
+      {listed.map(row)}
+      {archivedList.length ? <>
+        <Button variant="ghost" className="self-start" aria-expanded={archiveOpen} onClick={() => setArchiveOpen((open) => !open)}>{`Archived (${archivedList.length})`}</Button>
+        {archiveOpen ? archivedList.map(row) : null}
+      </> : null}
     </> : null}
     {medicine ? <>
-      {medicine.instructions ? <p>{medicine.instructions}</p> : null}<p className="text-sm text-muted-foreground">{medicineCadence(medicine)} · {medicine.untilEmpty ? `Until pills run out · last dose ${medicine.endsOn}` : medicine.endsOn ? `Through ${medicine.endsOn}` : "Ongoing"}</p>
+      {medicine.instructions ? <p>{medicine.instructions}</p> : null}<p className="text-sm text-muted-foreground">{medicineCadence(medicine)} · {medicine.untilEmpty ? `Until pills run out · last dose ${medicine.endsOn} at ${medicineLastDoseAt(medicine)}` : medicine.endsOn ? `Through ${medicine.endsOn}` : "Ongoing"}</p>
+      {archived ? <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><h2 className="font-semibold">Archived</h2><Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.unarchive(medicine.id))}>Unarchive</Button></div> : <>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><span className="tabular-nums">{supplyLabel(medicine) ?? "Pills not counted"}</span><span className="flex gap-2"><Button variant="outline" disabled={busy} onClick={() => setCounting("restock")}>Restock</Button><Button variant="outline" disabled={busy} onClick={() => setCounting("count")}>{medicine.supply ? "Recount" : "Count pills"}</Button></span></div>
       <h2 className="font-semibold">{medicineState(medicine, today) === "active" ? medicineOccurrences(medicine, today).length ? "Today" : (medicineNextDay(medicine, today) ? `Next dose ${medicineDay(medicineNextDay(medicine, today)!, today)}` : "No more doses") : medicineState(medicine, today)}</h2>
       {medicineOccurrences(medicine, today).map((planned) => {
@@ -103,7 +113,9 @@ export function MedicinesPage() {
         return <div key={dose.id} className="flex min-h-12 items-center justify-between gap-3 border-b py-2"><span>{time(dose.scheduledAt)}</span>{dose.takenAt || dose.skippedAt ? <span className="text-sm">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : "Skipped"} <Button variant="ghost" disabled={busy} onClick={() => void run(() => replica.medicines.undo(dose.id))}>Undo</Button></span> : <Button disabled={busy} onClick={() => take(dose)}>Taken {time(dose.scheduledAt)} dose</Button>}</div>;
       })}
       {undo ? <Button variant="ghost" disabled={busy} onClick={() => void run(async () => { await replica.medicines.undo(undo); setUndo(null); })}>Undo last taken dose</Button> : null}
-      {medicineState(medicine, today) === "ended" ? null : <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))}>{medicine.paused ? "Resume reminders" : "Pause reminders"}</Button>}
+      {medicineState(medicine, today) === "ended" ? <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.archive(medicine.id))}>Archive medicine</Button>
+        : <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))}>{medicine.paused ? "Resume reminders" : "Pause reminders"}</Button>}
+      </>}
       <h2 className="font-semibold">History</h2><p className="text-sm text-muted-foreground">Taken at records when you pressed Taken.</p>
       {snapshot.doses.filter((dose) => dose.medicineId === medicine.id).sort((a, b) => b.on.localeCompare(a.on)).map((dose) => <div key={dose.id} className="flex flex-col gap-1 border-b py-2"><span>{dose.on} · Scheduled {time(dose.scheduledAt)}</span><span className="text-sm text-muted-foreground">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : dose.skippedAt ? "Skipped" : "Not recorded"}</span></div>)}
       <Button variant="ghost" onClick={() => setConfirmDelete(true)}>Delete medicine</Button><Link to="/medicines" className="text-sm underline">Back to medicines</Link>

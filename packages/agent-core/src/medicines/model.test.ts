@@ -127,7 +127,7 @@ describe("medicines on chosen weekdays", () => {
     expect(() => model.edit("medicine", { ...input, weekdays } as MedicineInput)).toThrow("day of the week");
   });
   it("finds the next dose day, ignoring pause, until the course ends", () => {
-    const medicine = { ...monWedFri, id: "mwf", createdAt: "2026-10-01T00:00:00Z", supply: null };
+    const medicine = { ...monWedFri, id: "mwf", createdAt: "2026-10-01T00:00:00Z", supply: null, archivedAt: null };
     expect(medicineNextDay(medicine, "2026-10-09")).toBe("2026-10-09");
     expect(medicineNextDay(medicine, "2026-10-10")).toBe("2026-10-12");
     expect(medicineNextDay(medicine, "2026-10-01")).toBe("2026-10-07");

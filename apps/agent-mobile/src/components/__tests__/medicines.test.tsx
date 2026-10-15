@@ -82,11 +82,11 @@ describe('Adding a medicine', () => {
     await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Antibiotic');
     await fireEvent.press(screen.getByLabelText('2 times a day'));
     await fireEvent.press(screen.getByText('Until pills run out'));
-    await fireEvent.changeText(screen.getByLabelText('Pills you have'), '6');
-    expect(screen.getByText(`Last dose ${medicineDay(medicineEndDate(medicineToday(), 3), medicineToday())}`)).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText('Pills you have'), '5');
+    expect(screen.getByText(`Last dose ${medicineDay(medicineEndDate(medicineToday(), 3), medicineToday())} at 08:00`)).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Add medicine'));
     await waitFor(() => expect(screen.data.replica!.snapshot().medicines).toHaveLength(1));
-    expect(screen.data.replica!.snapshot().medicines[0]).toMatchObject({ untilEmpty: true, supply: { pillsLeft: 6 } });
+    expect(screen.data.replica!.snapshot().medicines[0]).toMatchObject({ untilEmpty: true, supply: { pillsLeft: 5 } });
   });
   it('keeps the draft visible until persistence succeeds and retries the same Medicine after failure', async () => {
     let fail = true;
@@ -263,9 +263,47 @@ describe('A medicine page', () => {
     expect(data.replica!.snapshot().doses).toEqual(history);
     expect(screen.queryByText(/^Ended /)).toBeNull();
   });
+  it('ends a course on its last pill with a closing toast, and keeps Undo for the day', async () => {
+    const data = createInMemoryTodoData();
+    const input = MedicineDraft.create(medicineToday()).change({ name: 'Muscle relaxant' }).frequency(3).withCourse({ kind: 'until-empty', pillsLeft: 2 }).commit();
+    const medicine = await data.replica!.medicines.add(input, undefined, 2);
+    mockParams = { id: medicine.id };
+    const screen = await openScreen(<MedicineDetail />, data);
+    expect(screen.queryByLabelText('Take 20:00 dose, 1 pill')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Take 08:00 dose, 1 pill'));
+    await waitFor(() => expect(takenToast()?.message).toBe('08:00 dose taken'));
+    await fireEvent.press(screen.getByLabelText('Take 14:00 dose, 1 pill'));
+    await waitFor(() => expect(takenToast()?.message).toBe('Last Muscle relaxant dose taken. Course finished.'));
+    expect(screen.getByText(/^Ended /)).toBeTruthy();
+    expect(screen.getByText('0 pills left · about 0 days')).toBeTruthy();
+    await fireEvent(screen.getByLabelText(/^14:00 dose, taken at /), 'longPress');
+    await fireEvent.press(screen.getByLabelText('Undo'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].supply?.pillsLeft).toBe(1));
+    expect(screen.getByLabelText('Take 14:00 dose, 1 pill')).toBeTruthy();
+  });
+  it('archives an ended medicine out of the list and brings it back', async () => {
+    const daysAgo = (days: number) => { const date = new Date(); date.setDate(date.getDate() - days); return medicineToday(date); };
+    const { screen, data } = await openMedicine({ startsOn: daysAgo(5), endsOn: daysAgo(1) });
+    await fireEvent.press(screen.getByLabelText('Medicine options'));
+    await fireEvent.press(screen.getByText('Archive medicine'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].archivedAt).not.toBeNull());
+    expect(screen.getByRole('header', { name: 'Archived' })).toBeTruthy();
+    expect(screen.queryByText('Schedule')).toBeNull();
+    await screen.unmount();
+    const list = await openScreen(<MedicinesList />, data);
+    expect(list.queryByLabelText('Open Vitamin D')).toBeNull();
+    await fireEvent.press(list.getByText('Archived (1)'));
+    expect(list.getByLabelText('Open Vitamin D')).toBeTruthy();
+    await list.unmount();
+    const page = await openScreen(<MedicineDetail />, data);
+    await fireEvent.press(page.getByText('Unarchive'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].archivedAt).toBeNull());
+    expect(page.getByText(/^Ended /)).toBeTruthy();
+  });
   it('pauses and resumes reminders from Medicine options', async () => {
     const { screen, data } = await openMedicine();
     await fireEvent.press(screen.getByLabelText('Medicine options'));
+    expect(screen.queryByText('Archive medicine')).toBeNull();
     await fireEvent.press(screen.getByText('Pause reminders'));
     await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(true));
     expect(screen.getByText('Paused')).toBeTruthy();

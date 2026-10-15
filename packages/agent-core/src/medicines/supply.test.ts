@@ -5,7 +5,7 @@ import { daysLeft, restockThreshold, supplyIsLow, supplyLabel } from "./supply";
 const medicine = (over: Partial<Medicine> = {}, pillsLeft: number | null = 60, leadDays = 14): Medicine => ({
   id: "m", name: "Pill", instructions: null, startsOn: "2026-10-01", endsOn: null, paused: false,
   weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [{ id: "evening", remindAt: "19:00", alarmAt: "20:00", amount: 2 }],
-  createdAt: "2026-10-01T00:00:00Z", supply: pillsLeft === null ? null : { pillsLeft, leadDays, refill: null }, ...over,
+  createdAt: "2026-10-01T00:00:00Z", supply: pillsLeft === null ? null : { pillsLeft, leadDays, refill: null }, archivedAt: null, ...over,
 });
 
 describe("Medicine supply", () => {

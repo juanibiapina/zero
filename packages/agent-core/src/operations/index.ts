@@ -308,7 +308,8 @@ export const todoOperations: readonly TodoOperation[] = [
       "List Medicines (routines with timed doses on chosen weekdays, ISO 1 = Monday) and their Doses since a date. A Dose is one dated occurrence; " +
       "takenAt is null until the user confirms it on their phone; skippedAt is set when the user chose to skip that dose. Each dose time takes amount pills. supply is null until the user counts their pills; " +
       "otherwise pillsLeft, leadDays (Zero adds a restock Task when the pills left cover only this many days), and refill (the last restock amount). " +
-      "untilEmpty true means the course runs until the counted pills run out: endsOn is the day of the last dose they cover, recalculated by Zero, and no restock Task is added.",
+      "untilEmpty true means the course runs until the counted pills run out: endsOn is the day of the last dose they cover, recalculated by Zero, and no restock Task is added; " +
+      "endsBefore, when set, is the first dose time on endsOn that the pills no longer cover. archivedAt is set when the user archived an ended Medicine to hide it from their list.",
     kind: "read",
     input: z.object({ dosesSince: PlainDate.optional().describe("Earliest Dose date; defaults to 7 days ago") }),
     run: (ctx, input) => {

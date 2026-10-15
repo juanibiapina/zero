@@ -7,7 +7,7 @@ import { MEDICINE_CHANNEL, medicineReceipt, medicineSchedule } from "./notificat
 
 const medicine = (over: Partial<Medicine> = {}): Medicine => ({
   id: "vitamin", name: "Vitamin D", instructions: "After food", startsOn: "2026-09-01", endsOn: null, paused: false,
-  weekdays: [1, 3, 5], doses: [{ id: "morning", remindAt: "07:45", alarmAt: "08:00", amount: 1 }], createdAt: "2026-09-01T08:00:00.000Z", supply: null, ...over,
+  weekdays: [1, 3, 5], doses: [{ id: "morning", remindAt: "07:45", alarmAt: "08:00", amount: 1 }], createdAt: "2026-09-01T08:00:00.000Z", supply: null, archivedAt: null, ...over,
 });
 const taken = (on: string, slotId = "morning"): Dose => ({ id: `${slotId}-${on}`, medicineId: "vitamin", slotId, on, scheduledAt: `${on}T06:00:00.000Z`, takenAt: `${on}T06:05:00.000Z`, skippedAt: null });
 const skipped = (on: string): Dose => ({ ...taken(on), takenAt: null, skippedAt: `${on}T06:05:00.000Z` });

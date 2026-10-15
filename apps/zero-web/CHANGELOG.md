@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-14: Fix medicines that run until the pills run out: the last pill now ends the medicine, with no dose left after it, and the page shows the time of the last dose.
+
+- 2026-10-14: Add Archive for ended medicines: they leave your medicines list and stay under Archived with their history, ready to unarchive.
+
 - 2026-10-12: Add Until pills run out to medicines: enter the pills you have and the medicine ends on the day the last one is due.
 
 - 2026-10-12: Remove Add again from ended medicines. Edit the medicine and choose Ongoing or a later last day to continue it with its history and pill count.

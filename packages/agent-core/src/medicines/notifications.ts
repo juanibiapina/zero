@@ -1,6 +1,6 @@
 import type { Channel, Receipt, Reminder, Schedule } from "../notifications/schedule";
 import { pillCount } from "./supply";
-import { doseId, medicineLead, medicineRecurrence, type Dose, type Medicine, type MedicineReceipt } from "./model";
+import { doseId, medicineLead, medicineSlotRecurrence, type Dose, type Medicine, type MedicineReceipt } from "./model";
 
 export const MEDICINE_SOURCE = "medicines";
 export const MEDICINE_CHANNEL = "medicine-alerts-v2";
@@ -22,7 +22,7 @@ export function medicineSchedule(snapshot: { medicines: Medicine[]; doses: Dose[
   }
   const reminders: Reminder[] = [];
   for (const medicine of snapshot.medicines) {
-    if (medicine.paused) continue;
+    if (medicine.paused || medicine.archivedAt) continue;
     for (const slot of medicine.doses) {
       const key = medicineReminderKey(medicine.id, slot.id);
       reminders.push({
@@ -32,7 +32,7 @@ export function medicineSchedule(snapshot: { medicines: Medicine[]; doses: Dose[
         title: medicine.name,
         lockScreen: { title: "Medicine reminder", text: "Open Zero Agent for details" },
         url: `zeroagent:///browse/medicines/${encodeURIComponent(medicine.id)}?slot=${encodeURIComponent(slot.id)}&date={date}`,
-        recurrence: medicineRecurrence(medicine),
+        recurrence: medicineSlotRecurrence(medicine, slot),
         at: slot.alarmAt,
         stages: [
           { offset: -medicineLead(slot), wake: "exact", text: withInstructions(`Take ${pillCount(slot.amount)} at {time}`, medicine.instructions) },

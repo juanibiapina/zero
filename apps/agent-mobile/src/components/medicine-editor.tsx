@@ -1,5 +1,5 @@
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
-import { MedicineDraft, medicineDay, medicineEndDate, medicineLead, medicineToday, pillCount, type MedicineSlot, type Weekday } from '@zero/agent-core';
+import { MedicineDraft, medicineDay, medicineEndDate, medicineLastDoseAt, medicineLead, medicineToday, pillCount, type MedicineSlot, type Weekday } from '@zero/agent-core';
 import { useLayoutEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
@@ -46,7 +46,7 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
   const tomorrow = medicineEndDate(today, 2);
   const { doses, weekdays, startsOn } = draft.input;
   const otherStart = startsOn !== today && startsOn !== tomorrow;
-  const endsOn = (() => { try { return draft.endsOn; } catch { return null; } })();
+  const { endsOn, endsBefore } = (() => { try { return { endsOn: draft.endsOn, endsBefore: draft.endsBefore }; } catch { return { endsOn: null, endsBefore: null }; } })();
   const slot = doses.find((item) => item.id === openSlot) ?? null;
   const pickerOpen = slot != null || picker != null;
   useLayoutEffect(() => { onPickerOpenChange?.(pickerOpen); }, [pickerOpen, onPickerOpenChange]);
@@ -100,7 +100,7 @@ export function MedicineSchedule({ draft, onChange, disabled = false, presets = 
       </View>
       {askCount ? <Input value={pillsText} onChangeText={typePills} keyboardType="number-pad" editable={!disabled}
         placeholder="Pills you have" accessibilityLabel="Pills you have" className="min-h-12" /> : null}
-      {untilEmpty && endsOn ? <Text variant="subtitle">{`Last dose ${medicineDay(endsOn, today)}`}</Text> : null}
+      {untilEmpty && endsOn ? <Text variant="subtitle">{`Last dose ${medicineDay(endsOn, today)} at ${medicineLastDoseAt({ doses, endsBefore })}`}</Text> : null}
       {fixedEnd ? <View className="flex-row items-center justify-between">
         <Text variant="subtitle">{days === 1 ? '1 day' : `${days} days`}</Text>
         <Stepper label="days" value={days} min={1} disabled={disabled} onChange={setDays} />
