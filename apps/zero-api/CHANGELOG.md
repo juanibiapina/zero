@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-10-15: Zero can now see the medicines you take only when needed, and when you took them.
 - 2026-10-10: Zero can now see which medicine doses you skipped.
 - 2026-09-23: Zero now answers with GPT-6 Luna.
 - 2026-08-17: If you go quiet for about a week, Zero now checks in once — offering to pick up an unread email, a topic you were working on, or just to help.

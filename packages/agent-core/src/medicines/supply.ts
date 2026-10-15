@@ -78,7 +78,7 @@ export function lastPillDay(medicine: Pick<Medicine, "startsOn" | "weekdays" | "
 
 export function supplyIsLow(medicine: Medicine, today: string): boolean {
   const supply = medicine.supply;
-  if (!supply || medicine.untilEmpty) return false;
+  if (!supply || medicine.untilEmpty || medicine.asNeeded) return false;
   if (medicine.paused || (medicine.endsOn !== null && today > medicine.endsOn)) return false;
   if (supply.pillsLeft > restockThreshold(medicine, supply.leadDays)) return false;
   return !courseFitsIn(medicine, supply.pillsLeft, today);

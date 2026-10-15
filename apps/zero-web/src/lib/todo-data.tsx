@@ -73,7 +73,7 @@ export function TodoDataProvider({ children }: { children: ReactNode }) {
 function TodoDataNotices() {
   const data = useTodoData();
   const [repairError, setRepairError] = useState<string | null>(null);
-  const recoveries = data.recoveries.filter((entry) => entry.table !== 'medicines' && entry.table !== 'doses');
+  const recoveries = data.recoveries.filter((entry) => entry.table !== 'medicines' && entry.table !== 'doses' && entry.table !== 'intakes');
   if (!data.durabilityError && !repairError && recoveries.length === 0) return null;
   return (
     <aside className="mx-auto w-full max-w-2xl space-y-2 px-4 pt-4 text-sm sm:px-6 md:ml-56 lg:px-8">

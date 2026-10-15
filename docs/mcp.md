@@ -2,7 +2,8 @@
 
 `zero-api` serves a remote MCP server at `https://zero.juanibiapina.dev/mcp`. An
 MCP client such as pi signs in as a Zero user, reads and changes that user's
-Tasks, Projects, Waiting conditions, and Afters, and reads their Medicines.
+Tasks, Projects, Waiting conditions, and Afters, and reads their Medicines with
+their Doses and Intakes.
 Writes land in the user's `TaskDO`, so they reach mobile and web through the
 normal sync.
 
@@ -102,6 +103,8 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
   (`{ kind: "medicine", medicineId, role }`). Agents can set only a Project
   parent, and completing a restock Task over MCP completes it without adding
   pills.
+- **Intakes** of as-needed Medicines change the pill count, so they stay a
+  user action in the app, like supply writes.
 - **Dose confirmation** belongs to the Android receipt flow
   (see [`storage.md`](storage.md), Medicine and Dose storage).
 - **Project icon suggestion** is a UI helper.

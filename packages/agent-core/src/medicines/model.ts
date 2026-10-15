@@ -12,6 +12,7 @@ export const EVERY_DAY: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
 export type Medicine = {
   id: string; name: string; instructions: string | null;
   startsOn: string; endsOn: string | null; untilEmpty?: boolean; paused: boolean;
+  asNeeded?: boolean;
   endsBefore?: string | null;
   weekdays: Weekday[];
   doses: MedicineSlot[]; createdAt: string;
@@ -25,8 +26,9 @@ export type Dose = {
   scheduledAt: string; takenAt: string | null; skippedAt: string | null;
 };
 export type MedicineReceipt = Dose & { actionId: string; kind: "presented" | "taken" | "skipped" };
-export type MedicineRecovery = { table: "medicines" | "doses"; id: string; text: string; reason: string };
-export type MedicineSnapshot = { medicines: Medicine[]; doses: Dose[]; recoveries: MedicineRecovery[] };
+export type Intake = { id: string; medicineId: string; takenAt: string; amount: number };
+export type MedicineRecovery = { table: "medicines" | "doses" | "intakes"; id: string; text: string; reason: string };
+export type MedicineSnapshot = { medicines: Medicine[]; doses: Dose[]; intakes: Intake[]; recoveries: MedicineRecovery[] };
 
 export function medicineToday(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -42,7 +44,7 @@ export function medicineRecurrence(medicine: Pick<Medicine, "startsOn" | "endsOn
   return { from: medicine.startsOn, until: medicine.endsOn, weekdays: medicine.weekdays };
 }
 export function medicineDueOn(medicine: Medicine, on: string): boolean {
-  return !medicine.paused && occursOn(medicineRecurrence(medicine), on);
+  return !medicine.asNeeded && !medicine.paused && occursOn(medicineRecurrence(medicine), on);
 }
 export function medicineSlotRecurrence(medicine: Pick<Medicine, "startsOn" | "endsOn" | "endsBefore" | "weekdays">, slot: Pick<MedicineSlot, "alarmAt">): Recurrence {
   const recurrence = medicineRecurrence(medicine);
@@ -58,6 +60,7 @@ export function finishesCourse(medicine: Medicine, slotId: string): boolean {
   return !!medicine.untilEmpty && !!medicine.supply && !!slot && medicine.supply.pillsLeft <= slot.amount;
 }
 export function medicineNextDay(medicine: Medicine, from: string): string | null {
+  if (medicine.asNeeded) return null;
   return nextOccurrence(medicineRecurrence(medicine), from);
 }
 // A day as it reads inside a sentence: "today", "tomorrow", a weekday within
@@ -69,7 +72,15 @@ export function medicineDay(date: string, today: string): string {
   if (date > today && date <= addDays(today, 6)) return new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(local);
   return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" }).format(local);
 }
-export function medicineCadence(medicine: Pick<MedicineInput, "weekdays" | "doses">): string {
+export function intakeTime(takenAt: string, today: string): string {
+  const at = new Date(takenAt);
+  const on = medicineToday(at);
+  const day = on === today ? "today" : on === addDays(today, -1) ? "yesterday"
+    : new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" }).format(at);
+  return `${day} at ${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+}
+export function medicineCadence(medicine: Pick<MedicineInput, "weekdays" | "doses" | "asNeeded">): string {
+  if (medicine.asNeeded) return "As needed";
   const count = medicine.doses.length;
   if (medicine.weekdays.length === 7) return count === 1 ? "Once a day" : `${count} times a day`;
   const days = medicine.weekdays.map((weekday) => WEEKDAY_NAMES[weekday - 1]).join(", ");
@@ -99,6 +110,11 @@ export function validateMedicine(input: MedicineInput): void {
   if (input.endsBefore != null && !validTime(input.endsBefore)) throw new Error("Invalid medicine details");
   if (typeof input.paused !== "boolean" || (input.untilEmpty !== undefined && typeof input.untilEmpty !== "boolean") || (input.instructions !== null && typeof input.instructions !== "string")) throw new Error("Invalid medicine details");
   if (!Array.isArray(input.weekdays) || !input.weekdays.length || input.weekdays.some((day, index) => !Number.isInteger(day) || day < 1 || day > 7 || (index > 0 && day <= input.weekdays[index - 1]))) throw new Error("Choose at least one day of the week");
+  if (input.asNeeded !== undefined && typeof input.asNeeded !== "boolean") throw new Error("Invalid medicine details");
+  if (input.asNeeded) {
+    if (!Array.isArray(input.doses) || input.doses.length || input.endsOn !== null || input.untilEmpty || input.paused) throw new Error("A medicine taken as needed has no schedule");
+    return;
+  }
   if (!Array.isArray(input.doses) || !input.doses.length || input.doses.length > 24) throw new Error("Add between 1 and 24 daily dose times");
   const ids = new Set<string>(); const times = new Set<string>();
   for (const slot of input.doses) {
@@ -110,6 +126,7 @@ export function validateMedicine(input: MedicineInput): void {
   }
 }
 export function medicineState(medicine: Medicine, on = medicineToday()): "scheduled" | "active" | "paused" | "ended" {
+  if (medicine.asNeeded) return "active";
   if (medicine.endsOn && on > medicine.endsOn) return "ended";
   if (medicine.untilEmpty && medicine.supply?.pillsLeft === 0) return "ended";
   if (medicine.paused) return "paused";
@@ -125,7 +142,8 @@ const count = (value: unknown): value is number => typeof value === "number" && 
 function storedDetails(input: MedicineInput): string {
   const { name, instructions, startsOn, endsOn, paused, weekdays, doses } = input;
   const endsBefore = input.untilEmpty && endsOn && input.endsBefore ? { endsBefore: input.endsBefore } : {};
-  return JSON.stringify({ name: name.trim(), instructions, startsOn, endsOn, ...endsBefore, untilEmpty: input.untilEmpty === true, paused, weekdays,
+  const asNeeded = input.asNeeded ? { asNeeded: true } : {};
+  return JSON.stringify({ name: name.trim(), instructions, startsOn, endsOn, ...endsBefore, untilEmpty: input.untilEmpty === true, ...asNeeded, paused, weekdays,
     doses: doses.map(({ id, remindAt, alarmAt, amount }) => ({ id, remindAt, alarmAt, amount })) });
 }
 
@@ -159,7 +177,7 @@ export class MedicineModel {
           refill: count(row.refill) && row.refill > 0 ? row.refill : null }
       : null;
     const untilEmpty = details.untilEmpty === true;
-    return { ...details, id, name: details.name.trim(), untilEmpty, endsBefore: untilEmpty && details.endsOn ? details.endsBefore ?? null : null,
+    return { ...details, id, name: details.name.trim(), untilEmpty, asNeeded: details.asNeeded === true, endsBefore: untilEmpty && details.endsOn ? details.endsBefore ?? null : null,
       createdAt: row.createdAt, supply, archivedAt: validInstant(row.archivedAt) ? row.archivedAt : null };
   }
 
@@ -178,7 +196,7 @@ export class MedicineModel {
   archive(id: string): void {
     const medicine = this.get(id);
     if (!medicine) throw new Error("Medicine was deleted or is not on this device");
-    if (medicineState(medicine, medicineToday(this.now())) !== "ended") throw new Error("Only an ended medicine can be archived");
+    if (!medicine.asNeeded && medicineState(medicine, medicineToday(this.now())) !== "ended") throw new Error("Only an ended medicine can be archived");
     if (!medicine.archivedAt) this.store.setCell("medicines", id, "archivedAt", this.now().toISOString());
   }
 
@@ -280,9 +298,48 @@ export class MedicineModel {
       if (dose && this.get(dose.medicineId)) doses.push(dose);
       else recoveries.push({ table: "doses", id, text: id, reason: "Invalid or orphaned Dose" });
     }
+    const intakes: Intake[] = [];
+    for (const id of this.store.getRowIds("intakes")) {
+      const intake = this.getIntake(id);
+      const parentId = this.store.getCell("intakes", id, "medicineId");
+      if (typeof parentId === "string" && this.store.getCell("medicines", parentId, "deletedAt")) continue;
+      if (intake && this.get(intake.medicineId)?.asNeeded) intakes.push(intake);
+      else recoveries.push({ table: "intakes", id, text: id, reason: "Invalid or orphaned intake" });
+    }
     medicines.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
     doses.sort((a, b) => b.on.localeCompare(a.on) || a.scheduledAt.localeCompare(b.scheduledAt));
-    return { medicines, doses, recoveries };
+    intakes.sort((a, b) => b.takenAt.localeCompare(a.takenAt) || a.id.localeCompare(b.id));
+    return { medicines, doses, intakes, recoveries };
+  }
+
+  takeAsNeeded(medicineId: string, amount: number, id = this.newId(), takenAt = this.now().toISOString()): Intake {
+    const medicine = this.get(medicineId);
+    if (!medicine) throw new Error("Medicine was deleted or is not on this device");
+    if (!medicine.asNeeded) throw new Error("This medicine follows a schedule");
+    if (medicine.archivedAt) throw new Error("Unarchive this medicine to record taking it");
+    if (!Number.isInteger(amount) || amount < 1) throw new Error("Take at least one pill");
+    if (!validInstant(takenAt)) throw new Error("Invalid confirmation time");
+    if (this.store.hasRow("intakes", id)) throw new Error("Intake already exists");
+    this.store.transaction(() => {
+      this.store.setRow("intakes", id, { medicineId, takenAt, amount });
+      this.changePills(medicineId, -amount);
+    });
+    return { id, medicineId, takenAt, amount };
+  }
+
+  removeIntake(id: string): void {
+    const intake = this.getIntake(id);
+    if (!intake) return;
+    this.store.transaction(() => {
+      this.store.delRow("intakes", id);
+      if (this.get(intake.medicineId)) this.changePills(intake.medicineId, intake.amount);
+    });
+  }
+
+  private getIntake(id: string): Intake | null {
+    const { medicineId, takenAt, amount } = this.store.getRow("intakes", id);
+    if (typeof medicineId !== "string" || !validInstant(takenAt) || !count(amount) || amount < 1) return null;
+    return { id, medicineId, takenAt, amount };
   }
 
   add(id: string, input: MedicineInput, pillsLeft?: number): Medicine {
@@ -299,6 +356,7 @@ export class MedicineModel {
     const medicine = this.get(id);
     if (!medicine) throw new Error("Medicine was deleted or is not on this device");
     validateMedicine(input);
+    if (!!medicine.asNeeded !== !!input.asNeeded) throw new Error("A medicine can't switch between scheduled and as needed");
     this.checkCount(input, !!medicine.supply, pillsLeft);
     this.watchSupply(id, () => {
       this.store.setCell("medicines", id, "details", storedDetails(input));
@@ -310,6 +368,9 @@ export class MedicineModel {
     this.store.transaction(() => {
       for (const doseId of this.store.getRowIds("doses")) {
         if (this.store.getCell("doses", doseId, "medicineId") === id) this.store.delRow("doses", doseId);
+      }
+      for (const intakeId of this.store.getRowIds("intakes")) {
+        if (this.store.getCell("intakes", intakeId, "medicineId") === id) this.store.delRow("intakes", intakeId);
       }
       this.store.setRow("medicines", id, { deletedAt: this.now().toISOString() });
     });

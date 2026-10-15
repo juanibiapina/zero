@@ -149,3 +149,29 @@ it("archives an ended medicine out of the list and brings it back", async () => 
   await waitFor(() => expect(replica.snapshot().medicines[0].archivedAt).toBeNull());
   expect(await screen.findByRole("button", { name: "Archive medicine" })).toBeVisible();
 });
+
+it("adds a medicine taken as needed and records each time it is taken", async () => {
+  const todo = createInMemoryTodoData();
+  replica = todo.replica;
+  render(<TodoDataContextProvider value={{ ...todo.data, authenticatedFeatures: false }}>
+    <MemoryRouter initialEntries={["/medicines"]}><Routes>
+      <Route path="/medicines" element={<MedicinesPage />} />
+      <Route path="/medicines/:id" element={<MedicinesPage />} />
+    </Routes></MemoryRouter>
+  </TodoDataContextProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "Add medicine" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Medicine name" }), { target: { value: "Ibuprofen" } });
+  fireEvent.click(screen.getByRole("radio", { name: "As needed" }));
+  expect(screen.queryByLabelText("Alarm 1")).toBeNull();
+  fireEvent.change(screen.getByLabelText("Pills you have"), { target: { value: "20" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save medicine" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(replica.snapshot().medicines[0]).toMatchObject({ asNeeded: true, doses: [], supply: { pillsLeft: 20 } });
+  fireEvent.change(await screen.findByLabelText("Pills to take"), { target: { value: "2" } });
+  fireEvent.click(screen.getByRole("button", { name: "Take" }));
+  expect(await screen.findByText("18 pills left")).toBeVisible();
+  expect(screen.getByRole("heading", { name: /^Taken today at / })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+  expect(await screen.findByText("20 pills left")).toBeVisible();
+  expect(replica.snapshot().intakes).toEqual([]);
+});

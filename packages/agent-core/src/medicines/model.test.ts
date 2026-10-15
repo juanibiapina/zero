@@ -87,7 +87,7 @@ describe("daily medicines", () => {
     const { model } = setup(); const dose = medicineOccurrences(model.get("medicine")!, "2026-10-02")[0];
     model.take(dose, "take"); model.remove("medicine");
     model.applyReceipts([{ ...dose, kind: "taken", actionId: "late", takenAt: now().toISOString() }], "device");
-    expect(model.snapshot()).toEqual({ medicines: [], doses: [], recoveries: [] });
+    expect(model.snapshot()).toEqual({ medicines: [], doses: [], intakes: [], recoveries: [] });
   });
   it("rejects invalid schedules and retains malformed synchronized intent for recovery", () => {
     const { model, store } = setup();

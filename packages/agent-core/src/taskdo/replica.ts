@@ -9,7 +9,7 @@ import { projectParent } from "../tasks/parent";
 import { localToday } from "../tasks/today";
 import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
-import { MedicineModel, type MedicineInput, type Medicine, type Dose, type MedicineReceipt, type MedicineRestock } from "../medicines/model";
+import { MedicineModel, type MedicineInput, type Medicine, type Dose, type Intake, type MedicineReceipt, type MedicineRestock } from "../medicines/model";
 
 export type TodoRecoveryRepair =
   | "make-task-loose"
@@ -17,7 +17,7 @@ export type TodoRecoveryRepair =
   | "remove-after";
 
 export type TodoRecovery = {
-  table: "tasks" | "projects" | "conditions" | "medicines" | "doses";
+  table: "tasks" | "projects" | "conditions" | "medicines" | "doses" | "intakes";
   id: string;
   text: string;
   reason: string;
@@ -31,6 +31,7 @@ export type TodoSnapshot = {
   recoveries: TodoRecovery[];
   medicines: Medicine[];
   doses: Dose[];
+  intakes: Intake[];
 };
 
 export type ProjectEditFields = {
@@ -82,6 +83,8 @@ export type TodoMedicines = {
   take: (dose: Dose) => Promise<void>;
   skip: (dose: Dose) => Promise<void>;
   undo: (id: string) => Promise<void>;
+  takeAsNeeded: (id: string, amount: number) => Promise<Intake>;
+  removeIntake: (id: string) => Promise<void>;
   applyReceipts: (receipts: MedicineReceipt[], deviceId: string) => Promise<void>;
   setSupply: (id: string, supply: { pillsLeft: number; leadDays: number }) => Promise<void>;
   clearSupply: (id: string) => Promise<void>;
@@ -158,6 +161,7 @@ export function projectTodoData(store: MergeableStore): TodoSnapshot {
     recoveries: [...projection.issues.map((issue) => recoveryFor(store, issue)), ...medicineSnapshot.recoveries],
     medicines: medicineSnapshot.medicines,
     doses: medicineSnapshot.doses,
+    intakes: medicineSnapshot.intakes,
   };
 }
 
@@ -231,7 +235,7 @@ export function createTaskdoReplica({
     for (const listener of listeners) listener(snapshot);
   };
   publish();
-  const storeListeners = ["tasks", "projects", "conditions", "medicines", "doses"].map((table) => store.addTableListener(table, publish));
+  const storeListeners = ["tasks", "projects", "conditions", "medicines", "doses", "intakes"].map((table) => store.addTableListener(table, publish));
   const write = async (mutate: () => void) => {
     if (closed) throw new Error("Local account is closed");
     store.transaction(mutate);
@@ -423,6 +427,12 @@ export function createTaskdoReplica({
       take: (dose) => write(() => { medicineModel.take(dose, randomId()); }),
       skip: (dose) => write(() => { medicineModel.skip(dose, randomId()); }),
       undo: (id) => write(() => { medicineModel.undo(id, randomId()); }),
+      async takeAsNeeded(id, amount) {
+        let result!: Intake;
+        await write(() => { result = medicineModel.takeAsNeeded(id, amount, randomId()); });
+        return result;
+      },
+      removeIntake: (id) => write(() => { medicineModel.removeIntake(id); }),
       applyReceipts: (receipts, deviceId) => write(() => { medicineModel.applyReceipts(receipts, deviceId); }),
       setSupply: (id, supply) => write(() => { medicineModel.setSupply(id, supply); }),
       clearSupply: (id) => write(() => { medicineModel.clearSupply(id); }),

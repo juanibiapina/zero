@@ -151,6 +151,18 @@ describe("todo operation catalog", () => {
     expect(listed.doses.map((dose) => dose.id)).toEqual([recent.id]);
   });
 
+  it("lists as-needed Medicines and their intakes since a date", () => {
+    const { ctx, run, value } = workspace();
+    const model = new MedicineModel(ctx.store, ctx.now);
+    model.add("m", { name: "Ibuprofen", instructions: null, startsOn: "2026-03-01", endsOn: null, paused: false, asNeeded: true, weekdays: [1, 2, 3, 4, 5, 6, 7], doses: [] });
+    model.takeAsNeeded("m", 2, "old", "2026-03-01T10:00:00.000Z");
+    model.takeAsNeeded("m", 1, "recent", "2026-03-09T10:00:00.000Z");
+
+    const listed = value<{ medicines: Array<{ id: string; asNeeded: boolean }>; intakes: Array<{ id: string; amount: number }> }>(run("medicines_list"));
+    expect(listed.medicines).toEqual([expect.objectContaining({ id: "m", asNeeded: true })]);
+    expect(listed.intakes).toEqual([expect.objectContaining({ id: "recent", amount: 1 })]);
+  });
+
   it("reports invalid synchronized rows as recoveries instead of listing them", () => {
     const { ctx, run, value } = workspace();
     ctx.store.setRow("tasks", "bad", { text: "Lost", createdAt: "2026-03-01T00:00:00Z", parent: JSON.stringify({ kind: "project", projectId: "gone" }) });

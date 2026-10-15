@@ -15,6 +15,11 @@ Each dose time takes a number of pills, one by default. A Medicine can also
 track its supply: the pills you have left, and how many days before they run
 out Zero reminds you to buy more (14 by default).
 
+A Medicine can instead be taken as needed: a name, optional notes, and
+optionally the pills you have, with no dose times, days, start or end.
+"Ibuprofen when I have a headache" is one. An Intake is one time you took it,
+such as "Ibuprofen, 2 pills, October 3 at 14:32".
+
 ## Why it is its own block
 
 A Medicine repeats on a clock and must reach you on time even when the app is
@@ -73,10 +78,30 @@ only what comes next.
 - Restock adds the pills you got and remembers the amount for next time.
   Recount replaces the count.
 
+### As needed
+
+- You choose scheduled or as needed when you add a Medicine. A Medicine
+  cannot switch between the two later.
+- An as-needed Medicine has no Doses and no reminders, and never pauses or
+  ends.
+- Take records an Intake at that moment with the pills you chose. The pills
+  start at the amount of your last Intake, or 1. You can take it any number of
+  times a day.
+- Every Intake subtracts its pills from a counted supply, never below zero.
+  Undo, or removing the Intake from history, deletes it and gives the pills
+  back.
+- Its supply is never low, so it never adds a restock Task. Restock and
+  Recount work as for any Medicine.
+- It can be archived at any time. An archived one records no Intakes.
+
 ## How it looks
 
 Medicines has its own list under Browse on mobile and in the web sidebar. The
-list shows names and each dose time with its pills ("08:00 · 2 pills"). A
+list shows names and each dose time with its pills ("08:00 · 2 pills").
+Scheduled Medicines come first; as-needed ones follow under their own "As
+needed" heading, and then the scheduled ones sit under "Scheduled". An
+as-needed row shows when you last took it ("Taken today at 14:32", or "Not
+taken yet") and the pills left. A
 Medicine's page shows today's doses and when you took or skipped them, with
 history on request. On a day that is not chosen, the list and the page show the next dose
 day as "tomorrow", a weekday within the coming week, or a date. A counted
@@ -98,6 +123,14 @@ does not offer when to buy more. On the web it is a fourth Ends option that
 makes Pills you have required, and the page reads "Until pills run out · last
 dose <date> at <time>". The add sheet opens with the keyboard on the name and asks for the
 name, optional notes, and the same schedule, with 1× to 4× a day presets.
+
+The add sheet on mobile, and the add form on the web, start with "On a
+schedule" or "As needed". As needed hides the schedule and asks only for the
+pills you have, which you may leave empty. An as-needed Medicine's page shows
+when you last took it, a pill stepper with Take, and its Intakes in History,
+newest first. Take shows "Took 2 pills" with Undo. On mobile, holding an
+Intake offers to remove it; on the web each Intake has Remove. Archive is
+always offered, also by holding the row in the list on mobile.
 
 Taking the last pill of a course that runs until the pills run out shows "Last
 <name> dose taken. Course finished." with Undo, and the page reads "Ended". An
@@ -165,7 +198,8 @@ restriction.
   how many pills you got. See [Task](task.md).
 - Project, Waiting, After: none, on purpose. Medicine never changes Project
   attention, and its doses never appear on Home.
-- Agents: list only. An agent cannot change a Medicine, because the phone sets
+- Agents: list only, including as-needed Medicines and their Intakes. An
+  agent cannot change a Medicine or record an Intake, because the phone sets
   its alarms only when the app sees the change.
 
 ## Left out on purpose
@@ -183,7 +217,10 @@ restriction.
 - A notification that a course finished when its last pill is taken from the
   notification. The list shows the Medicine as Ended the next time the app
   opens.
-- Archiving a Medicine that has not ended.
+- Archiving a scheduled Medicine that has not ended.
+- Recording an Intake at an earlier time. Remove a wrong one and take again.
+- A low supply, a restock Task, or a daily maximum for as-needed Medicines.
+- Taking an as-needed Medicine from a notification or from global quick add.
 
 ## Ideas
 

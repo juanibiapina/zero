@@ -221,7 +221,7 @@ function TodoHomeScreen() {
       ) : null}
       {todoData?.error ? <Text variant="error" className="px-screen-x">{todoData.error}</Text> : null}
       {recoveryError ? <Text variant="error" className="px-screen-x">{recoveryError}</Text> : null}
-      {todoData?.recoveries.filter((entry) => entry.table !== 'medicines' && entry.table !== 'doses').map((entry) => (
+      {todoData?.recoveries.filter((entry) => entry.table !== 'medicines' && entry.table !== 'doses' && entry.table !== 'intakes').map((entry) => (
         <View key={`${entry.table}-${entry.id}-${entry.reason}`} className="gap-2 px-screen-x py-1">
           <Text variant="error">
             Recover {entry.table}: {entry.text} — {entry.reason} ({entry.id})

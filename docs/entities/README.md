@@ -41,7 +41,8 @@ lives in the code and in [`storage.md`](../storage.md) and [`mcp.md`](../mcp.md)
   a person must check.
 - [After](project-after.md): a Project that needs no attention until another
   Project is Done.
-- [Medicine](medicine.md): a daily routine of doses, with its Doses.
+- [Medicine](medicine.md): a daily routine of doses, with its Doses, or a
+  medicine taken as needed, with its Intakes.
 
 ## Interactions
 
@@ -53,7 +54,7 @@ Read a row as "this block, when it meets that one".
 | **Project** | Deleting it deletes its Tasks | After another Project, through After | Owns any number. One open condition makes it Waiting | Completing it releases the Projects that wait for it. Undo restores them | None |
 | **Waiting** | None | Belongs to one Project and goes when it goes | Each resolves on its own | Outranks After | None |
 | **After** | None | Points from one Project to another. No cycles | Ranks below Waiting | Several on one Project must all resolve | None |
-| **Medicine** | A low supply adds one restock Task. Deleting it leaves its Tasks loose | None | None | None | Each Medicine has its own Doses |
+| **Medicine** | A low supply adds one restock Task. Deleting it leaves its Tasks loose | None | None | None | Each Medicine has its own Doses, or its own Intakes when taken as needed |
 
 Medicine stands apart from Projects on purpose. It never changes how much
 attention a Project needs; only its restock Tasks reach Home.

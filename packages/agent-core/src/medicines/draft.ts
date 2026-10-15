@@ -9,7 +9,7 @@ const DAILY_TIMES: Record<number, string[]> = {
   4: ["08:00", "12:00", "16:00", "20:00"],
 };
 export type MedicineCourse = { kind: "ongoing" } | { kind: "days"; days: string } | { kind: "last-day"; on: string }
-  | { kind: "until-empty"; pillsLeft: number | null };
+  | { kind: "until-empty"; pillsLeft: number | null } | { kind: "as-needed"; pillsLeft: number | null };
 const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
 const clock = (value: number) => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 const defaultLead = (count: number) => count === 1 ? 60 : count === 3 ? 30 : 15;
@@ -31,7 +31,8 @@ export class MedicineDraft {
       name: "", instructions: null, startsOn: today, endsOn: null, paused: false, weekdays: EVERY_DAY,
       doses: [{ id: safeRandomUUID(), alarmAt: "20:00", remindAt: reminder("20:00", defaultLead(1)), amount: 1 }],
     };
-    const course: MedicineCourse = input.untilEmpty ? { kind: "until-empty", pillsLeft: null }
+    const course: MedicineCourse = input.asNeeded ? { kind: "as-needed", pillsLeft: null }
+      : input.untilEmpty ? { kind: "until-empty", pillsLeft: null }
       : input.endsOn ? { kind: "last-day", on: input.endsOn } : { kind: "ongoing" };
     return new MedicineDraft(input, course, today);
   }
@@ -102,11 +103,11 @@ export class MedicineDraft {
   }
 
   get pillsLeft(): number | undefined {
-    return this.course.kind === "until-empty" && this.course.pillsLeft !== null ? this.course.pillsLeft : undefined;
+    return (this.course.kind === "until-empty" || this.course.kind === "as-needed") && this.course.pillsLeft !== null ? this.course.pillsLeft : undefined;
   }
 
   private get end(): { endsOn: string | null; endsBefore: CourseEnd["endsBefore"] } {
-    if (this.course.kind === "ongoing") return { endsOn: null, endsBefore: null };
+    if (this.course.kind === "ongoing" || this.course.kind === "as-needed") return { endsOn: null, endsBefore: null };
     if (this.course.kind === "last-day") return { endsOn: this.course.on, endsBefore: null };
     if (this.course.kind === "until-empty") {
       return this.course.pillsLeft === null ? { endsOn: this.input.endsOn, endsBefore: this.input.endsBefore ?? null }
@@ -124,6 +125,12 @@ export class MedicineDraft {
   }
 
   commit(): MedicineInput {
+    if (this.course.kind === "as-needed") {
+      const input: MedicineInput = { name: this.input.name.trim(), instructions: this.input.instructions?.trim() || null,
+        startsOn: this.input.startsOn, endsOn: null, paused: false, asNeeded: true, weekdays: [...EVERY_DAY], doses: [] };
+      validateMedicine(input);
+      return input;
+    }
     const { endsOn, endsBefore } = this.end;
     const input: MedicineInput = {
       ...this.input, name: this.input.name.trim(),
@@ -132,6 +139,7 @@ export class MedicineDraft {
       weekdays: [...this.input.weekdays],
       doses: this.input.doses.map((slot) => ({ ...slot })),
     };
+    delete input.asNeeded;
     if (this.course.kind === "until-empty") input.untilEmpty = true;
     else delete input.untilEmpty;
     if (this.course.kind === "until-empty" && endsBefore) input.endsBefore = endsBefore;

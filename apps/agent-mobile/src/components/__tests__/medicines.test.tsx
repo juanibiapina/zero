@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { createTaskdoReplica, defaultToastController, MedicineDraft, medicineDay, medicineEndDate, medicineOccurrences, medicineToday, type MedicineInput, type Weekday } from '@zero/agent-core';
 import { createMergeableStore } from 'tinybase';
 import type { ReactNode } from 'react';
@@ -26,6 +26,7 @@ async function openScreen(children: ReactNode, data = createInMemoryTodoData()) 
 }
 
 beforeEach(() => { mockNavigate.mockReset(); mockPush.mockReset(); mockParams = {}; defaultToastController.dismiss(); });
+afterAll(() => { defaultToastController.dismiss(); });
 
 const takenToast = () => defaultToastController.getSnapshot()[0];
 
@@ -414,5 +415,39 @@ describe('Medicine supply', () => {
     await fireEvent.changeText(screen.getByLabelText('How many pills do you have now?'), '3');
     await fireEvent.press(screen.getByLabelText('Save'));
     await waitFor(() => expect(restockTask(data)).toMatchObject({ text: 'Buy Vitamin D' }));
+  });
+});
+
+describe('A medicine taken as needed', () => {
+  it('is added with the pills you have and listed apart from scheduled medicines', async () => {
+    const data = createInMemoryTodoData();
+    await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
+    const screen = await openScreen(<MedicinesList />, data);
+    await fireEvent.press(screen.getByLabelText('Add medicine'));
+    await fireEvent.changeText(screen.getByLabelText('Medicine name'), 'Ibuprofen');
+    await fireEvent.press(screen.getByText('As needed'));
+    expect(screen.queryByLabelText('Add dose time')).toBeNull();
+    await fireEvent.changeText(screen.getByLabelText('Pills you have'), '20');
+    await fireEvent.press(screen.getByLabelText('Add medicine'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines).toHaveLength(2));
+    expect(data.replica!.snapshot().medicines.find((medicine) => medicine.name === 'Ibuprofen')).toMatchObject({ asNeeded: true, doses: [], supply: { pillsLeft: 20 } });
+    await waitFor(() => expect(screen.getByText('Scheduled')).toBeTruthy());
+    expect(screen.getByText('20 pills left')).toBeTruthy();
+    expect(screen.getByText('Not taken yet')).toBeTruthy();
+  });
+
+  it('records each time you take it, with Undo', async () => {
+    const { screen, data, medicine } = await openMedicine(MedicineDraft.create(medicineToday()).change({ name: 'Ibuprofen' }).withCourse({ kind: 'as-needed', pillsLeft: null }).commit());
+    await data.replica!.medicines.setSupply(medicine.id, { pillsLeft: 20, leadDays: 14 });
+    await fireEvent.press(screen.getByLabelText('More pills'));
+    await fireEvent.press(screen.getByLabelText('Take 2 pills'));
+    await waitFor(() => expect(takenToast()?.message).toBe('Took 2 pills'));
+    expect(screen.getByText('18 pills left')).toBeTruthy();
+    expect(screen.getAllByText(/^Taken today at /)).toHaveLength(1);
+    expect(screen.getByText('2 pills')).toBeTruthy();
+    await act(async () => { takenToast()!.action!.onPress(); });
+    await waitFor(() => expect(data.replica!.snapshot().intakes).toEqual([]));
+    expect(screen.getByText('20 pills left')).toBeTruthy();
+    expect(screen.getByText('Not taken yet')).toBeTruthy();
   });
 });
