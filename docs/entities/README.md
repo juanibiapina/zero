@@ -75,7 +75,7 @@ Capture was the first block: a raw thought dropped into an inbox and processed
 later into a typed Task. The split proved premature, because the user worked in
 one list. Task absorbed Capture's role as the entry point, together with its
 optional date and manual order. The reasoning is in
-[`todo-single-list-overview.md`](../plans/todo-single-list-overview.md).
+[`todo-single-list-overview.md`](https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/todo-single-list-overview.md).
 
 ## Candidate blocks
 

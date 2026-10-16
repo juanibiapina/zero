@@ -1,7 +1,7 @@
 // Which Brave key a turn uses, and the cohort tag that goes on its log lines.
 // Pure, so the canary routing is testable without a Durable Object.
 //
-// The paid key is a per-user canary (see docs/plans/brave-paid-canary.md): only
+// The paid key is a per-user canary (see https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/brave-paid-canary.md): only
 // flagged users use it, so paid-plan search cost can be measured on a small
 // cohort before a wider rollout. Everyone else uses the free key.
 

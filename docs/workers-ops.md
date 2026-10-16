@@ -78,7 +78,7 @@ The config edit is still the source of truth: it stops a future Workers Build
 deploy from re-provisioning the domain.
 
 This corrects the earlier "additive / manual delete" claim in
-`docs/plans/drop-old-console-hosts.md`.
+`https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/drop-old-console-hosts.md`.
 
 The teardown only applies to a domain the Worker still owns. To move a custom
 domain to another Worker, reassign it first with

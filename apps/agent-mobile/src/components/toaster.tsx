@@ -33,7 +33,7 @@ import { Text } from '@/components/ui/text';
 // app/_layout.tsx).
 //
 // Deliberately simple to sidestep the react-native-screens + reanimated failure
-// that sank sonner-native on this stack (see docs/plans/toast-primitive.md): a
+// that sank sonner-native on this stack (see https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/toast-primitive.md): a
 // fixed position (no height measurement or dynamic stacking math) and the same
 // FadeIn/FadeOut layout animation the quick-add already runs on-device. Exit
 // plays on unmount when the controller drops the toast.

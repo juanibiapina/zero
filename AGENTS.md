@@ -83,7 +83,7 @@ compares them with ZeroVault.
 
 The `zeroapps-landing` connector was attached 2026-07-26; before that, landing was
 deployed only via manual `wrangler deploy` (it had been bootstrapped that way and
-never wired into Workers Builds). See `docs/plans/workers-builds-investigation.md`.
+never wired into Workers Builds). See `https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/workers-builds-investigation.md`.
 
 ### Per-trigger deploy commands
 
@@ -125,7 +125,7 @@ Rules, each learned from a real breakage (2026-07-28):
 These commands live in Cloudflare, not in the repo, so a dashboard edit can
 silently undo them. Read them back with
 `GET /accounts/{account_id}/builds/workers/{script_tag}/triggers` after any
-connector change (see `docs/plans/workers-builds-investigation.md` for the
+connector change (see `https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/workers-builds-investigation.md` for the
 endpoint list).
 
 ### Build watch paths (deploy scoping)

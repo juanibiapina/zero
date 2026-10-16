@@ -85,7 +85,7 @@ Waiting and After.
 - Current shared Task editor: `src/components/task-editor-sheet.tsx`
 - Current transient feedback: `src/components/toaster.tsx`
 - Current tokens: `global.css`
-- Historical plans under `docs/plans/`, including Waiting affordance, Project
+- Historical plans under [`docs/plans/`](https://github.com/juanibiapina/zero/tree/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans), including Waiting affordance, Project
   status, Task completion, and Project dependency work.
 
 ## Product Principles

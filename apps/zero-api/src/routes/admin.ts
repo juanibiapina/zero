@@ -436,7 +436,7 @@ export const createAdminRoutes = () => {
 
   // PUT /api/admin/users/{userId}/brave-plan — flip a user's paid-Brave-key
   // canary flag live (no redeploy). The flag routes that user's web searches to
-  // the paid key; see docs/plans/brave-paid-canary.md.
+  // the paid key; see https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/brave-paid-canary.md.
   const bravePlanRoute = createRoute({
     method: "put",
     path: "/api/admin/users/{userId}/brave-plan",

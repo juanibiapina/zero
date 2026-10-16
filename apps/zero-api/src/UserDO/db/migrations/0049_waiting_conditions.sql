@@ -10,7 +10,7 @@
 -- Structured kinds are derived-satisfied on the client (no resolvedAt); only
 -- free-text persists resolvedAt. `id` is a client-minted UUID. Standalone from
 -- the agent's tables; owned by DbWaitingConditionStore. See
--- docs/entities/waiting-condition.md and docs/plans/todo-availability-model.md.
+-- docs/entities/waiting-condition.md and https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/todo-availability-model.md.
 CREATE TABLE "waiting_conditions" (
   "id" TEXT PRIMARY KEY NOT NULL,
   "projectId" TEXT NOT NULL,

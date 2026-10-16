@@ -49,10 +49,10 @@ model, and both work before sign-in.
 1. AI-assisted Task refinement. Let the agent propose a Project and Tasks from a
    loose Task, then commit only after explicit confirmation. The open design
    choices are in
-   [`todo-task-to-project-ai.md`](plans/todo-task-to-project-ai.md).
+   [`todo-task-to-project-ai.md`](https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/todo-task-to-project-ai.md).
 2. Connect the agent to todo workflows. Resolve Waiting conditions from observed
    email, calendar, or content, then add carefully scoped todo write tools where
    a confirmed workflow needs them.
 
-The active and historical plan index is
-[`docs/plans/todo-plans.md`](plans/todo-plans.md).
+The historical plan index is
+[`todo-plans.md`](https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/todo-plans.md).

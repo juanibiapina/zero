@@ -58,7 +58,7 @@ export interface BraveSearchOptions {
   defaultDelayMs?: number;
   // Which key cohort this adapter uses ("paid" | "free"), tagged onto every
   // Brave log line so paid-plan spend is countable per cohort. Omitted when not
-  // supplied. See docs/plans/brave-paid-canary.md.
+  // supplied. See https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/brave-paid-canary.md.
   cohort?: string;
 }
 

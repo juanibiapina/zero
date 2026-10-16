@@ -23,7 +23,7 @@ Object is not a redundant copy: KV caches *negative* lookups per colo for about
 to link for a minute afterwards, from the colo that serves Telegram's webhooks.
 That colo cannot be reached from the browser, so there is nothing to wait for or
 poll; the strongly consistent record is the only thing that can answer. Deleting
-it brings the bug back (incident 2026-07-31, `docs/plans/telegram-account-claim.md`).
+it brings the bug back (incident 2026-07-31, `https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/telegram-account-claim.md`).
 
 A KV hit never touches the Durable Object, so settled users cost the same as
 before. The fallback logs `telegram_account_fallback`; a lookup neither store

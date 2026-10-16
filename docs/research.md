@@ -97,7 +97,7 @@ and retry storms on a single query without storing content, the same rule
 
 **Paid-key canary and the `cohort` tag.** The paid Brave key is rolled out per
 user, gated by the `braveKeyPaid` flag on `user_settings` (see
-`docs/plans/brave-paid-canary.md`). AssistantDO picks the key with
+`https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/brave-paid-canary.md`). AssistantDO picks the key with
 `selectBraveKey` (`websearch/brave-key.ts`) and passes a `cohort` of `"paid"` or
 `"free"`, which rides on `queryFields` and so tags every Brave log line
 (`brave_request`, `brave_rate_limited`, `brave_request_failed`,

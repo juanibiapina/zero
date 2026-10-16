@@ -26,7 +26,7 @@
 // Re-emitting a whole document costs the model the entire body in generated
 // tokens on every small change, a cost that grows with the topic forever
 // (measured: 13,856 output tokens and 298s on one turn; see
-// docs/plans/writer-latency-investigation.md).
+// https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/writer-latency-investigation.md).
 //
 // The write tools check `getTopic` themselves rather than relying on the store
 // to reject an unknown name, so a missing topic is a normal tool error rather

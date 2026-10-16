@@ -67,4 +67,4 @@ turns it into the schedule. Tapping the phrase keeps the words as plain text.
 ## Ideas
 
 - Zero proposes a Project and Tasks from a loose Task, and commits only after
-  you confirm. See [`todo-task-to-project-ai.md`](../plans/todo-task-to-project-ai.md).
+  you confirm. See [`todo-task-to-project-ai.md`](https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/todo-task-to-project-ai.md).

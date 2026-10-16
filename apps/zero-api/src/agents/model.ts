@@ -45,7 +45,7 @@ export interface ModelSelection {
 
 // Every agent reasons at `high`. This is load-bearing: the model family defaults
 // to `medium`, and Zero's quality case for the cheap tier rests on `high` (see
-// docs/plans/openai-gpt56-luna.md). A silent drop here is a silent quality drop.
+// https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/openai-gpt56-luna.md). A silent drop here is a silent quality drop.
 export const DEFAULT_EFFORT: Effort = "high";
 
 // Per-agent effort overrides, mirroring AGENT_MODEL_OVERRIDES. Empty: every

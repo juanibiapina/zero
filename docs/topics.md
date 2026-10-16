@@ -310,7 +310,7 @@ document in generated tokens, growing with the topic without bound: on
 2026-07-29 the per-turn writer reached 13,856 output tokens in a single 298s generation,
 took 76% of the day's LLM time and 69% of its spend, and the wall time landed on
 the *next* message, since turns drain serially per DO. Anchored edits make a
-write cost the change. See `docs/plans/writer-latency-investigation.md` for the
+write cost the change. See `https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/writer-latency-investigation.md` for the
 measurements. The learner prompt also asks it to split a subject into a new linked
 topic once a body passes roughly 2,000 characters, so bodies stop growing without
 limit in the first place.

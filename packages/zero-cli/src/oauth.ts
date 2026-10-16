@@ -8,7 +8,7 @@
  * instead of the org-wide `zv_` key that also runs CI.
  *
  * Shape forced by the identity provider (all measured against the live
- * instance, see docs/plans/cli-oidc-login.md):
+ * instance, see https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/cli-oidc-login.md):
  *
  * - Authorization code + PKCE S256 only; there is no device flow, so a headless
  *   box needs a forwarded port or an API key.
