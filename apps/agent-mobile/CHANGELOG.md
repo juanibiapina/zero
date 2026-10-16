@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-16: Change long project descriptions to show their first lines with a More button, so your tasks stay on screen. Tap the description to edit it.
+
 - 2026-10-15: Add medicines you take only when needed: count the pills you have, tap Take each time you take one, and see when you took it. They sit under their own As needed heading in your medicines list.
 
 - 2026-10-15: Keep a task's drawer open when you change its date or project, so you can keep editing. The drawer shows the new date or project.

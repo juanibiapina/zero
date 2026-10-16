@@ -37,6 +37,7 @@ import { reportTodoError } from "@/lib/todo-feedback";
 import { useTodoAdd, type TodoAddKind } from "@/components/todo-composer";
 import { useLocalDay } from "@/lib/local-day";
 import { EmojiGrid } from "@/components/icon-picker";
+import { ProjectDescription } from "@/components/project-description";
 import {
   isBasisStale,
   compareByOrder,
@@ -209,8 +210,8 @@ function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
         description={
           <ProjectDescription
             key={`description-${project.id}`}
-            project={project}
-            onEdit={commitEdit}
+            value={project.description}
+            onCommit={(description) => commitEdit(project.id, { description })}
           />
         }
         onState={(state) => {
@@ -932,33 +933,3 @@ function ProjectRelations({
   );
 }
 
-// The project's description: its statement of intent, an always-visible editable
-// subtitle under the title (above the work). Commits on blur (not per keystroke)
-// and can be cleared to null. Seeded once at mount (single-project route).
-function ProjectDescription({
-  project,
-  onEdit,
-}: {
-  project: Project;
-  onEdit: (id: string, fields: ProjectEditFields) => void;
-}) {
-  const [description, setDescription] = useState(project.description ?? "");
-
-  const commit = () => {
-    const next = description.trim() === "" ? null : description;
-    if ((next ?? null) === (project.description ?? null)) return;
-    onEdit(project.id, { description: next });
-  };
-
-  return (
-    <textarea
-      value={description}
-      aria-label="Project description"
-      rows={2}
-      placeholder="What outcome are you after, and why does it matter?"
-      onChange={(e) => setDescription(e.target.value)}
-      onBlur={commit}
-      className="w-full resize-none border-0 bg-transparent p-0 text-base text-muted-foreground outline-none placeholder:text-muted-foreground/60 focus-visible:ring-0"
-    />
-  );
-}

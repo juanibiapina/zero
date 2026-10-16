@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-16: Fix long project descriptions showing a small scrolling box. Long descriptions now show their first lines with a More button, and open in full when you click them to edit.
+
 - 2026-10-15: Add medicines you take only when needed: count the pills you have, press Take each time you take one, and see when you took it. They sit under their own As needed heading in your medicines list.
 
 - 2026-10-15: Keep a task's drawer open when you change its date or project, so you can keep editing. The drawer shows the new date or project.

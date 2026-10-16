@@ -45,6 +45,7 @@ import {
 } from 'react-native';
 import { BackRow } from '@/components/back-row';
 import { EmojiPickerSheet } from '@/components/emoji-picker-sheet';
+import { ProjectDescription } from '@/components/project-description';
 import { Input } from '@/components/ui/input';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
@@ -898,27 +899,3 @@ function ProjectWaits({
   );
 }
 
-// The project's description input is deliberately shallow: the workspace owns
-// its draft and decides when actions and lifecycle events flush it.
-function ProjectDescription({
-  value,
-  onChange,
-  onBlur,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  onBlur: () => void;
-}) {
-  return (
-    <Input
-      value={value}
-      onChangeText={onChange}
-      onBlur={onBlur}
-      multiline
-      placeholder="What outcome are you after, and why does it matter?"
-      accessibilityLabel="Project description"
-      placeholderTextColorClassName="text-foreground-secondary"
-      className="text-subtitle"
-    />
-  );
-}

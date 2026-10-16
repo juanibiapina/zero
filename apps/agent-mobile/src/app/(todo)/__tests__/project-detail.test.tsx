@@ -216,6 +216,24 @@ describe('ProjectDetailScreen', () => {
       .toBe('Finish a community race'));
   });
 
+  it('reads a saved description as text and edits it on tap', async () => {
+    const screen = await renderScreen({
+      projects: [project('1', 'Run a 5K', { description: 'Finish a community race' })],
+    });
+    const text = await waitFor(() => screen.getAllByText('Finish a community race')[0]);
+    expect(screen.queryByLabelText('Project description')).toBeNull();
+
+    await fireEvent.press(text);
+    const input = screen.getByLabelText('Project description');
+    expect(screen.getByDisplayValue('Finish a community race')).toBeTruthy();
+    await fireEvent.changeText(input, 'Finish a half marathon');
+    await fireEvent(input, 'blur');
+
+    await waitFor(() => expect(screen.data.replica!.projects.collection.get('1')?.description)
+      .toBe('Finish a half marathon'));
+    expect(screen.queryByLabelText('Project description')).toBeNull();
+  });
+
   it('keeps the manual icon picker but hides account-only suggestions for guests', async () => {
     const fetch = jest.spyOn(global, 'fetch');
     const screen = await renderScreen({}, true);

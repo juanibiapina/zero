@@ -341,6 +341,23 @@ describe("ProjectsPage", () => {
     ).toHaveValue("Run a 5K");
   });
 
+  it("reads a saved description as text and edits it on click", async () => {
+    setApi([{ ...project("1", "Run a 5K", "next"), description: "Finish a community race" }]);
+    renderApp(["/projects/1"]);
+    const text = await screen.findByRole("button", { name: /Edit project description:\s*Finish a community race/ });
+    expect(screen.queryByRole("textbox", { name: "Project description" })).not.toBeInTheDocument();
+
+    fireEvent.click(text);
+    const field = screen.getByRole("textbox", { name: "Project description" });
+    expect(field).toHaveValue("Finish a community race");
+    expect(field).toHaveFocus();
+    fireEvent.change(field, { target: { value: "Finish a half marathon" } });
+    fireEvent.blur(field);
+
+    await waitFor(() => expect(h.replica!.projects.collection.get("1")?.description).toBe("Finish a half marathon"));
+    expect(screen.getByRole("button", { name: /Edit project description:\s*Finish a half marathon/ })).toBeInTheDocument();
+  });
+
   it("adds a task to a project from its detail screen", async () => {
     setApi([project("1", "Run a 5K", "next")]);
     renderApp();
