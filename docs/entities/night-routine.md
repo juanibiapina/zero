@@ -38,8 +38,8 @@ step.
 
 A 🌙 button in Home's header, from the opening time until the night closes,
 when the routine has steps. It opens the Night routine page, which Browse also
-lists. The page shows the open steps as rows with a circle, a collapsed "Done tonight (N)" with the times, and a quiet Going to
-bed row with a bed icon. The + button adds a step. Tapping a step renames or removes it;
+lists. The page shows the open steps as rows with a circle and a collapsed "Done tonight (N)" with the times. A round bed button
+left of the + is Going to bed. The + button adds a step. Tapping a step renames or removes it;
 holding and dragging it reorders it. After Going to bed the page shows "Good
 night · 1 of 2 done · bed at 23:42" and the steps left undone. Back returns to
 where you opened it: Home from the 🌙 button, Browse from Browse.

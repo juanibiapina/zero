@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-19: Move Going to bed in the Night routine to a round bed button next to the + button.
+
 - 2026-10-19: Remove the opening time setting from the Night routine page. The 🌙 button shows on Home from 21:00.
 
 - 2026-10-19: Change the Night routine so Back returns to Home when you opened it from the 🌙 button, and give Going to bed a calmer look. Its History is hidden for now.

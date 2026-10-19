@@ -156,9 +156,6 @@ function NightRoutineContent({ replica, view, onSystemBack }: { replica: TaskdoR
           )) : null}
         </View>
       ) : null}
-      {!closed ? (
-        <GoingToBedRow onPress={goToBed} />
-      ) : null}
     </View>
   );
 
@@ -182,6 +179,7 @@ function NightRoutineContent({ replica, view, onSystemBack }: { replica: TaskdoR
         onRename={(step, text) => { setEditing(null); setError(null); routine.renameStep(step.id, text).catch(fail); }}
         onRemove={(step) => { setEditing(null); setError(null); routine.removeStep(step.id).catch(fail); }}
       />
+      {closed || add.isOpen ? null : <GoingToBedButton onPress={goToBed} />}
       {closed ? null : add.element}
     </>
   );
@@ -189,28 +187,30 @@ function NightRoutineContent({ replica, view, onSystemBack }: { replica: TaskdoR
 
 const BEDTIME_ICON = Icon.select({ ios: 'bed.double', android: import('@expo/material-symbols/bedtime.xml') });
 
-function GoingToBedRow({ onPress }: { onPress: () => void }) {
+const FAB_SIZE = 56;
+const FAB_EDGE_GAP = 24;
+const FAB_SPACING = 16;
+
+function GoingToBedButton({ onPress }: { onPress: () => void }) {
   const accent = useColor('--color-accent');
-  const ripple = useColor('--color-ripple');
   return (
-    <View className="mx-screen-x mt-4 overflow-hidden rounded-2xl bg-surface-muted" style={{ borderCurve: 'continuous' }}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Going to bed"
-        accessibilityHint="Ends tonight's routine"
-        android_ripple={{ color: ripple }}
-        onPress={onPress}
-        className="min-h-14 flex-row items-center gap-3 px-4 py-3"
-      >
-        <View accessible={false} importantForAccessibility="no-hide-descendants">
-          <Host matchContents><Icon name={BEDTIME_ICON} size={22} color={accent} /></Host>
-        </View>
-        <View className="flex-1 gap-0.5">
-          <Text className="font-semibold">Going to bed</Text>
-          <Text variant="caption">Ends tonight. Steps left stay undone.</Text>
-        </View>
-      </Pressable>
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Going to bed"
+      onPress={onPress}
+      className="items-center justify-center rounded-full bg-surface shadow-raised"
+      style={{
+        position: 'absolute',
+        right: FAB_EDGE_GAP + FAB_SIZE + FAB_SPACING,
+        bottom: FAB_EDGE_GAP,
+        width: FAB_SIZE,
+        height: FAB_SIZE,
+      }}
+    >
+      <View accessible={false} importantForAccessibility="no-hide-descendants">
+        <Host matchContents><Icon name={BEDTIME_ICON} size={24} color={accent} /></Host>
+      </View>
+    </Pressable>
   );
 }
 

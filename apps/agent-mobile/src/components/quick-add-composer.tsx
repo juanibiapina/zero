@@ -41,6 +41,7 @@ export type QuickAddController = {
   element: ReactNode;
   open: (mode?: AddMode, project?: Project) => void;
   handleBack: () => boolean;
+  isOpen: boolean;
 };
 
 type Overlay = 'discard' | 'schedule' | 'project' | 'after' | 'icon';
@@ -552,7 +553,7 @@ export function useQuickAdd({
     </>
   );
 
-  return { element, open, handleBack };
+  return { element, open, handleBack, isOpen: adding };
 }
 
 function IconStrip({

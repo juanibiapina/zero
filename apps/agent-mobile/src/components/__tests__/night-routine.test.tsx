@@ -78,8 +78,10 @@ describe('Night routine', () => {
   it('adds a step with the + button', async () => {
     const { screen, data } = await open('2026-10-19T21:00:00', '/browse/night-routine', []);
     expect(screen.getByText('Add the steps of your night routine')).toBeTruthy();
+    expect(screen.getByLabelText('Going to bed')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Add'));
     expect(screen.queryByLabelText('Task')).toBeNull();
+    expect(screen.queryByLabelText('Going to bed')).toBeNull();
     const input = screen.getByPlaceholderText('Add a step');
     await fireEvent.changeText(input, 'Wechseldusche on legs');
     await fireEvent(input, 'submitEditing');
