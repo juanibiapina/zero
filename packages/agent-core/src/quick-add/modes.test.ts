@@ -19,6 +19,7 @@ describe("add-mode registry", () => {
       waiting: "Add a waiting condition",
       after: "Add an After project",
       project: "Add a project",
+      step: "Add a night routine step",
     };
     for (const mode of Object.keys(cases) as AddMode[]) {
       expect(ADD_MODE_LABEL[mode]).toBeTruthy();

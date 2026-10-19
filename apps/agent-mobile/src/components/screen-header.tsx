@@ -1,7 +1,7 @@
 import { useUser } from '@clerk/expo';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -174,7 +174,7 @@ function AccountControl() {
 
 // Account actions stay app-owned so signing out can safely checkpoint and
 // remove the local workspace before Clerk drops the session.
-export function ScreenHeader({ title, showSyncStatus = false, back }: { title: string; showSyncStatus?: boolean; back?: BackLink }) {
+export function ScreenHeader({ title, showSyncStatus = false, back, action }: { title: string; showSyncStatus?: boolean; back?: BackLink; action?: ReactNode }) {
   const insets = useSafeAreaInsets();
   if (back) {
     return (
@@ -193,6 +193,7 @@ export function ScreenHeader({ title, showSyncStatus = false, back }: { title: s
     >
       <Text variant="title">{title}</Text>
       <View className="flex-row items-center gap-2">
+        {action}
         {showSyncStatus ? <SyncStatusControl /> : null}
         <AccountControl />
       </View>

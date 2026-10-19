@@ -34,7 +34,8 @@ export type QuickAddSurface =
   | { kind: 'home' }
   | { kind: 'upcoming' }
   | { kind: 'projects' }
-  | { kind: 'project'; project: Project | null };
+  | { kind: 'project'; project: Project | null }
+  | { kind: 'night-routine' };
 
 export type QuickAddController = {
   element: ReactNode;
@@ -49,6 +50,7 @@ type Persisting = { isPersisted: { promise: Promise<unknown> } };
 const PROJECT_MODES: AddMode[] = ['task', 'waiting', 'after', 'project'];
 
 function modesFor(surface: QuickAddSurface['kind'], destination: Project | null): AddMode[] {
+  if (surface === 'night-routine') return ['step'];
   if (destination) return PROJECT_MODES;
   return surface === 'projects' ? ['project', 'task'] : ['task', 'project'];
 }
@@ -105,6 +107,7 @@ export function useQuickAdd({
     waiting: '',
     after: '',
     project: '',
+    step: '',
   });
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
@@ -149,7 +152,7 @@ export function useQuickAdd({
   const closeAdd = useCallback(() => {
     ignoreNextKeyboardHide.current = true;
     Keyboard.dismiss();
-    setDrafts({ waiting: '', after: '', project: '' });
+    setDrafts({ waiting: '', after: '', project: '', step: '' });
     setTaskDraft(TaskDraft.create());
     setAdding(false);
     setOverlay(null);
@@ -222,6 +225,11 @@ export function useQuickAdd({
     if (mode === 'waiting') {
       if (!contextProject) return;
       persistThen(replica.waits.addWaiting(contextProject.id, trimmed), closeAdd);
+      return;
+    }
+
+    if (mode === 'step') {
+      persistThen({ isPersisted: { promise: replica.nightRoutine.addStep(trimmed) } }, closeAdd);
       return;
     }
 
@@ -330,7 +338,9 @@ export function useQuickAdd({
         : 'Add waiting condition'
       : mode === 'project'
         ? 'Add project'
-        : 'Add';
+        : mode === 'step'
+          ? 'Add step'
+          : 'Add';
 
   const element = (
     <>

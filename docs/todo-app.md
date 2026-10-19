@@ -40,6 +40,8 @@ the connection returns.
 - Upcoming: Tasks with a future date.
 - Projects: Projects grouped by attention, each with its own workspace.
 - Medicines: medicine routines and their doses.
+- Night routine: the checklist before bed, on Home from its opening time and
+  always under Browse.
 
 Mobile is the main daily surface, and web is the companion. Both show the same
 model, and both work before sign-in.

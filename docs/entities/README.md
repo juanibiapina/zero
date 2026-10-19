@@ -43,21 +43,26 @@ lives in the code and in [`storage.md`](../storage.md) and [`mcp.md`](../mcp.md)
   Project is Done.
 - [Medicine](medicine.md): a daily routine of doses, with its Doses, or a
   medicine taken as needed, with its Intakes.
+- [Night routine](night-routine.md): the built-in checklist before bed, one
+  page per night.
 
 ## Interactions
 
 Read a row as "this block, when it meets that one".
 
-| | Task | Project | Waiting | After | Medicine |
-|---|---|---|---|---|---|
-| **Task** | Shares one manual order | Belongs to at most one. An arrived date makes it Active, a future date makes it Waiting until that day, no date keeps the Task off Home | Completing a Project Task offers to add what the Project now waits for | None. After never hides dated work | A restock Task belongs to it, shows 💊, and asks how many pills you got when completed |
-| **Project** | Deleting it deletes its Tasks | After another Project, through After | Owns any number. One open condition makes it Waiting | Completing it releases the Projects that wait for it. Undo restores them | None |
-| **Waiting** | None | Belongs to one Project and goes when it goes | Each resolves on its own | Outranks After | None |
-| **After** | None | Points from one Project to another. No cycles | Ranks below Waiting | Several on one Project must all resolve | None |
-| **Medicine** | A low supply adds one restock Task. Deleting it leaves its Tasks loose | None | None | None | Each Medicine has its own Doses, or its own Intakes when taken as needed |
+| | Task | Project | Waiting | After | Medicine | Night routine |
+|---|---|---|---|---|---|---|
+| **Task** | Shares one manual order | Belongs to at most one. An arrived date makes it Active, a future date makes it Waiting until that day, no date keeps the Task off Home | Completing a Project Task offers to add what the Project now waits for | None. After never hides dated work | A restock Task belongs to it, shows 💊, and asks how many pills you got when completed | None |
+| **Project** | Deleting it deletes its Tasks | After another Project, through After | Owns any number. One open condition makes it Waiting | Completing it releases the Projects that wait for it. Undo restores them | None | None |
+| **Waiting** | None | Belongs to one Project and goes when it goes | Each resolves on its own | Outranks After | None | None |
+| **After** | None | Points from one Project to another. No cycles | Ranks below Waiting | Several on one Project must all resolve | None | None |
+| **Medicine** | A low supply adds one restock Task. Deleting it leaves its Tasks loose | None | None | None | Each Medicine has its own Doses, or its own Intakes when taken as needed | None |
+| **Night routine** | None | None | None | None | None | One per user. Each night is a copy of the one before |
 
 Medicine stands apart from Projects on purpose. It never changes how much
-attention a Project needs; only its restock Tasks reach Home.
+attention a Project needs; only its restock Tasks reach Home. The Night routine
+stands apart from every block: its steps are not Tasks and never reach the work
+lists.
 
 Places and agents:
 
@@ -68,6 +73,7 @@ Places and agents:
 | **Waiting** | | | In its Project | | List, add, resolve, delete |
 | **After** | | | In its Project, and as its own Projects section | | List, add, delete |
 | **Medicine** | Its restock Tasks, as loose Tasks | | | Its own list and detail | List only |
+| **Night routine** | A 🌙 button from its opening time | | | | None |
 
 ## Removed blocks
 

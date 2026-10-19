@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-19: Add a Night routine: a checklist that shows as a 🌙 button on Home from 21:00, or the time you choose, and is always under Browse. Tick off steps, press Going to bed to end the night, and see which nights you did each step. Its steps never appear as tasks.
+
 - 2026-10-16: Change long project descriptions to show their first lines with a More button, so your tasks stay on screen. Tap the description to edit it.
 
 - 2026-10-15: Add medicines you take only when needed: count the pills you have, tap Take each time you take one, and see when you took it. They sit under their own As needed heading in your medicines list.
