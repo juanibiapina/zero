@@ -193,8 +193,8 @@ export function ScreenHeader({ title, showSyncStatus = false, back, action }: { 
     >
       <Text variant="title">{title}</Text>
       <View className="flex-row items-center gap-2">
-        {action}
         {showSyncStatus ? <SyncStatusControl /> : null}
+        {action}
         <AccountControl />
       </View>
     </View>
