@@ -51,8 +51,8 @@ describe('Night routine', () => {
     await fireEvent.press(await waitFor(() => screen.getByLabelText('Night routine')));
     expect(result.getPathname()).toBe('/browse/night-routine');
     expect(screen.getByText('Shower')).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText('Back to Browse'));
-    expect(result.getPathname()).toBe('/browse');
+    await fireEvent.press(screen.getByLabelText('Back to Home'));
+    expect(result.getPathname()).toBe('/');
   });
 
   it('shows the moon when the app returns after the opening time', async () => {
@@ -71,6 +71,8 @@ describe('Night routine', () => {
     await fireEvent.press(screen.getByLabelText('Night routine'));
     expect(result.getPathname()).toBe('/browse/night-routine');
     expect(screen.getByLabelText('Change opening time, 21:00')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Back to Browse'));
+    expect(result.getPathname()).toBe('/browse');
   });
 
   it('adds a step with the + button', async () => {

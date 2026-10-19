@@ -32,19 +32,19 @@ step.
   shows on Home. It can be any time from 08:00 to 23:59. The routine itself is
   always open from Browse, and a step done before the opening time counts for
   that night.
-- History counts, per step, the nights it was done among the last seven since
-  the step was added. There are no streaks.
+- Every night is kept with the steps done and the bedtime, for a History view
+  later. The page does not show it yet.
 
 ## How it looks
 
 A 🌙 button in Home's header, from the opening time until the night closes,
 when the routine has steps. It opens the Night routine page, which Browse also
 lists. The page shows the opening time as a chip, the open steps as rows with a
-circle, a collapsed "Done tonight (N)" with the times, a Going to bed button,
-and History. The + button adds a step. Tapping a step renames or removes it;
+circle, a collapsed "Done tonight (N)" with the times, and a quiet Going to
+bed row with a bed icon. The + button adds a step. Tapping a step renames or removes it;
 holding and dragging it reorders it. After Going to bed the page shows "Good
 night · 1 of 2 done · bed at 23:42" and the steps left undone. Back returns to
-Browse.
+where you opened it: Home from the 🌙 button, Browse from Browse.
 
 ## Interactions
 

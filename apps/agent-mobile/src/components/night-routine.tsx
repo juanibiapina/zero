@@ -1,6 +1,7 @@
+import { Host, Icon } from '@expo/ui';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { messageOf, toast, type NightStep, type NightView, type TaskdoReplica } from '@zero/agent-core';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, View } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
@@ -19,12 +20,16 @@ import { useNightRoutine } from '@/lib/night-routine';
 import { useColor } from '@/lib/theme';
 
 const NIGHT_ROUTINE_HREF = '/browse/night-routine';
-const BACK_TO_BROWSE = { label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: () => router.dismissTo('/browse') };
+const backToBrowse = () => router.dismissTo('/browse');
+const backToHome = () => {
+  router.dismissTo('/browse');
+  router.navigate('/');
+};
+const BACK_TO_BROWSE = { label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: backToBrowse };
+const BACK_TO_HOME = { label: 'Home', accessibilityLabel: 'Back to Home', onPress: backToHome };
 
 const clockOf = (date: Date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 const timeOf = (iso: string) => clockOf(new Date(iso));
-const nightLabel = (night: string) =>
-  new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(`${night}T12:00:00`));
 
 export function NightRoutineButton() {
   const { view } = useNightRoutine();
@@ -33,7 +38,7 @@ export function NightRoutineButton() {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Night routine"
-      onPress={() => router.navigate(NIGHT_ROUTINE_HREF, { withAnchor: true })}
+      onPress={() => router.navigate({ pathname: NIGHT_ROUTINE_HREF, params: { from: 'home' } }, { withAnchor: true })}
       className="h-12 w-12 items-center justify-center rounded-full"
     >
       <Text className="text-[22px]">🌙</Text>
@@ -43,11 +48,13 @@ export function NightRoutineButton() {
 
 export function NightRoutineScreen() {
   const { replica, view } = useNightRoutine();
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const fromHome = from === 'home';
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Night routine" back={BACK_TO_BROWSE} />
+      <ScreenHeader title="Night routine" back={fromHome ? BACK_TO_HOME : BACK_TO_BROWSE} />
       {replica && view ? (
-        <NightRoutineContent replica={replica} view={view} />
+        <NightRoutineContent replica={replica} view={view} onSystemBack={fromHome ? backToHome : null} />
       ) : (
         <Text variant="subtitle" className="px-screen-x py-6">Opening your night routine…</Text>
       )}
@@ -55,7 +62,7 @@ export function NightRoutineScreen() {
   );
 }
 
-function NightRoutineContent({ replica, view }: { replica: TaskdoReplica; view: NightView }) {
+function NightRoutineContent({ replica, view, onSystemBack }: { replica: TaskdoReplica; view: NightView; onSystemBack: (() => void) | null }) {
   const insets = useSafeAreaInsets();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<NightStep | null>(null);
@@ -66,10 +73,16 @@ function NightRoutineContent({ replica, view }: { replica: TaskdoReplica; view: 
   const fail = useCallback((cause: unknown) => setError(messageOf(cause)), []);
 
   const add = useQuickAdd({ replica, surface: { kind: 'night-routine' }, onError: setError });
+  const handleAddBack = add.handleBack;
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', add.handleBack);
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (handleAddBack()) return true;
+      if (!onSystemBack) return false;
+      onSystemBack();
+      return true;
+    });
     return () => sub.remove();
-  }, [add.handleBack]);
+  }, [handleAddBack, onSystemBack]);
 
   const complete = useCallback((step: NightStep) => {
     setError(null);
@@ -153,18 +166,8 @@ function NightRoutineContent({ replica, view }: { replica: TaskdoReplica; view: 
         </View>
       ) : null}
       {!closed ? (
-        <View className="px-screen-x pt-2">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Going to bed"
-            onPress={goToBed}
-            className="min-h-12 items-center justify-center rounded-full bg-accent"
-          >
-            <Text className="font-semibold text-on-accent">Going to bed</Text>
-          </Pressable>
-        </View>
+        <GoingToBedRow onPress={goToBed} />
       ) : null}
-      <History view={view} />
     </View>
   );
 
@@ -207,6 +210,33 @@ function NightRoutineContent({ replica, view }: { replica: TaskdoReplica; view: 
   );
 }
 
+const BEDTIME_ICON = Icon.select({ ios: 'bed.double', android: import('@expo/material-symbols/bedtime.xml') });
+
+function GoingToBedRow({ onPress }: { onPress: () => void }) {
+  const accent = useColor('--color-accent');
+  const ripple = useColor('--color-ripple');
+  return (
+    <View className="mx-screen-x mt-4 overflow-hidden rounded-2xl bg-surface-muted" style={{ borderCurve: 'continuous' }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Going to bed"
+        accessibilityHint="Ends tonight's routine"
+        android_ripple={{ color: ripple }}
+        onPress={onPress}
+        className="min-h-14 flex-row items-center gap-3 px-4 py-3"
+      >
+        <View accessible={false} importantForAccessibility="no-hide-descendants">
+          <Host matchContents><Icon name={BEDTIME_ICON} size={22} color={accent} /></Host>
+        </View>
+        <View className="flex-1 gap-0.5">
+          <Text className="font-semibold">Going to bed</Text>
+          <Text variant="caption">Ends tonight. Steps left stay undone.</Text>
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
 function OpenStepRow({ step, onComplete, onOpen }: { step: NightStep; onComplete: (step: NightStep) => void; onOpen: (step: NightStep) => void }) {
   const drag = useReorderableDrag();
   const ripple = useColor('--color-ripple');
@@ -242,35 +272,6 @@ function ClosedSummary({ view }: { view: NightView }) {
           {undone.map((step) => <Text key={step.id} variant="subtitle">{step.text}</Text>)}
         </View>
       ) : null}
-    </View>
-  );
-}
-
-function History({ view }: { view: NightView }) {
-  const withCounts = view.steps.filter((step) => view.counts[step.id]);
-  if (withCounts.length === 0 && view.history.length === 0) return null;
-  return (
-    <View className="gap-2 px-screen-x pt-6">
-      <Text accessibilityRole="header" variant="section">History</Text>
-      {withCounts.map((step) => {
-        const count = view.counts[step.id]!;
-        return (
-          <Text key={step.id} variant="subtitle" style={{ fontVariant: ['tabular-nums'] }}>
-            {`${step.text} · ${count.done} of the last ${count.nights} ${count.nights === 1 ? 'night' : 'nights'}`}
-          </Text>
-        );
-      })}
-      {view.history.slice(0, 14).map((night) => {
-        const done = night.steps.filter((step) => step.doneAt != null);
-        return (
-          <View key={night.night} className="gap-0.5 border-b border-divider py-2">
-            <Text className="font-medium">
-              {`${nightLabel(night.night)} · ${done.length} of ${night.steps.length}${night.wentToBedAt ? ` · bed at ${timeOf(night.wentToBedAt)}` : ''}`}
-            </Text>
-            {done.length > 0 ? <Text variant="caption">{done.map((step) => step.text).join(', ')}</Text> : null}
-          </View>
-        );
-      })}
     </View>
   );
 }
