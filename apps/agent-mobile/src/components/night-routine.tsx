@@ -1,5 +1,4 @@
 import { Host, Icon } from '@expo/ui';
-import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { messageOf, toast, type NightStep, type NightView, type TaskdoReplica } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -9,7 +8,6 @@ import ReorderableList, { useReorderableDrag, type ReorderableListReorderEvent }
 import { LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Chip } from '@/components/medicine-editor';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ScreenHeader } from '@/components/screen-header';
 import { Input } from '@/components/ui/input';
@@ -28,8 +26,10 @@ const backToHome = () => {
 const BACK_TO_BROWSE = { label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: backToBrowse };
 const BACK_TO_HOME = { label: 'Home', accessibilityLabel: 'Back to Home', onPress: backToHome };
 
-const clockOf = (date: Date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-const timeOf = (iso: string) => clockOf(new Date(iso));
+const timeOf = (iso: string) => {
+  const date = new Date(iso);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+};
 
 export function NightRoutineButton() {
   const { view } = useNightRoutine();
@@ -67,7 +67,6 @@ function NightRoutineContent({ replica, view, onSystemBack }: { replica: TaskdoR
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<NightStep | null>(null);
   const [showDone, setShowDone] = useState(false);
-  const [pickingTime, setPickingTime] = useState(false);
   const closed = view.state === 'closed';
   const routine = replica.nightRoutine;
   const fail = useCallback((cause: unknown) => setError(messageOf(cause)), []);
@@ -115,14 +114,6 @@ function NightRoutineContent({ replica, view, onSystemBack }: { replica: TaskdoR
 
   const header = (
     <View className="gap-1 px-screen-x pb-2">
-      <View className="flex-row items-center gap-2">
-        <Chip
-          label={`Opens at ${view.opensAt}`}
-          accessibilityLabel={`Change opening time, ${view.opensAt}`}
-          disabled={closed}
-          onPress={() => setPickingTime(true)}
-        />
-      </View>
       {error ? <Text variant="error" selectable>{error}</Text> : null}
       {closed ? <ClosedSummary view={view} /> : null}
       {!closed && view.steps.length === 0 ? (
@@ -185,20 +176,6 @@ function NightRoutineContent({ replica, view, onSystemBack }: { replica: TaskdoR
         onReorder={onReorder}
         keyboardShouldPersistTaps="handled"
       />
-      {pickingTime ? (
-        <DateTimePicker
-          value={new Date(`2000-01-01T${view.opensAt}:00`)}
-          mode="time"
-          is24Hour
-          onChange={(event, date) => {
-            setPickingTime(false);
-            if (event.type === 'set' && date) {
-              setError(null);
-              routine.setOpensAt(clockOf(date)).catch(fail);
-            }
-          }}
-        />
-      ) : null}
       <StepSheet
         step={editing}
         onClose={() => setEditing(null)}

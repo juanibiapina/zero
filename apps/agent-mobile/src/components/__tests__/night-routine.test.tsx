@@ -70,7 +70,7 @@ describe('Night routine', () => {
     const { screen, result } = await open('2026-10-19T14:00:00', '/browse');
     await fireEvent.press(screen.getByLabelText('Night routine'));
     expect(result.getPathname()).toBe('/browse/night-routine');
-    expect(screen.getByLabelText('Change opening time, 21:00')).toBeTruthy();
+    expect(screen.getByText('Shower')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Back to Browse'));
     expect(result.getPathname()).toBe('/browse');
   });
@@ -108,7 +108,6 @@ describe('Night routine', () => {
     await waitFor(() => expect(screen.getByText('Good night · 1 of 2 done · bed at 23:42')).toBeTruthy());
     expect(screen.queryByLabelText('Complete "Shower"')).toBeNull();
     expect(screen.queryByLabelText('Add')).toBeNull();
-    expect(screen.getByLabelText('Change opening time, 21:00').props.accessibilityState.disabled).toBe(true);
 
     const toast = defaultToastController.getSnapshot()[0];
     await act(async () => toast?.action?.onPress());

@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-19: Remove the opening time setting from the Night routine page. The 🌙 button shows on Home from 21:00.
+
 - 2026-10-19: Change the Night routine so Back returns to Home when you opened it from the 🌙 button, and give Going to bed a calmer look. Its History is hidden for now.
 
 - 2026-10-19: Add a Night routine: a checklist that shows as a 🌙 button on Home from 21:00, or the time you choose, and is always under Browse. Tick off steps, press Going to bed to end the night, and see which nights you did each step. Its steps never appear as tasks.
