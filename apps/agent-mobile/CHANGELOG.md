@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-20: Fix "App isn't installed" when you open Zero right after leaving it. The Home icon now updates while the app is open.
+
 - 2026-10-19: Show the update sign on Home to the left of the 🌙 button.
 
 - 2026-10-19: Move Going to bed in the Night routine to a round bed button next to the + button.

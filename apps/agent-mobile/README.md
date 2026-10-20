@@ -225,11 +225,18 @@ and matching monochrome silhouettes. The local `home-app-icon` native module
 leaves `MainActivity` enabled for Expo dev-client launches, the app scheme, and
 Clerk's hosted callback; only its six aliases carry the launcher filter. The app
 derives the state from the same hydrated `homeTasks` list Home renders, queues
-only a changed count bucket, and applies it when the app enters the background.
-Guest and signed-in workspaces both drive the count; safe sign-out opens a fresh
-guest Home, which selects the empty checkmark once loaded. Opening or inaccessible
+only a changed count bucket, and applies it while the app is in the foreground.
+Android tells the launcher about an alias change about one second late, and a tap
+on a launcher entry whose alias is off shows "App isn't installed", so the switch
+happens while Zero covers the launcher. The module turns the outgoing count
+aliases back to their manifest state (`DEFAULT`, which is off) instead of
+`DISABLED`: Android closes a task rooted at a `DISABLED` alias, but leaves it
+open for `DEFAULT`. The install icon's alias is on in the manifest, so leaving it
+needs `DISABLED`; that one switch per install waits for the background. Guest and
+signed-in workspaces both drive the count; safe sign-out opens a fresh guest
+Home, which selects the empty checkmark once loaded. Opening or inaccessible
 workspaces queue no count. Remote or date-based changes made while the process is
-stopped appear after the next app sync and background transition. iOS, the splash
+stopped appear after the next app sync while the app is open. iOS, the splash
 mark, the tab icon, and web remain static.
 
 Launcher and splash changes require a new native build. Application UI colors
@@ -480,8 +487,9 @@ E2E_LAUNCHER_ICON_PROOF=1 pnpm --filter @zero/agent-mobile e2e:pixel
 ```
 
 This mode enables launcher synchronization in the isolated hermetic workspace.
-It checks the real launcher alias before and after backgrounding, through all
-count buckets, account binding, completion, and safe sign-out. Cleanup restores
+It checks that the real launcher alias changes while the app is open and the app
+stays on top, and that going Home changes nothing, through all count buckets,
+account binding, completion, and safe sign-out. Cleanup restores
 all six aliases' original enabled settings, including manifest defaults, on
 success, failure, or interruption.
 

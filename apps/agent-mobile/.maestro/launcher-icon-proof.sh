@@ -35,8 +35,19 @@ assert_launcher_icon() {
   return 1
 }
 
+assert_app_on_top() {
+  local checkpoint="$1" top
+  top="$(adb_device shell dumpsys activity activities | grep -m1 topResumedActivity | tr -d '\r')"
+  printf '%s\n' "$top" > "$ARTIFACT_DIR/top-$checkpoint.txt"
+  if [[ "$top" != *"$PACKAGE/.MainActivity"* ]]; then
+    printf 'Expected %s/.MainActivity on top at %s; found: %s\n' "$PACKAGE" "$checkpoint" "$top" \
+      | tee "$ARTIFACT_DIR/launcher-check.txt" >&2
+    return 1
+  fi
+}
+
 run_launcher_phase() {
-  local action="$1" number="$2" foreground="$3" background="$4"
+  local action="$1" number="$2" expected="$3" switch_in="${4:-foreground}"
   local checkpoint="$action-$number"
   STAGE="launch launcher $checkpoint"
   if [[ "$action" == "ready" ]]; then
@@ -53,30 +64,36 @@ run_launcher_phase() {
     --format junit --output "$ARTIFACT_DIR/maestro/launcher-$checkpoint.xml" \
     --debug-output "$ARTIFACT_DIR/maestro/launcher-$checkpoint" \
     >> "$ARTIFACT_DIR/maestro.log" 2>&1
-  STAGE="launcher foreground $checkpoint"
-  if [[ -n "$foreground" ]]; then
-    assert_launcher_icon "$foreground" "$checkpoint-foreground"
+  if [[ "$switch_in" == "background" ]]; then
+    adb_device shell input keyevent KEYCODE_HOME
+    STAGE="launcher background $checkpoint"
+    assert_launcher_icon "$expected" "$checkpoint-background" 30
+    return
   fi
+  STAGE="launcher foreground $checkpoint"
+  assert_launcher_icon "$expected" "$checkpoint-foreground" 10
+  sleep 2
+  assert_app_on_top "$checkpoint"
   adb_device shell input keyevent KEYCODE_HOME
   STAGE="launcher background $checkpoint"
-  assert_launcher_icon "$background" "$checkpoint-background" 30
+  assert_launcher_icon "$expected" "$checkpoint-background"
 }
 
 run_launcher_icon_proof() {
   local count remaining tasks_response="" projects_response="" other_tasks="" other_projects=""
   local icons=(Empty OneTask TwoTasks ThreeTasks FourPlusTasks FourPlusTasks)
-  run_launcher_phase ready 0 '' Empty
+  run_launcher_phase ready 0 Empty background
   for count in 1 2 3 4 5; do
-    run_launcher_phase add "$count" "${icons[$((count - 1))]}" "${icons[$count]}"
+    run_launcher_phase add "$count" "${icons[$count]}"
   done
-  run_launcher_phase bind 0 FourPlusTasks FourPlusTasks
+  run_launcher_phase bind 0 FourPlusTasks
   # Complete four Tasks, then sign out with one remaining so the fresh guest's
   # checkmark proves that the account count cannot survive sign-out.
   for count in 1 2 3 4; do
     remaining=$((5 - count))
-    run_launcher_phase complete "$count" "${icons[$((remaining + 1))]}" "${icons[$remaining]}"
+    run_launcher_phase complete "$count" "${icons[$remaining]}"
   done
-  run_launcher_phase sign-out 0 OneTask Empty
+  run_launcher_phase sign-out 0 Empty
 
   STAGE="postcondition launcher proof"
   for count in $(seq 1 30); do
