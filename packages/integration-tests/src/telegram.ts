@@ -36,26 +36,6 @@ export const resolveBotId = async (
   return entity.id;
 };
 
-export interface SentMessage {
-  id: number;
-  date: number;
-}
-
-// Send into a forum topic by setting `replyTo` to the topic header id
-// (== Bot API `message_thread_id`).
-export const sendToTopic = async (
-  client: TelegramClient,
-  chatId: string,
-  threadId: number,
-  text: string,
-): Promise<SentMessage> => {
-  const result = await client.sendMessage(chatId, {
-    message: text,
-    replyTo: threadId,
-  });
-  return { id: result.id, date: result.date };
-};
-
 export interface PollOptions {
   chatId: string;
   botId: BigInteger;

@@ -18,7 +18,6 @@
     "@clerk/hono": "^0.1.59",
     "@zero/auth": "workspace:*",
     "@zero/errors-core": "workspace:*",
-    "@zero/vault-core": "workspace:*",
     "do-orm": "github:juanibiapina/do-orm",
     "hono": "^4.12.33",
     "zod": "^4.4.3"

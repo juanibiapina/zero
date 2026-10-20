@@ -96,28 +96,28 @@ Routes read `c.get("userId")` and access KV directly via `c.env.KV`.
 
 ## Routes Layer
 
-**Reference:** `apps/zero-api/src/routes/telegram.ts`
+**Reference:** `apps/zero-api/src/routes/tasks.ts`
 
 Routes are defined with `OpenAPIHono` + Zod schemas. Each `createRoute()`
 sits immediately above its `router.openapi()` handler so the OpenAPI spec
 and the implementation read as a single unit.
 
 ```typescript
-export const createTelegramRoutes = () => {
+export const createTasksRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-  const getRoute = createRoute({ ... });
-  router.openapi(getRoute, async (c) => {
-    const clerkUserId = c.get("userId");
-    const telegramId = await c.env.KV.get(`clerk:${clerkUserId}`);
-    return c.json({ telegramId }, 200);
+  const listRoute = createRoute({ ... });
+  router.openapi(listRoute, async (c) => {
+    const userId = c.get("userId");
+    const tasks = await getTaskDO(c.env, userId).listTasks();
+    return c.json({ tasks }, 200);
   });
 
   return router;
 };
 ```
 
-Routers are mounted in `app.ts` via `app.route("/", createTelegramRoutes())`.
+Routers are mounted in `app.ts` via `app.route("/", createTasksRoutes())`.
 
 ## Durable Object Layer
 

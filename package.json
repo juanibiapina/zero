@@ -24,9 +24,6 @@
     "turbo": "^2.10.8",
     "wrangler": "4.118.0"
   },
-  "dependencies": {
-    "drizzle-orm": "^0.45.2"
-  },
   "pnpm": {
     "overrides": {
       "@cloudflare/workers-types": "5.20260801.1"

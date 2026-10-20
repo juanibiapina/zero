@@ -16,9 +16,6 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "zod": "^4.4.3"
-  },
   "devDependencies": {
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",

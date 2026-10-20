@@ -16,8 +16,3 @@ type Ctx = Context<{ Bindings: Env; Variables: { userId: string; orgId: string }
 
 export const getErrorsDO = (c: Ctx): DurableObjectStub<ErrorsDO> =>
   c.env.ERRORSDO.get(c.env.ERRORSDO.idFromName(c.get("orgId")));
-
-export const getErrorsDOForOrg = (
-  env: Env,
-  orgId: string,
-): DurableObjectStub<ErrorsDO> => env.ERRORSDO.get(env.ERRORSDO.idFromName(orgId));
