@@ -117,17 +117,6 @@ export interface AttachmentMeta {
     | "sticker";
 }
 
-// Image MIME types view_image can return as native Anthropic image blocks.
-const IMAGE_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-]);
-
-export const isImage = (mimeType: string): boolean =>
-  IMAGE_MIME_TYPES.has(mimeType);
-
 const isPdfAttachment = (attachment: AttachmentMeta): boolean =>
   attachment.kind === "document" &&
   (attachment.mimeType === "application/pdf" || attachment.filename.toLowerCase().endsWith(".pdf"));

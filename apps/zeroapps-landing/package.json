@@ -14,9 +14,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@zero/eslint-config": "workspace:*",
-    "@zero/typescript-config": "workspace:*",
     "astro": "^7.1.6",
-    "astro-eslint-parser": "^3.0.0",
     "eslint": "10.8.0",
     "eslint-plugin-astro": "^3.0.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
