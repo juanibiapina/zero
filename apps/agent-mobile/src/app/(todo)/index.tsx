@@ -29,6 +29,7 @@ import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 
 import { useTodoDataContext } from '@/lib/todo-data-context';
 import { NightRoutineButton } from '@/components/night-routine';
+import { RecordButton } from '@/components/record-button';
 import { ProjectListRow } from '@/components/project-list-row';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
@@ -194,7 +195,7 @@ function TodoHomeScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Home" showSyncStatus action={<NightRoutineButton />} />
+      <ScreenHeader title="Home" showSyncStatus action={<><RecordButton /><NightRoutineButton /></>} />
       {RUNTIME_PROFILE.hermetic && todoData ? (
         <View className="flex-row gap-4 px-screen-x py-1">
           {todoData.signedIn ? (

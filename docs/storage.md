@@ -163,6 +163,10 @@ Android also owns a durable native notification store, used by alarm receivers w
 
 Native delivery state and reminder enablement are device-local implementation state; Medicine and Dose remain the two product models. Product behavior lives in [`Medicine and Dose`](entities/medicine.md), and Android delivery in the [notification module](../apps/agent-mobile/modules/zero-notifications/README.md).
 
+## Recording storage
+
+The same TinyBase workspace synchronizes `recordings`, one row per voice note keyed by a random id: `{ startedAt, timeZone, durationMs, source, device }`. A row is written once, when the recording is saved, and never changes, so devices never conflict. The audio is not synchronized: it stays on the phone that recorded it, as AAC in `documents/recordings/<id>.m4a`, and `device` names that phone. Sign-out and account deletion leave the files in place.
+
 ## Recurring Task transitions
 
 A recurring completion is an in-place state transition, not a completed-row

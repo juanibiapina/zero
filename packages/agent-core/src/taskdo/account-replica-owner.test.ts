@@ -28,6 +28,7 @@ function snapshot(recoveryId?: string): TodoSnapshot {
     doses: [],
     intakes: [],
     nights: [],
+    recordings: [],
     recoveries: recoveryId
       ? [{ table: "tasks", id: recoveryId, text: recoveryId, reason: "Invalid Task" }]
       : [],

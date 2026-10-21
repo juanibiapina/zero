@@ -11,6 +11,7 @@ import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
 import { MedicineModel, type MedicineInput, type Medicine, type Dose, type Intake, type MedicineReceipt, type MedicineRestock } from "../medicines/model";
 import { NightRoutineModel, readNights, type Night, type NightStep } from "../night-routine/model";
+import { RecordingModel, type Recording } from "../recordings/model";
 
 export type TodoRecoveryRepair =
   | "make-task-loose"
@@ -34,6 +35,7 @@ export type TodoSnapshot = {
   doses: Dose[];
   intakes: Intake[];
   nights: Night[];
+  recordings: Recording[];
 };
 
 export type ProjectEditFields = {
@@ -108,6 +110,10 @@ export type TodoNightRoutine = {
   undoBed: (night: string) => Promise<void>;
 };
 
+export type TodoRecordings = {
+  add: (recording: Recording) => Promise<void>;
+};
+
 export type TaskdoReplica = {
   store: MergeableStore;
   tasks: TodoTasks;
@@ -115,6 +121,7 @@ export type TaskdoReplica = {
   waits: TodoWaits;
   medicines: TodoMedicines;
   nightRoutine: TodoNightRoutine;
+  recordings: TodoRecordings;
   snapshot: () => TodoSnapshot;
   subscribe: (listener: (snapshot: TodoSnapshot) => void) => () => void;
   refresh: () => Promise<void>;
@@ -178,6 +185,7 @@ export function projectTodoData(store: MergeableStore): TodoSnapshot {
     doses: medicineSnapshot.doses,
     intakes: medicineSnapshot.intakes,
     nights: readNights(store),
+    recordings: new RecordingModel(store).list(),
   };
 }
 
@@ -231,6 +239,7 @@ export function createTaskdoReplica({
   const model = new TodoModel({ store, now });
   const medicineModel = new MedicineModel(store, now, randomId);
   const nightModel = new NightRoutineModel(store, now, randomId);
+  const recordingModel = new RecordingModel(store);
   const keys = {
     tasks: ["taskdo", ...queryKeyScope, "tasks"],
     projects: ["taskdo", ...queryKeyScope, "projects"],
@@ -252,7 +261,7 @@ export function createTaskdoReplica({
     for (const listener of listeners) listener(snapshot);
   };
   publish();
-  const storeListeners = ["tasks", "projects", "conditions", "medicines", "doses", "intakes", "nights"].map((table) => store.addTableListener(table, publish));
+  const storeListeners = ["tasks", "projects", "conditions", "medicines", "doses", "intakes", "nights", "recordings"].map((table) => store.addTableListener(table, publish));
   const write = async (mutate: () => void) => {
     if (closed) throw new Error("Local account is closed");
     store.transaction(mutate);
@@ -480,6 +489,9 @@ export function createTaskdoReplica({
         return night;
       },
       undoBed: (night) => write(() => { nightModel.undoBed(night); }),
+    },
+    recordings: {
+      add: (recording) => write(() => { recordingModel.add(recording); }),
     },
     snapshot: () => snapshot,
     subscribe(listener) {
