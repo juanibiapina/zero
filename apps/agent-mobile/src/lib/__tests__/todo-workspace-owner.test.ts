@@ -12,6 +12,7 @@ const EMPTY_SNAPSHOT: TodoSnapshot = {
   doses: [],
   intakes: [],
   nights: [],
+  recordings: [],
   recoveries: [],
 };
 

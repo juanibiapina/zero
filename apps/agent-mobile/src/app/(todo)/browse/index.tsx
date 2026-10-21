@@ -19,6 +19,11 @@ const DESTINATIONS = [
     icon: Icon.select({ ios: 'moon', android: import('@expo/material-symbols/bedtime.xml') }),
   },
   {
+    label: 'Recordings',
+    href: '/browse/recordings',
+    icon: Icon.select({ ios: 'mic', android: import('@expo/material-symbols/mic.xml') }),
+  },
+  {
     label: 'Medicines',
     href: '/browse/medicines',
     icon: Icon.select({ ios: 'pills', android: import('@expo/material-symbols/medication.xml') }),

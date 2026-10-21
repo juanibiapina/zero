@@ -46,7 +46,14 @@
       "expo-sqlite",
       "expo-web-browser",
       "expo-image",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundRecording": true,
+          "enableBackgroundPlayback": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
