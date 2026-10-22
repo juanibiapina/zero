@@ -130,20 +130,20 @@ The dedicated folder is **`Zero Agent releases`**. Its folder ID is
 ```bash
 FOLDER=1aQScniH9VH9sT7ejWUWhMvXtNvs6CWY_
 
-gdcli juanibiapina@gmail.com upload \
-  /tmp/zero-agent-v1.1.0-vc80-preview.apk --folder "$FOLDER"
-gdcli juanibiapina@gmail.com share <newFileId> --anyone
-gdcli juanibiapina@gmail.com ls "$FOLDER"
-gdcli juanibiapina@gmail.com delete <oldFileId>
+gog drive upload \
+  /tmp/zero-agent-v1.1.0-vc80-preview.apk --parent "$FOLDER"
+gog drive share <newFileId> --to anyone
+gog drive ls --parent "$FOLDER"
+gog drive delete <oldFileId> --force
 ```
 
-Upload and share the new APK before you delete the old APK. `gdcli delete` moves
-the old file to Trash.
+Upload and share the new APK before you delete the old APK. `gog drive delete`
+moves the old file to Trash.
 
 If the folder is lost, create it again and update the folder ID in this file:
 
 ```bash
-gdcli juanibiapina@gmail.com mkdir "Zero Agent releases"
+gog drive mkdir "Zero Agent releases"
 ```
 
 ### 3. Install and test the APK
