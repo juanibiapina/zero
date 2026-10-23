@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-23: Delete a voice note: hold it in Recordings, choose Delete recording, and confirm. Deleting one made on another phone also removes its audio from that phone.
+
 - 2026-10-20: Add voice notes: tap the mic on Home, or add the Record widget to your home screen, and recording starts at once. Stop saves it, and Browse lists your recordings so you can play them back.
 
 - 2026-10-20: Fix "App isn't installed" when you open Zero right after leaving it. The Home icon now updates while the app is open.

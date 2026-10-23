@@ -112,6 +112,9 @@ export type TodoNightRoutine = {
 
 export type TodoRecordings = {
   add: (recording: Recording) => Promise<void>;
+  remove: (id: string) => Promise<void>;
+  deleted: () => string[];
+  onDeleted: (listener: (id: string) => void) => () => void;
 };
 
 export type TaskdoReplica = {
@@ -492,6 +495,9 @@ export function createTaskdoReplica({
     },
     recordings: {
       add: (recording) => write(() => { recordingModel.add(recording); }),
+      remove: (id) => write(() => { recordingModel.remove(id); }),
+      deleted: () => recordingModel.deleted(),
+      onDeleted: (listener) => recordingModel.onDeleted(listener),
     },
     snapshot: () => snapshot,
     subscribe(listener) {

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { defaultToastController, type Recording } from '@zero/agent-core';
+import { defaultToastController, RecordingModel, type Recording } from '@zero/agent-core';
 import { Stack } from 'expo-router';
+import { createMergeableStore } from 'tinybase';
 import { act, fireEvent, renderRouter, waitFor } from 'expo-router/testing-library';
 
 import HomeScreen from '@/app/(todo)/index';
@@ -56,6 +57,7 @@ jest.mock('expo-file-system', () => {
     constructor(...parts: unknown[]) { this.uri = uriOf(parts); }
     get exists() { return mockFiles.has(this.uri); }
     moveSync(destination: File) { mockFiles.delete(this.uri); mockFiles.add(destination.uri); }
+    delete() { mockFiles.delete(this.uri); }
   }
   return { Directory, File, Paths: { document: new Directory('file:///documents') } };
 });
@@ -193,6 +195,62 @@ describe('Recordings', () => {
     const { screen } = await open('/browse/recordings', [newYork]);
     expect(screen.getByText('On Pixel 9')).toBeTruthy();
     expect(screen.queryByLabelText(/^Play/)).toBeNull();
+  });
+
+  const holdAndDelete = async (screen: Awaited<ReturnType<typeof open>>['screen'], label: string) => {
+    await fireEvent(screen.getByLabelText(label), 'longPress');
+    await fireEvent.press(screen.getByText('Delete recording'));
+  };
+
+  it('deletes a recording made on this phone, with its audio, after asking', async () => {
+    mockFiles.add('file:///documents/recordings/b.m4a');
+    const { screen, data } = await open('/browse/recordings', [berlin]);
+    await holdAndDelete(screen, 'Play recording from Tue 20 Oct, 20:30');
+    expect(screen.getByText('Its audio is deleted and it leaves all your devices. This can’t be undone.')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Delete'));
+    await waitFor(() => expect(saved(data)).toEqual([]));
+    expect(screen.getByText('No recordings yet.')).toBeTruthy();
+    expect(mockFiles.has('file:///documents/recordings/b.m4a')).toBe(false);
+  });
+
+  it('keeps the recording and its audio when the delete is cancelled', async () => {
+    mockFiles.add('file:///documents/recordings/b.m4a');
+    const { screen, data } = await open('/browse/recordings', [berlin]);
+    await holdAndDelete(screen, 'Play recording from Tue 20 Oct, 20:30');
+    await fireEvent.press(screen.getByLabelText('Cancel'));
+    expect(screen.queryByText('Delete recording?')).toBeNull();
+    expect(saved(data)).toEqual([berlin]);
+    expect(mockFiles.has('file:///documents/recordings/b.m4a')).toBe(true);
+  });
+
+  it('says a recording was made on another phone and deletes it anyway', async () => {
+    const { screen, data } = await open('/browse/recordings', [newYork]);
+    await fireEvent(screen.getByLabelText('Recording from Tue 20 Oct, 21:00, on Pixel 9'), 'longPress');
+    expect(screen.getByText('Recorded on Pixel 9. Its audio isn’t on this phone.')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Delete recording'));
+    expect(screen.getByText('It leaves all your devices. Pixel 9 deletes its audio the next time it syncs.')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Delete'));
+    await waitFor(() => expect(saved(data)).toEqual([]));
+  });
+
+  it('deletes the audio here when another phone deletes the recording', async () => {
+    mockFiles.add('file:///documents/recordings/b.m4a');
+    const { data } = await open('/browse/recordings', [berlin]);
+    const otherPhone = createMergeableStore();
+    otherPhone.merge(data.replica!.store);
+    new RecordingModel(otherPhone).remove('b');
+    await act(async () => { data.replica!.store.merge(otherPhone); });
+    expect(mockFiles.has('file:///documents/recordings/b.m4a')).toBe(false);
+  });
+
+  it('stops playing a recording when it is deleted', async () => {
+    mockFiles.add('file:///documents/recordings/b.m4a');
+    const { screen, data } = await open('/browse/recordings', [berlin]);
+    await fireEvent.press(screen.getByLabelText('Play recording from Tue 20 Oct, 20:30'));
+    await holdAndDelete(screen, 'Pause recording from Tue 20 Oct, 20:30');
+    await fireEvent.press(screen.getByLabelText('Delete'));
+    await waitFor(() => expect(saved(data)).toEqual([]));
+    expect(mockAudio.player!.playing).toBe(false);
   });
 
   it('opens from Browse', async () => {

@@ -6,11 +6,14 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { BackHandler, FlatList, InteractionManager, Linking, Pressable, View } from 'react-native';
 
 import { ScreenHeader } from '@/components/screen-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ListRow } from '@/components/ui/list-row';
+import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
+import { localAudio } from '@/lib/recording-audio';
 import { useColor } from '@/lib/theme';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
-import { localAudio, useVoiceCapture, type CaptureStatus } from '@/lib/voice-capture';
+import { useVoiceCapture, type CaptureStatus } from '@/lib/voice-capture';
 
 const PLAY_ICON = Icon.select({ ios: 'play.fill', android: import('@expo/material-symbols/play_arrow.xml') });
 const PAUSE_ICON = Icon.select({ ios: 'pause.fill', android: import('@expo/material-symbols/pause.xml') });
@@ -109,7 +112,9 @@ function useRecordings(replica: TaskdoReplica | null): Recording[] | null {
   );
 }
 
-function RecordingRow({ recording, playing, onToggle }: { recording: Recording; playing: boolean; onToggle: (recording: Recording) => void }) {
+function RecordingRow({ recording, playing, onToggle, onHold }: {
+  recording: Recording; playing: boolean; onToggle: (recording: Recording) => void; onHold: (recording: Recording) => void;
+}) {
   const color = useColor('--color-accent');
   const muted = useColor('--color-foreground-muted');
   const here = localAudio(recording.id) !== null;
@@ -124,6 +129,10 @@ function RecordingRow({ recording, playing, onToggle }: { recording: Recording; 
       trailing={<Text variant="subtitle" style={{ fontVariant: ['tabular-nums'] }}>{formatDuration(recording.durationMs)}</Text>}
       accessibilityLabel={here ? `${playing ? 'Pause' : 'Play'} recording from ${when}` : `Recording from ${when}, on ${recording.device}`}
       onPress={here ? () => onToggle(recording) : undefined}
+      onLongPress={() => onHold(recording)}
+      accessibilityHint="Long press for options"
+      accessibilityActions={[{ name: 'delete', label: 'Delete recording' }]}
+      onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'delete') onHold(recording); }}
       className="min-h-12"
     >
       <Text>{when}</Text>
@@ -138,6 +147,9 @@ export function RecordingsScreen() {
   const player = useAudioPlayer(null);
   const playback = useAudioPlayerStatus(player);
   const [current, setCurrent] = useState<string | null>(null);
+  const [holding, setHolding] = useState<Recording | null>(null);
+  const [deleting, setDeleting] = useState<Recording | null>(null);
+  const ripple = useColor('--color-ripple');
 
   useEffect(() => {
     void setAudioModeAsync({ playsInSilentMode: true });
@@ -160,6 +172,22 @@ export function RecordingsScreen() {
     setCurrent(recording.id);
   }, [current, playback.playing, playback.currentTime, playback.duration, player]);
 
+  const remove = async (recording: Recording) => {
+    setDeleting(null);
+    if (!replica) return;
+    if (current === recording.id) {
+      player.pause();
+      setCurrent(null);
+    }
+    try {
+      await replica.recordings.remove(recording.id);
+    } catch (cause) {
+      toast(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+  const holdingHere = holding ? localAudio(holding.id) !== null : false;
+  const deletingHere = deleting ? localAudio(deleting.id) !== null : false;
+
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Recordings" back={{ label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: backToBrowse }} />
@@ -172,10 +200,39 @@ export function RecordingsScreen() {
           data={recordings}
           keyExtractor={(recording) => recording.id}
           renderItem={({ item }) => (
-            <RecordingRow recording={item} playing={current === item.id && playback.playing} onToggle={toggle} />
+            <RecordingRow recording={item} playing={current === item.id && playback.playing} onToggle={toggle} onHold={setHolding} />
           )}
         />
       )}
+      <Sheet open={!!holding} onClose={() => setHolding(null)} contextBridge={null}>
+        <View className="pb-4">
+          <Text className="px-screen-x text-[20px] font-semibold">{holding ? formatStartedAt(holding) : ''}</Text>
+          {holding && !holdingHere ? (
+            <Text variant="subtitle" className="px-screen-x pt-1">{`Recorded on ${holding.device}. Its audio isn’t on this phone.`}</Text>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            android_ripple={{ color: ripple }}
+            onPress={() => { setDeleting(holding); setHolding(null); }}
+            className="mt-2 min-h-14 justify-center px-screen-x"
+          >
+            <Text className="text-[16px] text-danger">Delete recording</Text>
+          </Pressable>
+        </View>
+      </Sheet>
+      {deleting ? (
+        <ConfirmDialog
+          title="Delete recording?"
+          message={deletingHere
+            ? 'Its audio is deleted and it leaves all your devices. This can’t be undone.'
+            : `It leaves all your devices. ${deleting.device} deletes its audio the next time it syncs.`}
+          cancelLabel="Cancel"
+          confirmLabel="Delete"
+          destructive
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => { void remove(deleting); }}
+        />
+      ) : null}
     </View>
   );
 }

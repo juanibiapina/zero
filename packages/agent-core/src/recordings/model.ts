@@ -33,6 +33,24 @@ export class RecordingModel {
     this.store.setRow(TABLE, id, cells);
   }
 
+  remove(id: string): void {
+    if (this.store.hasRow(TABLE, id)) this.store.delRow(TABLE, id);
+  }
+
+  deleted(): string[] {
+    const rows = this.store.getMergeableContent()[0][0][TABLE]?.[0] ?? {};
+    return Object.entries(rows)
+      .filter(([, [cells]]) => Object.values(cells).length > 0 && Object.values(cells).every(([value]) => value == null))
+      .map(([id]) => id);
+  }
+
+  onDeleted(listener: (id: string) => void): () => void {
+    const listenerId = this.store.addRowListener(TABLE, null, (_store, _table, id) => {
+      if (this.deleted().includes(id)) listener(id);
+    });
+    return () => { this.store.delListener(listenerId); };
+  }
+
   list(): Recording[] {
     return this.store.getRowIds(TABLE)
       .flatMap((id) => readRecording(id, this.store.getRow(TABLE, id)) ?? [])

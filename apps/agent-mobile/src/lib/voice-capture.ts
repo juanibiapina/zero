@@ -11,8 +11,9 @@ import {
   type RecordingOptions,
   type RecordingStatus,
 } from 'expo-audio';
-import { Directory, File, Paths } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { keepAudio } from '@/lib/recording-audio';
 
 export type CaptureStatus = 'starting' | 'recording' | 'saving' | 'saved' | 'denied' | 'failed';
 
@@ -32,14 +33,6 @@ const FORMAT: RecordingOptions = {
   ios: { audioQuality: AudioQuality.MEDIUM },
   web: {},
 };
-
-const library = () => new Directory(Paths.document, 'recordings');
-const audioFile = (id: string) => new File(library(), `${id}.m4a`);
-
-export function localAudio(id: string): string | null {
-  const file = audioFile(id);
-  return file.exists ? file.uri : null;
-}
 
 type Take = { id: string; startedAt: number; timeZone: string };
 
@@ -66,8 +59,7 @@ export function useVoiceCapture({ source, save }: {
     setStatus('saving');
     try {
       const durationMs = Date.now() - current.startedAt;
-      library().create({ idempotent: true, intermediates: true });
-      new File(event.url).moveSync(audioFile(current.id));
+      keepAudio(event.url, current.id);
       await latest.current.save({
         id: current.id,
         startedAt: new Date(current.startedAt).toISOString(),

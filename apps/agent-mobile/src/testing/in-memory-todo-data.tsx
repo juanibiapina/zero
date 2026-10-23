@@ -4,13 +4,16 @@ import {
 } from '@zero/agent-core';
 import type { ReactNode } from 'react';
 
+import { cleanUpDeletedAudio } from '@/lib/recording-audio';
 import { TodoDataContextProvider, type TodoData } from '@/lib/todo-data-context';
 
 export type { InMemoryTodoSeed };
 
 export function createInMemoryTodoData(seed: InMemoryTodoSeed = {}): TodoData {
+  const { state } = createInMemoryTaskdoClientState(seed);
+  if (state.replica) cleanUpDeletedAudio(state.replica.recordings);
   return {
-    ...createInMemoryTaskdoClientState(seed).state,
+    ...state,
     workspaceStatus: 'account',
     signedIn: true,
     signOut: async () => {},

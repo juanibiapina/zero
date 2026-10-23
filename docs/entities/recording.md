@@ -20,6 +20,9 @@ transcription and other blocks can build on it afterwards.
 - Stop, Back and the Stop button in the recording notification all save the
   Recording. It keeps recording with the screen off or in another app.
 - A saved Recording never changes.
+- Holding a Recording offers Delete, which asks first and then removes it from
+  every device. The phone that holds the audio deletes it, at once or the next
+  time it syncs. A Recording from another phone says so before you delete it.
 - The audio stays on the phone that recorded it. Its details sync to every
   device.
 - A recording cut off by Android closing the app is lost.
@@ -33,6 +36,9 @@ Stop button. Saving shows "Saved · 0:42" on Home.
 Browse lists Recordings, newest first, with the date and time where it was
 recorded and the duration. Tapping one plays it, and tapping again pauses. A
 Recording made on another phone shows "On Pixel 7" and does not play.
+Holding one opens a menu with its date and time and Delete recording; for a
+Recording from another phone the menu adds "Recorded on Pixel 7. Its audio
+isn't on this phone."
 
 ## Interactions
 
@@ -42,7 +48,7 @@ Recording made on another phone shows "On Pixel 7" and does not play.
 ## Left out on purpose
 
 - Location.
-- Deleting, renaming or sharing a Recording, and seeking inside one.
+- Renaming or sharing a Recording, and seeking inside one.
 - Recordings on the web.
 
 ## Ideas

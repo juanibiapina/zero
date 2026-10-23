@@ -165,7 +165,7 @@ Native delivery state and reminder enablement are device-local implementation st
 
 ## Recording storage
 
-The same TinyBase workspace synchronizes `recordings`, one row per voice note keyed by a random id: `{ startedAt, timeZone, durationMs, source, device }`. A row is written once, when the recording is saved, and never changes, so devices never conflict. The audio is not synchronized: it stays on the phone that recorded it, as AAC in `documents/recordings/<id>.m4a`, and `device` names that phone. Sign-out and account deletion leave the files in place.
+The same TinyBase workspace synchronizes `recordings`, one row per voice note keyed by a random id: `{ startedAt, timeZone, durationMs, source, device }`. A row is written once, when the recording is saved, and never changes, so devices never conflict. Deleting a Recording removes its row with `delRow`, which needs no tombstone row because a Recording has no children; the deletion stamp syncs like any other change. The audio is not synchronized: it stays on the phone that recorded it, as AAC in `documents/recordings/<id>.m4a`, and `device` names that phone. That phone deletes the file when it sees the row's deletion stamp, when the workspace opens and whenever a deletion arrives. A row that only disappears from memory, as a reload can make it, has no stamp and keeps its audio. Sign-out and account deletion leave the files in place.
 
 ## Recurring Task transitions
 

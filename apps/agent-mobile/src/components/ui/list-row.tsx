@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, View, type PressableProps } from 'react-native';
 import { useColor } from '@/lib/theme';
 
 import { cn } from '@/lib/cn';
@@ -36,6 +36,9 @@ export function ListRow({
   onPress,
   onLongPress,
   accessibilityLabel,
+  accessibilityHint,
+  accessibilityActions,
+  onAccessibilityAction,
   className,
 }: {
   leading?: ReactNode;
@@ -44,6 +47,9 @@ export function ListRow({
   onPress?: () => void;
   onLongPress?: () => void;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityActions?: PressableProps['accessibilityActions'];
+  onAccessibilityAction?: PressableProps['onAccessibilityAction'];
   className?: string;
 }) {
   const ripple = useColor('--color-ripple');
@@ -55,6 +61,9 @@ export function ListRow({
       <Pressable
         accessibilityRole={onPress ? 'button' : undefined}
         accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        accessibilityActions={accessibilityActions}
+        onAccessibilityAction={onAccessibilityAction}
         onPress={onPress}
         onLongPress={onLongPress}
         android_ripple={onPress ? { color: ripple } : undefined}

@@ -15,6 +15,7 @@ import {
 
 import type { TokenGetter } from './api';
 import { API_BASE_URL } from './env';
+import { cleanUpDeletedAudio } from './recording-audio';
 import { loadLastSync, saveLastSync } from './sync-metadata';
 import type { TodoWorkspaceDescriptor } from './todo-workspace';
 
@@ -176,6 +177,7 @@ export function createTaskdoReplicaOpener({
     let replica: TaskdoReplica | undefined;
     let removeForeground = () => {};
     let unsubscribe = () => {};
+    let stopAudioCleanup = () => {};
     try {
       await reload();
       try {
@@ -220,12 +222,14 @@ export function createTaskdoReplicaOpener({
         removeForeground = subscribeToForeground(() => { void session.reconnect(); });
       }
 
+      stopAudioCleanup = cleanUpDeletedAudio(replica.recordings);
       const openedReplica = replica;
       let closePromise: Promise<void> | undefined;
       return {
         ...openedReplica,
         close() {
           closePromise ??= (async () => {
+            stopAudioCleanup();
             removeForeground();
             unsubscribe();
             await openedReplica.close();
@@ -236,6 +240,7 @@ export function createTaskdoReplicaOpener({
         },
       };
     } catch (error) {
+      stopAudioCleanup();
       removeForeground();
       unsubscribe();
       await replica?.close();
