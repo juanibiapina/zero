@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-24: Record voice notes through your Bluetooth headset's microphone when one is connected. The Record screen vibrates and starts the timer once the microphone is listening, and shows which microphone it is using.
+
 - 2026-10-24: Change an empty Home to a simple All done screen. It no longer lists your Next and Waiting projects.
 
 - 2026-10-23: Delete a voice note: hold it in Recordings, choose Delete recording, and confirm. Deleting one made on another phone also removes its audio from that phone.

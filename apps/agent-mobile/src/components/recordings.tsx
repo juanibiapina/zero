@@ -13,7 +13,7 @@ import { Text } from '@/components/ui/text';
 import { localAudio } from '@/lib/recording-audio';
 import { useColor } from '@/lib/theme';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
-import { useVoiceCapture, type CaptureStatus } from '@/lib/voice-capture';
+import { useVoiceCapture, type CaptureStatus, type Microphone } from '@/lib/voice-capture';
 
 const PLAY_ICON = Icon.select({ ios: 'play.fill', android: import('@expo/material-symbols/play_arrow.xml') });
 const PAUSE_ICON = Icon.select({ ios: 'pause.fill', android: import('@expo/material-symbols/pause.xml') });
@@ -44,13 +44,28 @@ function formatStartedAt({ startedAt, timeZone }: Recording): string {
 }
 
 const STATUS_TEXT: Record<CaptureStatus, string> = {
-  starting: 'Starting…',
+  starting: 'Getting the microphone ready…',
   recording: 'Recording',
   saving: 'Saving…',
   saved: 'Saved',
   denied: 'Zero needs microphone access to record.',
   failed: 'The recording couldn’t be saved.',
 };
+
+const MIC_KIND: Record<Microphone['kind'], string> = {
+  phone: 'Phone microphone',
+  bluetooth: 'Bluetooth headset',
+  'bluetooth-le': 'Bluetooth LE headset',
+  'hearing-aid': 'Hearing aid',
+  wired: 'Wired headset',
+  usb: 'USB microphone',
+  other: 'Microphone',
+};
+
+function describeMicrophone(mic: Microphone | null): string {
+  if (!mic) return 'Microphone';
+  return mic.name ? `${mic.name} · ${MIC_KIND[mic.kind]}` : MIC_KIND[mic.kind];
+}
 
 export function RecordScreen() {
   const replica = useTodoReplica();
@@ -61,7 +76,7 @@ export function RecordScreen() {
     backToHome();
     InteractionManager.runAfterInteractions(() => toast(`Saved · ${formatDuration(recording.durationMs)}`));
   }, [replica]);
-  const { status, elapsedMs, stop } = useVoiceCapture({ source: source === 'widget' ? 'widget' : 'app', save });
+  const { status, mic, elapsedMs, stop } = useVoiceCapture({ source: source === 'widget' ? 'widget' : 'app', save });
 
   const back = useCallback(() => {
     if (status === 'recording') void stop();
@@ -80,10 +95,15 @@ export function RecordScreen() {
     <View className="flex-1 bg-background">
       <ScreenHeader title="Voice note" back={{ label: 'Home', accessibilityLabel: 'Back to Home', onPress: back }} />
       <View className="flex-1 items-center justify-center gap-4 px-screen-x">
-        <Text accessibilityRole="timer" className="text-[56px] font-light text-foreground" style={{ fontVariant: ['tabular-nums'] }}>
-          {formatDuration(elapsedMs)}
-        </Text>
+        {status === 'starting' ? null : (
+          <Text accessibilityRole="timer" className="text-[56px] font-light text-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+            {formatDuration(elapsedMs)}
+          </Text>
+        )}
         <Text variant="subtitle" className="text-center">{STATUS_TEXT[status]}</Text>
+        {status === 'recording' || status === 'saving' ? (
+          <Text variant="caption" accessibilityLabel={`Microphone: ${describeMicrophone(mic)}`} className="text-center">{describeMicrophone(mic)}</Text>
+        ) : null}
         {status === 'denied' ? (
           <Pressable accessibilityRole="button" onPress={() => void Linking.openSettings()} className="min-h-12 justify-center">
             <Text className="font-semibold text-accent">Open settings</Text>

@@ -12,13 +12,18 @@ import {
   type RecordingStatus,
 } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Vibration } from 'react-native';
 
 import { keepAudio } from '@/lib/recording-audio';
+import { routeToHeadset, watchRecordingInput, type HeadsetRoute, type Microphone } from '../../modules/headset-mic';
+
+export type { Microphone } from '../../modules/headset-mic';
 
 export type CaptureStatus = 'starting' | 'recording' | 'saving' | 'saved' | 'denied' | 'failed';
 
 export type VoiceCapture = {
   status: CaptureStatus;
+  mic: Microphone | null;
   elapsedMs: number;
   stop: () => Promise<void>;
 };
@@ -36,12 +41,25 @@ const FORMAT: RecordingOptions = {
 
 type Take = { id: string; startedAt: number; timeZone: string };
 
+const READY_VIBRATION_MS = 60;
+
 export function useVoiceCapture({ source, save }: {
   source: RecordingSource;
   save: (recording: Recording) => Promise<void>;
 }): VoiceCapture {
   const [status, setStatus] = useState<CaptureStatus>('starting');
+  const [mic, setMic] = useState<Microphone | null>(null);
   const take = useRef<Take | null>(null);
+  const route = useRef<HeadsetRoute | null>(null);
+  const unwatch = useRef<(() => void) | null>(null);
+  const unmounted = useRef(false);
+
+  const letGo = useCallback(() => {
+    unwatch.current?.();
+    unwatch.current = null;
+    route.current?.release();
+    route.current = null;
+  }, []);
   const finished = useRef(false);
   const latest = useRef({ source, save });
   useEffect(() => {
@@ -52,6 +70,7 @@ export function useVoiceCapture({ source, save }: {
     const current = take.current;
     if (!event.isFinished || !current || finished.current) return;
     finished.current = true;
+    letGo();
     if (event.hasError || !event.url) {
       setStatus('failed');
       return;
@@ -72,7 +91,7 @@ export function useVoiceCapture({ source, save }: {
     } catch {
       setStatus('failed');
     }
-  }, []);
+  }, [letGo]);
 
   const recorder = useAudioRecorder(FORMAT, (event) => { void finish(event); });
   const { durationMillis } = useAudioRecorderState(recorder, 250);
@@ -81,6 +100,14 @@ export function useVoiceCapture({ source, save }: {
   useEffect(() => {
     if (begun.current) return;
     begun.current = true;
+    let listening = false;
+    const listen = (input: Microphone | null) => {
+      setMic(input);
+      if (listening || !take.current) return;
+      listening = true;
+      Vibration.vibrate(READY_VIBRATION_MS);
+      setStatus('recording');
+    };
     (async () => {
       if (!(await requestRecordingPermissionsAsync()).granted) {
         setStatus('denied');
@@ -88,6 +115,16 @@ export function useVoiceCapture({ source, save }: {
       }
       const notifications = await requestNotificationPermissionsAsync();
       await setAudioModeAsync({ allowsRecording: true, allowsBackgroundRecording: notifications.granted, playsInSilentMode: true });
+      route.current = await routeToHeadset().catch(() => null);
+      if (unmounted.current) {
+        letGo();
+        return;
+      }
+      let firstReport: { mic: Microphone | null } | null = null;
+      unwatch.current = watchRecordingInput((input) => {
+        if (take.current) listen(input);
+        else firstReport = { mic: input };
+      });
       await recorder.prepareToRecordAsync();
       recorder.record();
       take.current = {
@@ -95,14 +132,27 @@ export function useVoiceCapture({ source, save }: {
         startedAt: Date.now(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
-      setStatus('recording');
-    })().catch(() => setStatus('failed'));
-  }, [recorder]);
+      const reported = firstReport as { mic: Microphone | null } | null;
+      if (!unwatch.current) listen(null);
+      else if (reported) listen(reported.mic);
+    })().catch(() => {
+      letGo();
+      setStatus('failed');
+    });
+  }, [recorder, letGo]);
+
+  useEffect(() => {
+    unmounted.current = false;
+    return () => {
+      unmounted.current = true;
+      if (!take.current) letGo();
+    };
+  }, [letGo]);
 
   const stop = useCallback(async () => {
     if (!take.current || finished.current) return;
     await recorder.stop();
   }, [recorder]);
 
-  return { status, elapsedMs: durationMillis, stop };
+  return { status, mic, elapsedMs: durationMillis, stop };
 }

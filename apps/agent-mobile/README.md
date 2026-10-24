@@ -173,7 +173,7 @@ back only where the native component does not fit.
 
 ## Native modules
 
-The app has two local Expo modules under `modules/`, both Android-only. Each
+The app has four local Expo modules under `modules/`, all Android-only. Each
 `modules/<name>/index.ts` is that module's only TypeScript binding, and one app
 module owns each binding:
 
@@ -181,6 +181,15 @@ module owns each binding:
 | --- | --- | --- |
 | `zero-notifications` | `src/lib/medicine-reminders.ts` | Shows scheduled notifications from a schedule and records their buttons with no JavaScript running |
 | `home-app-icon` | `src/components/home-app-icon-sync.tsx` | Switches the launcher icon to match the Home task count |
+| `headset-mic` | `src/lib/voice-capture.ts` | Makes a connected Bluetooth headset the communication device so a voice note records from its mic, and reports the input Android actually records from |
+| `record-widget` | none (no binding) | Home screen widget that opens `zeroagent:///browse/record?source=widget` |
+
+Android sends a plain `MIC` recording to a classic Bluetooth headset only while
+that headset is the communication device, and expo-audio's `setAudioModeAsync`
+points the communication device at the speaker. So `useVoiceCapture` calls
+`routeToHeadset()` after `setAudioModeAsync`, and reports Recording only after
+Android's first report of the capturing input. Where the binding cannot report
+(no native module), `record()` returning counts as ready.
 
 The medicine proof route, `src/app/e2e-medicine-proof.tsx`, also calls the
 notification binding, because it tests the native code. Tests replace a binding with

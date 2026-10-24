@@ -4,6 +4,7 @@ import { defaultToastController, RecordingModel, type Recording } from '@zero/ag
 import { Stack } from 'expo-router';
 import { createMergeableStore } from 'tinybase';
 import { act, fireEvent, renderRouter, waitFor } from 'expo-router/testing-library';
+import { Vibration } from 'react-native';
 
 import HomeScreen from '@/app/(todo)/index';
 import BrowseLayout from '@/app/(todo)/browse/_layout';
@@ -12,6 +13,7 @@ import RecordPage from '@/app/(todo)/browse/record';
 import RecordingsPage from '@/app/(todo)/browse/recordings';
 import { Toaster } from '@/components/toaster';
 import { createInMemoryTodoData, InMemoryTodoDataProvider } from '@/testing/in-memory-todo-data';
+import type { Microphone } from '../../../modules/headset-mic';
 
 type FinishEvent = { id: string; isFinished: boolean; hasError: boolean; error: string | null; url: string | null };
 
@@ -22,6 +24,28 @@ const mockAudio = {
   player: null as null | { playing: boolean; source: unknown; listeners: Set<() => void> },
 };
 const mockFiles = new Set<string>();
+
+const PHONE: Microphone = { name: 'Pixel 7', kind: 'phone' };
+const mockMic = {
+  headset: false,
+  released: 0,
+  canReport: true,
+  reportOnRecord: PHONE as Microphone | null | 'nothing',
+  listener: null as ((mic: Microphone | null) => void) | null,
+};
+
+jest.mock('../../../modules/headset-mic', () => ({
+  routeToHeadset: async () => (mockMic.headset ? { release: () => { mockMic.released += 1; } } : null),
+  watchRecordingInput: (onInput: (mic: Microphone | null) => void) => {
+    if (!mockMic.canReport) return null;
+    mockMic.listener = onInput;
+    return () => { mockMic.listener = null; };
+  },
+}));
+
+function report(mic: Microphone | null) {
+  mockMic.listener?.(mic);
+}
 
 jest.mock('expo-audio', () => {
   const React = jest.requireActual<typeof import('react')>('react');
@@ -78,11 +102,20 @@ function finish(event: Partial<FinishEvent> = {}) {
 }
 
 beforeEach(() => {
+  mockMic.headset = false;
+  mockMic.released = 0;
+  mockMic.canReport = true;
+  mockMic.reportOnRecord = PHONE;
+  mockMic.listener = null;
+  jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {}).mockClear();
   mockAudio.micGranted = true;
   mockFiles.clear();
   mockAudio.recorder = {
     prepareToRecordAsync: async () => {},
-    record: () => { mockFiles.add(RECORDED); },
+    record: () => {
+      mockFiles.add(RECORDED);
+      if (mockMic.reportOnRecord !== 'nothing') report(mockMic.reportOnRecord);
+    },
     stop: async () => { finish(); },
   };
   const player = {
@@ -168,6 +201,62 @@ describe('Voice capture', () => {
     const { screen, data } = await open('/browse/record?source=app');
     await waitFor(() => screen.getByText('Zero needs microphone access to record.'));
     expect(saved(data)).toEqual([]);
+  });
+});
+
+describe('Microphone', () => {
+  it('invites speech only once Android reports that the microphone is capturing', async () => {
+    mockMic.reportOnRecord = 'nothing';
+    const { screen } = await open('/browse/record?source=app');
+    await waitFor(() => screen.getByText('Getting the microphone ready…'));
+    expect(screen.queryByText('0:00')).toBeNull();
+    expect(Vibration.vibrate).not.toHaveBeenCalled();
+
+    await act(async () => { report({ name: 'Pixel Buds Pro', kind: 'bluetooth' }); });
+    expect(screen.getByText('Recording')).toBeTruthy();
+    expect(screen.getByText('0:00')).toBeTruthy();
+    expect(screen.getByText('Pixel Buds Pro · Bluetooth headset')).toBeTruthy();
+    expect(Vibration.vibrate).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the phone microphone when no headset is connected', async () => {
+    const { screen } = await open('/browse/record?source=app');
+    await waitFor(() => screen.getByText('Pixel 7 · Phone microphone'));
+  });
+
+  it('shows the kind alone when Android gives no name, and Microphone when it names no device', async () => {
+    mockMic.reportOnRecord = { name: null, kind: 'bluetooth-le' };
+    const { screen } = await open('/browse/record?source=app');
+    await waitFor(() => screen.getByText('Bluetooth LE headset'));
+    await act(async () => { report(null); });
+    expect(screen.getByText('Microphone')).toBeTruthy();
+  });
+
+  it('follows the input when the headset drops mid-recording', async () => {
+    mockMic.headset = true;
+    mockMic.reportOnRecord = { name: 'Pixel Buds Pro', kind: 'bluetooth' };
+    const { screen } = await open('/browse/record?source=app');
+    await waitFor(() => screen.getByText('Pixel Buds Pro · Bluetooth headset'));
+    await act(async () => { report(PHONE); });
+    expect(screen.getByText('Pixel 7 · Phone microphone')).toBeTruthy();
+    expect(Vibration.vibrate).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives the headset back once the voice note is saved', async () => {
+    mockMic.headset = true;
+    const { screen, data } = await open('/browse/record?source=app');
+    await waitFor(() => screen.getByText('Recording'));
+    expect(mockMic.released).toBe(0);
+    await fireEvent.press(screen.getByLabelText('Stop and save'));
+    await waitFor(() => expect(saved(data)).toHaveLength(1));
+    expect(mockMic.released).toBe(1);
+  });
+
+  it('starts at once and says Microphone where the phone cannot report its input', async () => {
+    mockMic.canReport = false;
+    const { screen } = await open('/browse/record?source=app');
+    await waitFor(() => screen.getByText('Recording'));
+    expect(screen.getByText('Microphone')).toBeTruthy();
   });
 });
 
