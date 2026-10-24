@@ -89,93 +89,33 @@ describe('HomeScreen', () => {
     defaultToastController.dismiss();
   });
 
-  it('shows a quiet no-project state without duplicating the add action', async () => {
+  it('shows All done without duplicating the add action', async () => {
     const screen = await renderScreen();
-    await waitFor(() => expect(screen.getByText('Home is clear')).toBeTruthy());
-    expect(screen.getByText('Nothing needs your attention right now.')).toBeTruthy();
-    expect(screen.getByText('No projects yet')).toBeTruthy();
-    expect(screen.getByText(
-      'Projects group related tasks around an outcome you want to accomplish.',
-    )).toBeTruthy();
-    expect(screen.queryByText('Create a project')).toBeNull();
+    await waitFor(() => expect(screen.getByText('All done')).toBeTruthy());
+    expect(screen.queryByText('No projects yet')).toBeNull();
     expect(screen.getByLabelText('Add')).toBeTruthy();
     expect(screen.getByText('Home')).toBeTruthy();
     expect(screen.getByLabelText('Account')).toBeTruthy();
   });
 
-  it('shows every Next and Waiting project without previewing After or Backlog', async () => {
+  it('shows only All done when Home has no tasks, whatever projects exist', async () => {
     const nextOne = project('next-1', 'Finish diploma');
-    const nextTwo = project('next-2', 'Move apartment');
     const waitingOne = project('waiting-1', 'Hear from the landlord');
-    const waitingTwo = project('waiting-2', 'Receive the certificate');
-    const afterOnly = project('after-only', 'Plan the celebration');
-    const prerequisite = project('prerequisite', 'Prerequisite');
-    const backlog = project('backlog', 'Learn the piano', { state: 'backlog' });
     const screen = await renderScreen({
-      projects: [
-        nextOne,
-        nextTwo,
-        waitingOne,
-        waitingTwo,
-        afterOnly,
-        prerequisite,
-        backlog,
-      ],
-      waits: [
-        waiting(waitingOne.id),
-        waiting(waitingTwo.id),
-        after(afterOnly.id, prerequisite.id),
-      ],
+      projects: [nextOne, waitingOne],
+      waits: [waiting(waitingOne.id)],
     });
 
-    await waitFor(() => expect(screen.getByText('Home is clear')).toBeTruthy());
-    expect(screen.getByRole('header', { name: 'Next' })).toBeTruthy();
-    expect(screen.getByRole('header', { name: 'Waiting' })).toBeTruthy();
-    expect(screen.getByText('Finish diploma')).toBeTruthy();
-    expect(screen.getByText('Move apartment')).toBeTruthy();
-    expect(screen.getByText('Hear from the landlord')).toBeTruthy();
-    expect(screen.getByText('Receive the certificate')).toBeTruthy();
-    expect(screen.getAllByText(/^for /)).toHaveLength(2);
-    expect(screen.queryByLabelText('Plan the celebration')).toBeNull();
-    expect(screen.getByLabelText('Prerequisite')).toBeTruthy();
-    expect(screen.queryByLabelText('Learn the piano')).toBeNull();
-    expect(screen.getByLabelText('View all projects')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('All done')).toBeTruthy());
+    expect(screen.queryByText('Finish diploma')).toBeNull();
+    expect(screen.queryByText('Hear from the landlord')).toBeNull();
+    expect(screen.queryByLabelText('View all projects')).toBeNull();
   });
 
-  it('opens a previewed project and the full Projects tab', async () => {
-    const screen = await renderScreen({
-      projects: [project('p', 'Finish diploma')],
-    });
-    await waitFor(() => expect(screen.getByLabelText('Finish diploma')).toBeTruthy());
-
-    await fireEvent.press(screen.getByLabelText('Finish diploma'));
-    expect(mockNavigate).toHaveBeenCalledWith('/projects/p', { withAnchor: true });
-
-    await fireEvent.press(screen.getByLabelText('View all projects'));
-    expect(mockNavigate).toHaveBeenCalledWith('/projects', undefined);
-  });
-
-  it('keeps the clear state out of the normal Home task list', async () => {
+  it('keeps All done out of the normal Home task list', async () => {
     const screen = await renderScreen({ tasks: [task('t', 'mail the letter')] });
     await waitFor(() => expect(screen.getByText('mail the letter')).toBeTruthy());
-    expect(screen.queryByText('Home is clear')).toBeNull();
-    expect(screen.queryByText('No projects yet')).toBeNull();
-  });
-
-  it('distinguishes completed Project history from a fresh workspace', async () => {
-    const screen = await renderScreen({
-      projects: [project('done', 'Finished outcome')],
-    });
-    await waitFor(() => expect(screen.getByText('Finished outcome')).toBeTruthy());
-    await act(async () => {
-      await screen.data.replica!.projects.setState('done', 'done').isPersisted.promise;
-    });
-    await waitFor(() => expect(screen.getByText('No current projects')).toBeTruthy());
-    expect(screen.getByText(
-      'Start another whenever you have a new outcome to work toward.',
-    )).toBeTruthy();
-    expect(screen.queryByText('No projects yet')).toBeNull();
-    expect(screen.queryByLabelText('View all projects')).toBeNull();
+    expect(screen.queryByText('All done')).toBeNull();
   });
 
   it('keeps the guest Home header quiet', async () => {

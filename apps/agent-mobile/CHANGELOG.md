@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-24: Change an empty Home to a simple All done screen. It no longer lists your Next and Waiting projects.
+
 - 2026-10-23: Delete a voice note: hold it in Recordings, choose Delete recording, and confirm. Deleting one made on another phone also removes its audio from that phone.
 
 - 2026-10-20: Add voice notes: tap the mic on Home, or add the Record widget to your home screen, and recording starts at once. Stop saves it, and Browse lists your recordings so you can play them back.

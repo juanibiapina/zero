@@ -293,7 +293,7 @@ describe("web todo parity", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 8, 30, 12));
     const replica = open(path, { projects: [project("p", "Renovate")], tasks: [task("t", "Due on October 1", { parent: projectParent("p"), showUpDate: "2026-10-01" })] });
-    if (path === "/home") await screen.findByRole("region", { name: "Home is clear" });
+    if (path === "/home") await screen.findByRole("region", { name: "All done" });
     else await screen.findByRole("button", { name: 'Edit "Due on October 1"' });
     const before = replica.snapshot();
     act(() => { vi.setSystemTime(new Date(2026, 9, 1, 12)); window.dispatchEvent(new Event("focus")); });
@@ -304,15 +304,4 @@ describe("web todo parity", () => {
     expect(replica.snapshot()).toEqual(before);
   });
 
-  it("shows every Waiting Project and keeps Backlog and After out of clear Home", async () => {
-    open("/home", { projects: [project("p", "First waiting"), project("q", "Second waiting"), project("back", "Backlog", "backlog"), project("after", "After project")], tasks: [task("t", "Later", { parent: projectParent("p"), showUpDate: tomorrow(localToday()) })], waits: [
-      { id: "w", projectId: "q", kind: "free-text", text: "A reply", createdAt: "2026-09-01T12:00:00Z", resolvedAt: null, refId: null, targetStatus: null },
-      { id: "a", projectId: "after", kind: "project-status", text: null, createdAt: "2026-09-01T12:00:00Z", resolvedAt: null, refId: "p", targetStatus: "done" },
-    ] });
-    const region = await screen.findByRole("region", { name: "Home is clear" });
-    expect(within(region).getByRole("link", { name: /First waiting/ })).toBeInTheDocument();
-    expect(within(region).getByRole("link", { name: /Second waiting/ })).toBeInTheDocument();
-    expect(within(region).queryByText("Backlog")).toBeNull();
-    expect(within(region).queryByText("After project")).toBeNull();
-  });
 });

@@ -3,11 +3,10 @@ import { TaskRecurrence } from "@/components/task-recurrence";
 import { useCallback, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
-import { Link } from "react-router";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { homeTasks, listView, taskIcon, LOADING_TEXT_DELAY_MS, messageOf, orderKeyBetween, projectStatusContext, projectStatusSections, tomorrow, type Task, type TaskdoReplica } from "@zero/agent-core";
+import { homeTasks, listView, taskIcon, LOADING_TEXT_DELAY_MS, messageOf, orderKeyBetween, tomorrow, type Task, type TaskdoReplica } from "@zero/agent-core";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { TodoComposer } from "@/components/todo-composer";
 import { useTaskEditor } from "@/components/task-editor";
@@ -46,8 +45,6 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   const view = listView({ count: list.length, isLoading });
   const showLoading = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
   const hydrating = isLoading || projectsLoading || conditionsLoading;
-  const sections = projectStatusSections({ projects, tasks, conditions, today });
-  const currentCount = sections.reduce((count, section) => count + section.count, 0);
 
   return <div className="flex flex-col gap-6">
     <TodoComposer replica={replica} />
@@ -59,16 +56,9 @@ function Home({ replica }: { replica: TaskdoReplica }) {
             onComplete={() => detail.complete(task)} onOpen={() => detail.open(task)} onPostpone={() => { void replica.tasks.reschedule(task.id, tomorrow(today)).isPersisted.promise.catch((cause) => setError(messageOf(cause))); }} />)}</ul>
         </SortableContext>
       </DndContext>
-    </section> : <section aria-label="Home is clear" className="flex flex-col gap-6">
-      <div className="border-b pb-4"><h2 className="text-lg font-semibold">Home is clear</h2><p className="text-sm text-muted-foreground">Nothing needs your attention right now.</p></div>
-      {sections.filter((section) => section.status === "next" || section.status === "waiting").map((section) => <section key={section.status} className="flex flex-col gap-2">
-        <h3 className="font-semibold">{section.status === "next" ? "Next" : "Waiting"}</h3>
-        <ul className="divide-y">{section.projects.map((project) => <li key={project.id}><Link className="flex min-h-12 items-center gap-3 py-3 hover:text-primary" to={`/projects/${project.id}`}>
-          <span aria-hidden>{project.icon}</span><span className="min-w-0 flex-1 break-words">{project.title}</span>
-          <span className="text-sm text-muted-foreground">{projectStatusContext(project, tasks, conditions, projects, today)?.rowLabel}</span>
-        </Link></li>)}</ul>
-      </section>)}
-      {currentCount === 0 ? <div><h3 className="font-semibold">{projects.length ? "No current projects" : "No projects yet"}</h3><p className="mt-1 text-sm text-muted-foreground">{projects.length ? "Start another whenever you have a new outcome to work toward." : "Projects group related tasks around an outcome you want to accomplish."}</p></div> : <Link className="text-sm font-semibold text-primary underline-offset-4 hover:underline" to="/projects">View all projects</Link>}
+    </section> : <section aria-label="All done" className="flex flex-col items-center gap-4 py-16">
+      <div aria-hidden className="flex size-20 items-center justify-center rounded-full bg-muted text-4xl text-muted-foreground">✓</div>
+      <h2 className="text-2xl font-semibold">All done</h2>
     </section>}
     {detail.editor}
   </div>;

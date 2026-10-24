@@ -5,13 +5,8 @@ import {
   listView,
   LOADING_TEXT_DELAY_MS,
   homeTasks,
-  projectStatusContext,
-  projectStatusSections,
   taskIcon,
   todoSyncPresentation,
-  type Project,
-  type ProjectAttention,
-  type ProjectDisplayStatus,
   type Task,
   type TaskdoReplica,
 } from '@zero/agent-core';
@@ -20,9 +15,8 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BackHandler,
-  Pressable,
   RefreshControl,
-  SectionList,
+  ScrollView,
   View,
 } from 'react-native';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
@@ -30,7 +24,6 @@ import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { useTodoDataContext } from '@/lib/todo-data-context';
 import { NightRoutineButton } from '@/components/night-routine';
 import { RecordButton } from '@/components/record-button';
-import { ProjectListRow } from '@/components/project-list-row';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
 import { ScreenHeader } from '@/components/screen-header';
@@ -45,61 +38,21 @@ import {
   usePullRefresh,
 } from '@/lib/screen-hooks';
 
-type HomeProjectSection = {
-  status: Extract<ProjectDisplayStatus, 'next' | 'waiting'>;
-  title: 'Next' | 'Waiting';
-  data: Project[];
-};
-
-function HomeClearState({
-  projects,
-  tasks,
-  conditions,
-  today,
+function HomeAllDone({
   refreshing,
   onRefresh,
 }: {
-  projects: Project[];
-  tasks: Task[];
-  conditions: ProjectAttention[];
-  today: string;
   refreshing: boolean;
   onRefresh: () => void;
 }) {
   const accent = useColor('--color-accent');
-  const ripple = useColor('--color-ripple');
-  const allSections = useMemo(
-    () => projectStatusSections({ projects, tasks, conditions, today }),
-    [conditions, projects, tasks, today],
-  );
-  const currentProjectCount = useMemo(
-    () => allSections.reduce((count, section) => count + section.count, 0),
-    [allSections],
-  );
-  const sections = useMemo<HomeProjectSection[]>(
-    () => allSections.flatMap((section) => {
-      if (section.status !== 'next' && section.status !== 'waiting') return [];
-      return [{
-        status: section.status,
-        title: section.status === 'next' ? 'Next' : 'Waiting',
-        data: section.projects,
-      }];
-    }),
-    [allSections],
-  );
-  const noCurrentProjects = currentProjectCount === 0;
-  const neverHadProjects = projects.length === 0;
-
-  const openProject = useCallback((project: Project) => {
-    router.navigate(`/projects/${project.id}`, { withAnchor: true });
-  }, []);
 
   return (
     <Animated.View
       entering={FadeIn.duration(200).reduceMotion(ReduceMotion.System)}
       style={{ flex: 1 }}
     >
-      <SectionList
+      <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 96 }}
         refreshControl={(
@@ -110,73 +63,18 @@ function HomeClearState({
             colors={[accent]}
           />
         )}
-        sections={sections}
-        keyExtractor={(project) => project.id}
-        stickySectionHeadersEnabled={false}
-        ListHeaderComponent={(
-          <View className="flex-row items-center gap-3 border-b border-divider px-screen-x py-6">
-            <View
-              accessible={false}
-              importantForAccessibility="no-hide-descendants"
-              className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted"
-            >
-              <Text className="text-[24px] text-foreground-secondary">✓</Text>
-            </View>
-            <View className="flex-1 gap-0.5">
-              <Text variant="section">Home is clear</Text>
-              <Text variant="subtitle">Nothing needs your attention right now.</Text>
-            </View>
+      >
+        <View className="flex-1 items-center justify-center gap-4 px-screen-x">
+          <View
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            className="h-20 w-20 items-center justify-center rounded-full bg-surface-muted"
+          >
+            <Text className="text-[40px] text-foreground-secondary">✓</Text>
           </View>
-        )}
-        ListEmptyComponent={
-          noCurrentProjects ? (
-            <View className="gap-2 px-screen-x py-6">
-              <Text variant="section">
-                {neverHadProjects ? 'No projects yet' : 'No current projects'}
-              </Text>
-              <Text variant="subtitle">
-                {neverHadProjects
-                  ? 'Projects group related tasks around an outcome you want to accomplish.'
-                  : 'Start another whenever you have a new outcome to work toward.'}
-              </Text>
-            </View>
-          ) : null
-        }
-        ListFooterComponent={
-          noCurrentProjects ? null : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="View all projects"
-              android_ripple={{ color: ripple }}
-              className="min-h-12 justify-center px-screen-x py-3"
-              onPress={() => router.navigate('/projects')}
-            >
-              <Text className="font-semibold text-accent">View all projects</Text>
-            </Pressable>
-          )
-        }
-        renderSectionHeader={({ section }) => (
-          <View className="border-b border-divider bg-background px-screen-x pb-2 pt-6">
-            <Text accessibilityRole="header" variant="section">{section.title}</Text>
-          </View>
-        )}
-        renderItem={({ item, section }) => (
-          <ProjectListRow
-            project={item}
-            status={section.status}
-            context={
-              projectStatusContext(
-                item,
-                tasks,
-                conditions,
-                projects,
-                today,
-              )?.rowLabel ?? null
-            }
-            onPress={() => openProject(item)}
-          />
-        )}
-      />
+          <Text variant="title">All done</Text>
+        </View>
+      </ScrollView>
     </Animated.View>
   );
 }
@@ -335,11 +233,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
         hydrating ? (
           <View className="flex-1" />
         ) : (
-          <HomeClearState
-            projects={projects ?? []}
-            tasks={tasks ?? []}
-            conditions={conditions ?? []}
-            today={today}
+          <HomeAllDone
             refreshing={refreshing}
             onRefresh={onRefresh}
           />
