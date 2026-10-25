@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-10-25: Remove the Zero assistant on Telegram. It no longer answers messages, and your conversations, what it learned about you, your files, your schedules and your Telegram link are deleted. Your tasks, projects and medicines in the Zero app stay.
 - 2026-10-15: Zero can now see the medicines you take only when needed, and when you took them.
 - 2026-10-10: Zero can now see which medicine doses you skipped.
 - 2026-09-23: Zero now answers with GPT-6 Luna.

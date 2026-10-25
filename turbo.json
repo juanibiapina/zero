@@ -5,8 +5,7 @@
     "CLOUDFLARE_API_TOKEN",
     "CLERK_PUBLISHABLE_KEY",
     "CLERK_SECRET_KEY",
-    "VITE_CLERK_PUBLISHABLE_KEY",
-    "VITE_TELEGRAM_BOT_USERNAME"
+    "VITE_CLERK_PUBLISHABLE_KEY"
   ],
   // A `dev` task fetches its own secrets with `zero vault run`, so the CLI's
   // credential has to survive strict mode. These are passed through, not

@@ -8,32 +8,14 @@
   ],
   "secrets": {
     "required": [
-      "ADMIN_USER_ID",
-      "BRAVE_API_KEY",
-      "BRAVE_API_KEY_PAID",
       "CLERK_PUBLISHABLE_KEY",
       "CLERK_SECRET_KEY",
       "CLERK_WEBHOOK_SIGNING_SECRET",
-      "CLOUDFLARE_API_KEY",
-      "CLOUDFLARE_ANALYTICS_TOKEN",
       "DISCORD_SIGNUP_WEBHOOK_URL",
       "ENVIRONMENT",
-      "GITHUB_APP_ID",
-      "GITHUB_APP_PRIVATE_KEY",
-      "TAVILY_API_KEY",
       "TYPESAFE_API_KEY",
-      "TELEGRAM_BOT_INFO",
-      "TELEGRAM_BOT_TOKEN",
-      "TELEGRAM_WEBHOOK_SECRET",
       "ZERO_API_KEY"
     ]
-  },
-  "vars": {
-    "TELEGRAM_API_ROOT": "https://api.telegram.org",
-    "CLOUDFLARE_ACCOUNT_ID": "4e04b64af4013414441c59014392bea0",
-    "CLOUDFLARE_GATEWAY_ID": "zero",
-    "MODEL_ID": "gpt-6-luna",
-    "LLM_BASE_URL_OVERRIDE": ""
   },
   "routes": [
     { "pattern": "zero.juanibiapina.dev/api/*", "zone_name": "juanibiapina.dev" },
@@ -46,49 +28,15 @@
   "limits": {
     "cpu_ms": 300000
   },
-  "ai": {
-    "binding": "AI"
-  },
-  // Resizes a photo down to a viewing copy small enough to store in a
-  // conversation row before the model ever sees it (see tools/files.ts).
-  "images": {
-    "binding": "IMAGES"
-  },
   "upload_source_maps": true,
-  "kv_namespaces": [
-    {
-      "binding": "KV",
-      "id": "c585ffa89cbb45448d2480491434b2ee",
-      "preview_id": "c585ffa89cbb45448d2480491434b2ee"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "FILES",
-      "bucket_name": "zero-attachments"
-    }
-  ],
   "analytics_engine_datasets": [
-    { "binding": "ANALYTICS", "dataset": "zero-events" },
-    { "binding": "AI_USAGE", "dataset": "zero-ai-usage" }
+    { "binding": "ANALYTICS", "dataset": "zero-events" }
   ],
   "durable_objects": {
     "bindings": [
       {
         "name": "USER_DO",
         "class_name": "UserDO"
-      },
-      {
-        "name": "SCHEDULE_DO",
-        "class_name": "ScheduleDO"
-      },
-      {
-        "name": "ASSISTANT_DO",
-        "class_name": "AssistantDO"
-      },
-      {
-        "name": "TELEGRAM_ACCOUNT_DO",
-        "class_name": "TelegramAccountDO"
       },
       {
         "name": "TASK_DO",
@@ -140,6 +88,10 @@
     {
       "tag": "v11",
       "deleted_classes": ["LearningDO"]
+    },
+    {
+      "tag": "v12",
+      "deleted_classes": ["AssistantDO", "ScheduleDO", "TelegramAccountDO"]
     }
   ]
 }

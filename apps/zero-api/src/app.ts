@@ -1,6 +1,6 @@
-// Middleware order matters: the Telegram webhook is mounted before Clerk
-// (it carries no Clerk JWT); the user-settings routes are mounted after
-// Clerk + the auth guard so handlers always see a verified `userId`.
+// Middleware order matters: the Clerk webhook and MCP routes are mounted before
+// Clerk (they carry no Clerk session); the user-settings and todo routes are
+// mounted after Clerk + the auth guard so handlers always see a verified `userId`.
 
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { clerkMiddleware, getAuth } from "@clerk/hono";
@@ -8,11 +8,8 @@ import { cors } from "hono/cors";
 import type { Env } from "./types";
 import { logError, fmtErr } from "./log";
 import { reportError } from "./reporting/zero-errors";
-import { createTelegramWebhookRoute } from "./routes/telegram-webhook";
 import { createClerkWebhookRoute } from "./routes/clerk-webhook";
 import { createUserSettingsRoutes } from "./routes/user-settings";
-import { createOnboardingRoutes } from "./routes/onboarding";
-import { createAdminRoutes } from "./routes/admin";
 import { createTasksRoutes } from "./routes/tasks";
 import { createProjectsRoutes } from "./routes/projects";
 import { createWaitsRoutes } from "./routes/waits";
@@ -26,9 +23,7 @@ type Variables = {
 export const createApp = () => {
   const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-  // Report uncaught request errors to ZeroErrors alongside the log line. The
-  // webhook path swallows its own failures (returning 200), so this only fires
-  // for genuinely unexpected throws in the HTTP handlers.
+  // Report uncaught request errors to ZeroErrors alongside the log line.
   app.onError((err, c) => {
     logError("http_error", { error: fmtErr(err), path: c.req.path });
     try {
@@ -49,7 +44,6 @@ export const createApp = () => {
     })
   );
 
-  app.route("/", createTelegramWebhookRoute());
   app.route("/", createClerkWebhookRoute());
   app.route("/", createMcpRoutes());
 
@@ -89,8 +83,6 @@ export const createApp = () => {
   });
 
   app.route("/", createUserSettingsRoutes());
-  app.route("/", createOnboardingRoutes());
-  app.route("/", createAdminRoutes());
   app.route("/", createTaskSyncRoutes());
   app.route("/", createTasksRoutes());
   app.route("/", createProjectsRoutes());

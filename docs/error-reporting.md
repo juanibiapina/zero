@@ -1,60 +1,47 @@
-# Agent error reporting
+# Error reporting
 
-The agent Worker reports its own failures to ZeroErrors, project `zero-agent`.
+The `zero-api` Worker reports its own failures to ZeroErrors, project
+`zero-agent` (named for the retired Telegram agent).
 Read them at `https://dash.zeroapps.dev/errors`. One function does the reporting:
 `apps/zero-api/src/reporting/zero-errors.ts`.
 
 ## What gets reported
 
-Report a failure when **the user experienced it** (they got a fallback, a notice,
-or no reply at all) or when **work was permanently lost**. Everything else is a
-log line, not an issue.
+Report a failure when **the user experienced it** or when **work was permanently
+lost**. Everything else is a log line, not an issue.
 
 Not reported, on purpose:
 
-- Rejected user input: sign-in required, oversize file, invalid PDF, full file
-  quota, a rejected Telegram link. The system worked; the input did not qualify.
+- Rejected user input, such as an invalid timezone. The system worked; the input
+  did not qualify.
 - A failed attempt that will be retried. Nothing is lost yet. Only the give-up
   reports.
 - Durable Object resets (see below).
 
 ## Sites
 
-`context.site` names the failure. Ids (`clerk_user_id`, `chat_id`, `topic_id`)
-ride in context; no message content, tool results or request bodies are ever
-sent.
+`context.site` names the failure. Ids (`clerk_user_id`) ride in context; no task
+content or request bodies are ever sent.
 
 | `site` | Level | Meaning |
 |---|---|---|
 | `http` | error | An HTTP route threw. |
-| `turn` | error | The agent path threw; the user got the fallback message. |
-| `turn_rate_limited` | warning | A 429/529 turn failure; the user got the rate-limit notice. Upstream capacity, not our defect. |
-| `schedule_gave_up` | error | A deadline failed its 6 dispatch attempts. The work is gone. |
-| `onboarding` | error | Google onboarding failed; status is `failed`. |
-| `admin_task` | error | An admin task failed; status is `failed`. |
-| `file_download` | warning | Telegram refused a file the user sent; they got a notice instead of their attachment. |
-| `learning` | error | A learning run ended without an answer; its messages stay unconsolidated for the next run. |
-| `delivery` | error | Telegram refused a reply after it was claimed; that message is lost. |
 
 An issue's **level is stamped when the issue is created** and never changes. A
 message that first arrives as a `warning` stays a warning even if a later report
 of the same fingerprint says `error`.
 
-Pi retries a failed model request before a turn or a learning run gives up, so
-one report stands for a run that already exhausted its retries.
-
 ## Durable Object resets are never reported
 
 Every deploy tears down in-flight Durable Objects with `Durable Object reset
-because its code was updated`. That is deploy noise, and it reaches the reporter
-through several doors (turns, learning slices, schedule RPCs), so the filter
-lives in the reporter itself (`isDurableObjectReset`, `src/do/retry.ts`) rather
+because its code was updated`. That is deploy noise, so the filter lives in the
+reporter itself (`isDurableObjectReset`, `src/do/retry.ts`) rather
 than at any one call site. Skipped reports log `error_report_skipped`.
 
 ## The `ENVIRONMENT` gate
 
 Nothing is sent unless `env.ENVIRONMENT === "production"`, so local runs, unit
-tests and `bin/e2e-test` cannot write into the production issue list.
+tests and the mobile e2e harness cannot write into the production issue list.
 
 - Local: the `dev` script mounts `ENVIRONMENT=development` from ZeroVault
   `zero-api/development` at `apps/zero-api/.dev.vars`, for as long as

@@ -54,7 +54,8 @@ model, and both work before sign-in.
    [`todo-task-to-project-ai.md`](https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/todo-task-to-project-ai.md).
 2. Connect the agent to todo workflows. Resolve Waiting conditions from observed
    email, calendar, or content, then add carefully scoped todo write tools where
-   a confirmed workflow needs them.
+   a confirmed workflow needs them. The Telegram agent removed from this repo is at git
+   tag `zero-agent-final`, as prior art for its Pi Durable harness and tools.
 
 The historical plan index is
 [`todo-plans.md`](https://github.com/juanibiapina/zero/blob/574911e0df656ba5923198819c9ec5d061f623c6/docs/plans/todo-plans.md).

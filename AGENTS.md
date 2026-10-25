@@ -6,7 +6,7 @@ During development, use `gob run bin/ci` to run all necessary checks including b
 
 **Mobile (`apps/agent-mobile`):** unit tests, lint, and typecheck run in the Turbo pipeline like the other packages. On the `mini` host (2 CPUs, 7.6 GB RAM) these checks are cheap in isolation but crawl 10-50x when they compete for memory: stop Metro and any local `gradlew`/`eas build --local` before running them, prefer EAS cloud builds, and use `jest --runInBand` / `turbo --concurrency=1`. See the "Run checks on a starved box" section of `apps/agent-mobile/README.md`. Test mobile behavior in Jest at the module interface by default. `pnpm --filter @zero/agent-mobile e2e:pixel` runs the two critical phone flows in `.maestro/critical/`: native persistence across restart, account binding and sync with the Worker, and native medicine notifications. Change one of those flows only when a change touches its seam and Jest cannot prove the behavior; do not add a third default flow without recording the decision in `apps/agent-mobile/README.md`. A passing run prints one `PASS` line; a failing run prints the flow, the failed step, a screenshot path, and the artifact directory. Use manual Metro inspection with screenshots for visual, auditory, tactile, or accessibility judgment. See `apps/agent-mobile/README.md`.
 
-**Local `workerd` limitation:** on dev boxes where the host `workerd` binary can't start (e.g. NixOS), no local Worker runtime can start (the API Workers' `vite dev`, `wrangler dev`, `dev:worker`), including asset-only ones like `apps/zeroapps-landing` (observed: `write EPIPE` then "NixOS cannot run dynamically linked executables"). The `e2e:pixel` harness is the supported exception: it runs the Task Worker inside rootless Podman. `gob run bin/ci` and `bin/e2e-test` still can't run whole-repo because they boot host `workerd`. For other changes, verify the touched package directly, e.g. `pnpm --filter @zero/api run test`, plus `pnpm --filter @zero/api run lint` and `pnpm --filter @zero/api run typecheck`. GitHub Actions CI runs lint, typecheck, build, package tests, and the deploy dry-run. The `packages/agent-e2e` suite is **not** wired into CI; run it manually via `bin/e2e-test` on a `workerd`-capable machine.
+**Local `workerd` limitation:** on dev boxes where the host `workerd` binary can't start (e.g. NixOS), no local Worker runtime can start (the API Workers' `vite dev`, `wrangler dev`, `dev:worker`), including asset-only ones like `apps/zeroapps-landing` (observed: `write EPIPE` then "NixOS cannot run dynamically linked executables"). The `e2e:pixel` harness is the supported exception: it runs the Task Worker inside rootless Podman. `gob run bin/ci` still can't run whole-repo because it boots host `workerd`. For other changes, verify the touched package directly, e.g. `pnpm --filter @zero/api run test`, plus `pnpm --filter @zero/api run lint` and `pnpm --filter @zero/api run typecheck`. GitHub Actions CI runs lint, typecheck, build, package tests, and the deploy dry-run.
 
 ## Changelog
 
@@ -22,25 +22,21 @@ separate follow-up after deployment.
 
 Route the entry by product:
 
-- **Agent (Zero assistant):** changes to `apps/zero-api` or the Telegram bot go
-  in `apps/zero-api/CHANGELOG.md`.
+- **Todo app server (`apps/zero-api`):** it has no surface of its own, so a
+  user-visible change goes in the changelog of the app where users see it
+  (mobile, web, or both).
 - **ZeroVault / ZeroErrors / console:** changes to `apps/zeroapps-api`,
   `apps/zeroapps-dashboard-web`, or shared console UI go in the root `CHANGELOG.md`.
-- **Mobile todo app (`apps/agent-mobile`):** a separate product surface, NOT the
-  Zero agent. Its user-facing changes do **not** go in `apps/zero-api/CHANGELOG.md`
-  (that ships to agent users as the in-product Changelog topic). They go in
+- **Mobile todo app (`apps/agent-mobile`):** user-facing changes go in
   `apps/agent-mobile/CHANGELOG.md`.
-- **Web app (`apps/zero-web`):** user-facing changes to the web surface (e.g. the
-  Inbox) go in `apps/zero-web/CHANGELOG.md`, not the agent file.
+- **Web app (`apps/zero-web`):** user-facing changes to the web surface go in
+  `apps/zero-web/CHANGELOG.md`.
 - **Emoji app (`apps/zeroapps-emoji`):** user-facing changes to the public emoji
   page go in `apps/zeroapps-emoji/CHANGELOG.md`.
 
-`apps/zero-api/CHANGELOG.md` is bundled and surfaced in-product as Zero's
-read-only "Changelog" system topic (`apps/zero-api/src/store/system-topics.ts`),
-so its entries ship to agent users on the next deploy. Keep them clean and
-user-facing. The root `CHANGELOG.md` has no in-product surface today; it is the
-console's human-readable changelog. **Do not mix console entries into the agent
-file** — that is exactly what this split fixed.
+`apps/zero-api/CHANGELOG.md` is the closed history of the retired Telegram
+agent; add no entries to it. The root `CHANGELOG.md` has no in-product surface
+today; it is the console's human-readable changelog.
 
 ## Agent Skills
 
@@ -67,8 +63,8 @@ Each deployable Worker has its own Workers Builds git connector on
 package: scope + "-" + package name (`@zeroapps/api` deploys `zeroapps-api`),
 and its folder is `apps/<Worker name>`.
 
-- `zero-api` (agent API) — build `pnpm turbo run build --filter=@zero/api`, deploy `pnpm -F @zero/api run deploy`
-- `zero-web` (agent web app, `zero.juanibiapina.dev`) — build `pnpm turbo run build --filter=@zero/web`, deploy `pnpm -F @zero/web run deploy`. `@zero/web` takes `wrangler` from the workspace root: declaring it in the package changes a `utf-8-validate` peer variant, which installs a second `tinybase` copy and breaks the replica tests.
+- `zero-api` (todo API) — build `pnpm turbo run build --filter=@zero/api`, deploy `pnpm -F @zero/api run deploy`
+- `zero-web` (todo web app, `zero.juanibiapina.dev`) — build `pnpm turbo run build --filter=@zero/web`, deploy `pnpm -F @zero/web run deploy`. `@zero/web` takes `wrangler` from the workspace root: declaring it in the package changes a `utf-8-validate` peer variant, which installs a second `tinybase` copy and breaks the replica tests.
 - `zeroapps-api` (Vault + Errors API) — build `pnpm turbo run build --filter=@zeroapps/api`, deploy `pnpm -F @zeroapps/api run deploy`
 - `zeroapps-dashboard-web` (dashboard SPA, `dash.zeroapps.dev`) — build `pnpm turbo run build --filter=@zeroapps/dashboard-web`, deploy `pnpm -F @zeroapps/dashboard-web run deploy`
 - `zeroapps-landing` (landing site, `zeroapps.dev`) — build `pnpm -F @zeroapps/landing run build`, deploy `pnpm -F @zeroapps/landing run deploy`
@@ -133,7 +129,7 @@ endpoint list).
 Each connector's Workers Builds **build watch paths** are scoped so a push only
 rebuilds the Workers it actually affects. Before 2026-07-27 all four connectors
 used the default include `*`, so any commit (CLI, docs, landing, dashboard UI)
-forced a `zero-api` rebuild and reset in-flight agent turns ("Durable Object
+forced a `zero-api` rebuild and reset its live Durable Objects ("Durable Object
 reset because its code was updated"). The include lists now name only each
 Worker's real dependency set; the exclude list is empty for every Worker.
 
@@ -156,7 +152,7 @@ Per-Worker **include** paths (exclude list is empty for every Worker):
 - **every Worker also includes the shared build roots:** `packages/typescript-config/*`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`, `patches/*`
 
 Each web app is its own Worker, so a web-only change redeploys only its web
-Worker and never resets agent turns in `zero-api`.
+Worker and never resets `zero-api`'s Durable Objects.
 Repo-root `docs/` (plans, notes) is documentation only and is intentionally in no
 Worker's watch paths — it is **not** the `apps/zeroapps-docs` site, which is what
 `zeroapps-docs` watches. When you add a new cross-package dependency to a Worker,
@@ -175,15 +171,9 @@ gob run pnpm run deploy:sites      # landing + docs + emoji
 There is no root `deploy` script: an unwrapped whole-repo deploy would ship a
 web bundle built with no values in it.
 
-A deploy reassigns `AssistantDO` instances to the new Worker version, which resets
-any DO mid-turn ("Durable Object reset because its code was updated") and
-interrupts the in-flight turn. Turns self-heal (Pi Durable resumes from its last
-checkpoint on the next heartbeat alarm, and replies are claimed before they are
-sent, so no duplicates — see `docs/harness.md`), but the user still sees a
-delay. To shrink the blast radius, prefer gradual version rollout (Workers
-Builds / git connector) so only a slice of DOs reset per step, and **space out
-rapid successive pushes** — back-to-back deploys are the worst case for mid-turn
-resets.
+A `zero-api` deploy resets every live Durable Object ("Durable Object reset
+because its code was updated"), which drops open sync connections to `TaskDO`.
+**Space out rapid successive pushes** so clients are not cut off repeatedly.
 
 See `docs/workers-ops.md` for deploy-time Workers ops facts (forcing a deploy to
 fail on a missing secret via `secrets.required`, and `custom_domain` route
@@ -212,15 +202,14 @@ releases` Google Drive folder and replace the previous APK. See
 
 ## Architecture
 
-Zero receives Telegram bot webhooks and routes each update to the right user via a KV cache backed by an authoritative `TelegramAccountDO` per Telegram account, consulted whenever KV misses (see `docs/telegram-login.md`). The per-user `UserDO` owns the user's data (topics, settings, files, schedules, watched mail threads) and hands every message to the per-user `AssistantDO`, which runs every agent on Pi Durable (`@earendil-works/pi-durable`) hosted by the Agents SDK's `PiHarness` and Lifecycle (see `docs/harness.md`): an **interface agent** reads the chat's transcript and the topic-based knowledge model and replies to the user, and a **learner** later consolidates what was learned into topics. The interface agent, the learner, onboarding and admin tasks are extensions of one Pi harness with different prompts and tools, reaching UserDO's data over RPC; the interface agent investigates the web in its own loop with `web_search` (`WebSearch` port, Brave adapter) and `read_page` (`PageFetcher` port, Tavily adapter). The webhook hands each message over with an operation id and returns 200 immediately; Pi runs the turn, and Lifecycle's alarm keeps it running and resumes it after a crash or deploy. LLM calls go through the Cloudflare AI Gateway (BYOK) with per-user `cf-aig-metadata` attribution; the model is `MODEL_ID` (`gpt-6-luna` on the OpenAI Responses API), and the provider is derived from the model id. The web app is a single screen where a signed-in user links their Telegram account via Telegram's Login Widget (see `docs/telegram-login.md`). A user can also ask Zero to act later, once or on a routine; the schedule record lives in `UserDO` and its deadline in `ScheduleDO`, which hands the schedule's prompt to the assistant as an ordinary message when it comes due (see `docs/schedules.md`). Zero also watches Gmail threads it sent for you, and any the user points at, and starts a turn when a reply arrives (see `docs/mail-watch.md`). See `docs/topics.md` for the topic model and learning policy, `docs/harness.md` for how the agents run, and `docs/research.md` for web research. The same Worker serves an MCP server at `/mcp` that lets local agents such as pi read and change a user's todo workspace through Clerk OAuth (see `docs/mcp.md`).
+`zero-api` is the todo app's server. Each signed-in account has a `TaskDO`, the only server authority for its todo data, which mobile and web replicas synchronize with over `/api/task-sync` (see `docs/storage.md`), and a `UserDO` that holds its settings (the device-reported timezone). REST routes under `/api/*` and an MCP server at `/mcp` reach the same `TaskDO`; the MCP server lets local agents such as pi read and change a user's todo workspace through Clerk OAuth (see `docs/mcp.md`). The Zero Telegram agent that used to run in this Worker was removed; its last code is at git tag `zero-agent-final`.
 
 Packages:
 
 - **Worker:** `apps/zero-api` (`@zero/api`, Worker `zero-api`) serves `/api/*`, `/mcp*` and `/.well-known/*` on `zero.juanibiapina.dev` through zone routes, which take precedence over the web app's custom domain.
-- **Frontend:** `apps/zero-web` (`@zero/web`) is a Vite SPA served by the assets-only Worker `zero-web` on the `zero.juanibiapina.dev` custom domain. Its `/api` calls stay same-origin (the agent web app authenticates with Clerk's session cookie) and reach `zero-api` through the routes above.
+- **Frontend:** `apps/zero-web` (`@zero/web`) is a Vite SPA served by the assets-only Worker `zero-web` on the `zero.juanibiapina.dev` custom domain. Its `/api` calls stay same-origin (the web app authenticates with Clerk's session cookie) and reach `zero-api` through the routes above.
 - **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Routine releases publish compatible JavaScript and assets to the EAS `preview` channel after green `main` CI. Native fingerprint changes use a preview APK built **locally by default** on `mini` with a Nix dev shell; use an EAS cloud build only when explicitly asked. Publish the APK to a dedicated Google Drive folder and replace the previous APK. See `docs/mobile-releases.md` for the release process and `apps/agent-mobile/README.md` for the local build toolchain. A todo app (the Todoist replacement, intended to become the main surface) is being built on this app plus `apps/zero-api`; its vision, decisions, and build order live in `docs/todo-app.md` — read and update it when working on todos.
 - **Shared app code:** `packages/agent-core` (`@zero/agent-core`) — the platform-agnostic todo, medicine and night routine models and the TaskDO replica, imported by `apps/agent-mobile`, `apps/zero-api` and `apps/zero-web`
-- **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and OpenAI servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
 - **Dashboard API Worker:** `apps/zeroapps-api` (`@zeroapps/api`, Worker `zeroapps-api`) serves the public API at `api.zeroapps.dev` and the dashboard's `/api/*` and `/ping` on `dash.zeroapps.dev` (zone routes, which take precedence over the dashboard's custom domain). It holds the Vault and Errors Durable Objects and uses `packages/errors-core` (`@zero/errors-core`). `packages/vault-core` (`@zero/vault-core`) holds the API key types the dashboard uses.
 - **Dashboard frontend:** `apps/zeroapps-dashboard-web` (`@zeroapps/dashboard-web`) is a Vite SPA served by the assets-only Worker `zeroapps-dashboard-web` on the `dash.zeroapps.dev` custom domain, with Vault at `/vault/*` and Errors at `/errors/*`. Its `/api` calls stay same-origin and reach `zeroapps-api` through the routes above.
 - **Landing site:** `apps/zeroapps-landing` (`@zeroapps/landing`) is a static Astro site served by the asset-only Worker `zeroapps-landing` for `zeroapps.dev`. `astro build` ships zero client JS with CSS inlined into `<head>`; unknown paths get a real 404 (`not_found_handling: 404-page`). It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
@@ -269,7 +258,7 @@ for `zero-api`):
 POST /accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/query
 {"queryId":"q","timeframe":{"from":<ms>,"to":<ms>},
  "parameters":{"datasets":["cloudflare-workers"],
-   "filters":[{"key":"$metadata.message","operation":"eq","value":"turn_started","type":"string"}]},
+   "filters":[{"key":"$metadata.message","operation":"eq","value":"mcp_tool_called","type":"string"}]},
  "limit":100,"view":"events"}
 ```
 
@@ -277,8 +266,8 @@ POST /accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/
   invocation and adds **`outcome`, `wallTimeMs`, `cpuTimeMs`** — the only way to
   see an `exceededWallTime` kill, which throws nothing and reaches no error sink.
 - Group by `$workers.requestId` to read one invocation. Do **not** trust
-  `eventType`: a turn's later logs can be attributed to a concurrent `rpc`
-  invocation running in the same Durable Object.
+  `eventType`: an invocation's later logs can be attributed to a concurrent
+  `rpc` invocation running in the same Durable Object.
 - `$workers.event.scheduledTime` on an alarm is the time it was *scheduled*, not
   when it ran. The gap between the two is how alarm delay is measured.
 - `limit` caps at **1000** and truncates silently: a query returning exactly
@@ -288,41 +277,6 @@ POST /accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/
 - There is **no aggregation**: counting means fetching events and counting them
   yourself, which the row cap breaks on a busy day. Split the window (per hour,
   per day) and sum the parts.
-
-Brave search spend is countable from Workers Logs: every request to Brave emits
-one `brave_request`, and each turn reports its own `searches` /
-`unique_queries` on `interface_completed`. See `docs/research.md` (Search usage).
-Brave bills 200s only, so the day's bill is the `status: 200` count:
-
-```bash
-FROM=$(date -u -d 'today 00:00' +%s)000; TO=$(date +%s)000
-curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/query" \
-  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
-  -d "{\"queryId\":\"q\",\"timeframe\":{\"from\":$FROM,\"to\":$TO},
-       \"parameters\":{\"datasets\":[\"cloudflare-workers\"],
-         \"filters\":[{\"key\":\"\$metadata.message\",\"operation\":\"eq\",\"value\":\"brave_request\",\"type\":\"string\"}]},
-       \"limit\":1000,\"view\":\"events\"}" \
-  | jq -r '.result.events.events[].source | "\(.status) \(.attempt)"' | sort | uniq -c
-```
-
-First column is the count, then `status` and `attempt`: `200 0` is a paid
-search, any row with `attempt > 0` is retry cost, and `429` rows are throttling.
-Mind the 1000-row cap above — on a heavy day, run it per hour.
-
-Per-LLM-call cost, tokens, cache counts and a `metadata.agent` tag live in the
-**AI Gateway** logs instead:
-
-```
-GET /accounts/4e04b64af4013414441c59014392bea0/ai-gateway/gateways/zero/logs?per_page=50&order_by=created_at&order_by_direction=desc
-```
-
-- `per_page` maxes at 50; a larger value returns `success: false` with an error,
-  which looks exactly like an empty page if you only read `result`. Check
-  `success`.
-- `created_at` is the request **end** time, so a call's start is
-  `created_at - duration`.
-- These logs **lag** by minutes. Never read recency from them; use Workers Logs
-  for "what is happening now".
 
 ## Dev Server
 
@@ -340,5 +294,5 @@ Then start the dev server again with `pnpm turbo dev`.
 When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. No secret is written to disk: `zero vault run -p <project> -e <env> -- <command>` gives a command its secrets, and `--mount <path>` serves them through a named pipe for tools that read a dotenv file (`wrangler` reading `.dev.vars`). The CLI runs via `pnpm dlx @zeroapps/cli@0.7.0` and needs only the `ZERO_API_KEY` env var; `ZERO_API_URL` is optional and defaults to `https://api.zeroapps.dev` (set it only to target another instance). It is a bare origin: the CLI appends `/vault/v1` or `/errors/v1` itself, so a `/vault` suffix left over from the `zv` era produces 404s.
 
 ZeroVault projects (each with `development` and `production` environments):
-- `zero-api` — Worker backend secrets (also used by `bin/e2e-test`)
+- `zero-api` — Worker backend secrets
 - `zero-web` — Frontend build-time secrets

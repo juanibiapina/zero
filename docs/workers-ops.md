@@ -28,10 +28,10 @@ A plain `wrangler deploy`, `wrangler versions upload` or `wrangler deploy
   pipe changes it, which loops forever. `server.watch.ignored` lists
   `**/.dev.vars`.
 - **Vite ignores Wrangler `rules`.** `.sql` imports follow Wrangler's default
-  module rules and upload as text modules. `zero-api` also imports `.md`, which
-  the `text-imports` plugin in its `vite.config.ts` inlines (`vitest.config.ts`
-  reuses it). `src/text-modules.d.ts` types both, since `wrangler types` only
-  emitted those declarations from `rules`. `wrangler.e2e.jsonc` keeps its
+  module rules and upload as text modules. `zero-api`'s UserDO migrations are `.sql`
+  files, which the `text-imports` plugin in its `vite.config.ts` inlines
+  (`vitest.config.ts` reuses it). `src/text-modules.d.ts` types them, since
+  `wrangler types` only emitted that declaration from `rules`. `wrangler.e2e.jsonc` keeps its
   `rules` because the mobile e2e harness still runs `wrangler dev` on it.
 - **Dynamic imports become separate modules.** Vite splits them into chunks under
   `dist/<worker>/assets/`; Wrangler uploads each as an ES module with its source

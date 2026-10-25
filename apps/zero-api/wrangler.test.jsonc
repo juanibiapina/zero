@@ -7,32 +7,10 @@
     "nodejs_compat"
   ],
   "vars": {
-    "TELEGRAM_API_ROOT": "http://localhost:3501",
-    "LLM_BASE_URL_OVERRIDE": "http://localhost:3502",
-    "ENVIRONMENT": "test",
-    "MODEL_ID": "gpt-6-luna",
-    "CLOUDFLARE_ACCOUNT_ID": "test-account",
-    "CLOUDFLARE_GATEWAY_ID": "test-gateway"
-  },
-  "kv_namespaces": [
-    {
-      "binding": "KV",
-      "id": "c585ffa89cbb45448d2480491434b2ee",
-      "preview_id": "c585ffa89cbb45448d2480491434b2ee"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "FILES",
-      "bucket_name": "zero-attachments"
-    }
-  ],
-  "ai": {
-    "binding": "AI"
+    "ENVIRONMENT": "test"
   },
   "analytics_engine_datasets": [
-    { "binding": "ANALYTICS", "dataset": "zero-events" },
-    { "binding": "AI_USAGE", "dataset": "zero-ai-usage" }
+    { "binding": "ANALYTICS", "dataset": "zero-events" }
   ],
   "durable_objects": {
     "bindings": [
@@ -41,20 +19,8 @@
         "class_name": "UserDO"
       },
       {
-        "name": "TELEGRAM_ACCOUNT_DO",
-        "class_name": "TelegramAccountDO"
-      },
-      {
         "name": "TASK_DO",
         "class_name": "TaskDO"
-      },
-      {
-        "name": "SCHEDULE_DO",
-        "class_name": "ScheduleDO"
-      },
-      {
-        "name": "ASSISTANT_DO",
-        "class_name": "AssistantDO"
       }
     ]
   },
@@ -104,6 +70,10 @@
     {
       "tag": "v11",
       "deleted_classes": ["LearningDO"]
+    },
+    {
+      "tag": "v12",
+      "deleted_classes": ["AssistantDO", "ScheduleDO", "TelegramAccountDO"]
     }
   ]
 }

@@ -8,8 +8,8 @@ it needs and removes every trace when the command exits. There is no
 
 | Value | Source of truth | Who reads it |
 |---|---|---|
-| Worker secrets (`TELEGRAM_BOT_TOKEN`, `CLERK_SECRET_KEY`, `MASTER_KEY`, …) | ZeroVault `zero-api`, `zerovault` | The Worker dev server locally, Worker secrets in production |
-| Web build values (`VITE_CLERK_PUBLISHABLE_KEY`, `VITE_TELEGRAM_BOT_USERNAME`) | ZeroVault `zero-web`, `zerovault-web` | Vite, locally and in `pnpm run build:agent` |
+| Worker secrets (`CLERK_SECRET_KEY`, `MASTER_KEY`, …) | ZeroVault `zero-api`, `zerovault` | The Worker dev server locally, Worker secrets in production |
+| Web build values (`VITE_CLERK_PUBLISHABLE_KEY`) | ZeroVault `zero-web`, `zerovault-web` | Vite, locally and in `pnpm run build:agent` |
 | The same web build values, for production builds | The Workers Builds connector on each Worker | The Cloudflare build, which has no ZeroVault credential |
 
 The web build values are public: they are compiled into the bundle and served to
@@ -49,7 +49,7 @@ with plain environment variables. Wrangler treats the two routes differently:
    else. A stale file therefore wins silently. Delete it.
 2. With no `.dev.vars`, Wrangler copies the **whole host environment** into the
    Worker's bindings whenever the config declares `secrets`. A variable exported
-   in your shell, such as `TELEGRAM_BOT_TOKEN`, would override the vault value.
+   in your shell, such as `CLERK_SECRET_KEY`, would override the vault value.
 3. On that route Wrangler also drops any key that is not listed in `vars` or
    `secrets.required`, with no error.
 
@@ -83,18 +83,9 @@ through `wrangler secret bulk`, piping JSON with no file in between.
 
 ## CI
 
-The GitHub Actions build job holds no credential. It sets `pk_test_ci` and
-`ci-bot` for the two public build values, because it proves that the code
-compiles, not that the configuration is right. `bin/check-build-vars` covers the
-configuration.
-
-## Analytics Engine reporting
-
-`CLOUDFLARE_ANALYTICS_TOKEN` belongs in the `zero-api` development and
-production environments. Create it as a custom Cloudflare token with only
-**Account → Account Analytics → Read** for the Zero account. It reads the
-`zero-ai-usage` dataset for admin reports. Model calls write through the
-`AI_USAGE` Worker binding and do not use this token.
+The GitHub Actions build job holds no credential. It sets `pk_test_ci` for the
+public build value, because it proves that the code compiles, not that the
+configuration is right. `bin/check-build-vars` covers the configuration.
 
 ## TypeSafe
 
@@ -109,6 +100,3 @@ Before deploying code that lists a new secret in `secrets.required`:
 
 1. Store the secret in both `zero-api` environments.
 2. Run `bin/sync-secrets-to-cloudflare` to set the production Worker secret.
-
-Do not reuse `CLOUDFLARE_API_KEY`, which authenticates AI Gateway requests and
-has a different purpose.

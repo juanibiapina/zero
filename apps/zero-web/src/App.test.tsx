@@ -21,7 +21,7 @@ vi.mock("./pages/SettingsPage", () => ({ SettingsPage: () => <div>Account settin
 beforeEach(() => {
   auth.isSignedIn = true;
   window.history.replaceState({}, "", "/");
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ onboardingSeen: true, googleOnboardingStatus: null, timezone: null }) }));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ createdAt: null, timezone: null }) }));
 });
 afterEach(() => vi.unstubAllGlobals());
 function renderAt(path: string) { window.history.replaceState({}, "", path); render(<App />); }

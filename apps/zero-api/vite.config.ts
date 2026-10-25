@@ -7,7 +7,7 @@ export const textImports = (): Plugin => ({
   enforce: "pre",
   load(id) {
     const path = id.split("?")[0];
-    if (path.endsWith(".md") || path.endsWith(".sql")) {
+    if (path.endsWith(".sql")) {
       return `export default ${JSON.stringify(readFileSync(path, "utf8"))};`;
     }
   },

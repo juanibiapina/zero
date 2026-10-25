@@ -8,7 +8,7 @@ import {
 import { log } from "../log";
 import type { Env } from "../types";
 import { getTaskDO } from "../TaskDO/stub";
-import { suggestProject, type ProjectSuggestion } from "../agents/project-suggest";
+import { suggestProject, type ProjectSuggestion } from "../project-suggest";
 import { typesafeDecide } from "@zeroapps/typesafe";
 
 type Variables = {

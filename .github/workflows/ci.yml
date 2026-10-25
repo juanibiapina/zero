@@ -35,13 +35,12 @@ jobs:
   build:
     name: Build & Validate
     runs-on: ubuntu-latest
-    # No credential of any kind. The two build-time values below are public and
-    # only decide what a bundle embeds, which this job does not deploy.
+    # No credential of any kind. The build-time value below is public and only
+    # decides what a bundle embeds, which this job does not deploy.
     # Production values live on the Workers Builds connectors; bin/check-build-vars
     # compares them against ZeroVault.
     env:
       VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci
-      VITE_TELEGRAM_BOT_USERNAME: ci-bot
     steps:
       - uses: actions/checkout@v7
 
@@ -62,9 +61,6 @@ jobs:
 
       - name: Run tests
         run: pnpm run test
-
-      - name: Run Workers runtime tests
-        run: pnpm --filter @zero/api run test:workers
 
       # The `--` is required: `turbo run deploy --dry-run` is turbo's own dry
       # run and would execute nothing.

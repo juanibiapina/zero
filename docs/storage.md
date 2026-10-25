@@ -62,9 +62,8 @@ data on reconnect.
 - Every signed-in account stores todo entities in its per-account `TaskDO`
   TinyBase mergeable store. Todo REST routes and WebSocket synchronization use
   that same authority.
-- `UserDO` still owns agent conversations, settings, schedules, and other
-  non-todo state. Migration 0057 removes its retired physical todo tables after
-  TaskDO became the sole authority.
+- `UserDO` owns the account's settings. Migration 0057 removed its retired
+  physical todo tables after TaskDO became the sole authority.
 
 ## Client replicas
 

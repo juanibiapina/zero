@@ -4,8 +4,8 @@ set -euo pipefail
 
 # Compare the build-time values Cloudflare uses against ZeroVault.
 #
-# The web apps read two public values at build time (a Clerk publishable key and
-# the Telegram bot username). ZeroVault holds them for local builds; the
+# The web apps read a public value at build time (the Clerk publishable key).
+# ZeroVault holds it for local builds; the
 # Workers Builds connectors hold their own copy for production builds, because a
 # Cloudflare build has no ZeroVault credential and should not need one.
 #
@@ -14,7 +14,7 @@ set -euo pipefail
 #
 # Needs CLOUDFLARE_API_TOKEN and a ZeroVault credential (ZERO_API_KEY or
 # `zero login`). A value stored as a build *secret* reads back as null from the
-# Cloudflare API and cannot be compared, so keep these two as plain variables.
+# Cloudflare API and cannot be compared, so keep these as plain variables.
 
 ACCOUNT_ID="4e04b64af4013414441c59014392bea0"
 # ZERO_CLI overrides the CLI, e.g. to test against a local build.

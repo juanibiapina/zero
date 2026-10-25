@@ -18,6 +18,7 @@ describe("0057 legacy todo tables migration", () => {
   });
 
   it("runs after the last historical UserDO migration", () => {
-    expect(Object.keys(migrations).slice(-2)).toEqual(["m0056", "m0057"]);
+    const keys = Object.keys(migrations);
+    expect(keys.indexOf("m0057")).toBe(keys.indexOf("m0056") + 1);
   });
 });

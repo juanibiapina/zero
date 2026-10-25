@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-25: Remove the Telegram and Google connections and the onboarding steps from Settings. Delete my data now lists what it erases: your tasks, projects, medicines and settings.
+
 - 2026-10-24: Change an empty Home to a simple All done screen. It no longer lists your Next and Waiting projects.
 
 - 2026-10-16: Fix long project descriptions showing a small scrolling box. Long descriptions now show their first lines with a More button, and open in full when you click them to edit.
