@@ -163,6 +163,28 @@ describe("todo operation catalog", () => {
     expect(listed.intakes).toEqual([expect.objectContaining({ id: "recent", amount: 1 })]);
   });
 
+  it("keeps a Shopping list that agents can add to, reorder, edit, and buy from", () => {
+    const { run, value } = workspace();
+    value(run("shopping_add", { text: "Milk" }));
+    value(run("shopping_add", { id: "eggs", text: "Eggs" }));
+    expect(run("shopping_add", { id: "eggs", text: "Eggs" })).toMatchObject({ ok: true, changed: false });
+    value(run("shopping_add", { text: "Bread" }));
+
+    value(run("shopping_move", { id: "id-2", toIndex: 0 }));
+    value(run("shopping_update", { id: "id-1", text: "Oat milk" }));
+    const texts = () => value<{ items: Array<{ text: string }> }>(run("shopping_list")).items.map((item) => item.text);
+    const before = texts();
+    expect(before[0]).toBe("Bread");
+    expect(before).toContain("Oat milk");
+
+    value(run("shopping_buy", { id: "eggs" }));
+    expect(texts()).toEqual(before.filter((text) => text !== "Eggs"));
+    value(run("shopping_unbuy", { id: "eggs" }));
+    expect(texts()).toEqual(before);
+    expect(value<{ tasks: unknown[] }>(run("tasks_list")).tasks).toEqual([]);
+    expect(run("shopping_buy", { id: "gone" })).toEqual({ ok: false, error: "missing-item" });
+  });
+
   it("reports invalid synchronized rows as recoveries instead of listing them", () => {
     const { ctx, run, value } = workspace();
     ctx.store.setRow("tasks", "bad", { text: "Lost", createdAt: "2026-03-01T00:00:00Z", parent: JSON.stringify({ kind: "project", projectId: "gone" }) });

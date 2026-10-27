@@ -166,6 +166,12 @@ Native delivery state and reminder enablement are device-local implementation st
 
 The same TinyBase workspace synchronizes `recordings`, one row per voice note keyed by a random id: `{ startedAt, timeZone, durationMs, source, device }`. A row is written once, when the recording is saved, and never changes, so devices never conflict. Deleting a Recording removes its row with `delRow`, which needs no tombstone row because a Recording has no children; the deletion stamp syncs like any other change. The audio is not synchronized: it stays on the phone that recorded it, as AAC in `documents/recordings/<id>.m4a`, and `device` names that phone. That phone deletes the file when it sees the row's deletion stamp, when the workspace opens and whenever a deletion arrives. A row that only disappears from memory, as a reload can make it, has no stamp and keeps its audio. Sign-out and account deletion leave the files in place.
 
+## Shopping item storage
+
+The same TinyBase workspace synchronizes `shoppingItems`, one row per item keyed by a random id: `{ text, createdAt, sortKey, boughtAt }`. Each field is its own cell, so buying an item on one device and editing or moving it on another both survive the merge. `ShoppingListModel` in `@zero/agent-core` owns the rows; the replica, both clients and the MCP tools go through it.
+
+Order uses the Task rule: a fractional `sortKey`, with rows that have none after the keyed ones, by `createdAt`. A new item takes a key after the last open item. `move(id, toIndex)` takes a position in the open list and mints the key itself, so neither the clients nor agents handle keys; when a neighbour has no key, or two items share one after a concurrent move, it rekeys the open list in its new order. Buying sets `boughtAt` and keeps the row, so Undo deletes that one cell and the item returns to its place. Items are never deleted.
+
 ## Recurring Task transitions
 
 A recurring completion is an in-place state transition, not a completed-row

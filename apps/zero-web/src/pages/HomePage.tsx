@@ -4,9 +4,9 @@ import { useCallback, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { homeTasks, listView, taskIcon, LOADING_TEXT_DELAY_MS, messageOf, orderKeyBetween, tomorrow, type Task, type TaskdoReplica } from "@zero/agent-core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { homeTasks, listView, taskIcon, LOADING_TEXT_DELAY_MS, messageOf, orderKeyBetween, tomorrow, type TaskdoReplica } from "@zero/agent-core";
+import { ChecklistRow } from "@/components/checklist-row";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { TodoComposer } from "@/components/todo-composer";
 import { useTaskEditor } from "@/components/task-editor";
@@ -52,8 +52,12 @@ function Home({ replica }: { replica: TaskdoReplica }) {
     {view === "loading" || (view === "empty" && hydrating) ? showLoading ? <p className="text-sm text-muted-foreground">Loading your tasks…</p> : <div className="min-h-24" /> : list.length ? <section aria-label="Tasks">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={list.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-          <ul className="flex flex-col gap-3">{list.map((task) => <Row key={task.id} id={task.id} text={task.text} task={task} icon={taskIcon(task, projects) ?? undefined}
-            onComplete={() => detail.complete(task)} onOpen={() => detail.open(task)} onPostpone={() => { void replica.tasks.reschedule(task.id, tomorrow(today)).isPersisted.promise.catch((cause) => setError(messageOf(cause))); }} />)}</ul>
+          <ul className="flex flex-col gap-3">{list.map((task) => <ChecklistRow key={task.id} id={task.id} text={task.text} icon={taskIcon(task, projects) ?? undefined}
+            checkLabel={`Complete "${task.text}"`} onCheck={() => detail.complete(task)} onOpen={() => detail.open(task)}
+            openLabel={[`Edit "${task.text}"`, taskRecurrenceLabel(task)].filter(Boolean).join(", ")}
+            trailing={<button type="button" aria-label={`Postpone "${task.text}" to tomorrow`} className="shrink-0 rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-foreground" onClick={() => { void replica.tasks.reschedule(task.id, tomorrow(today)).isPersisted.promise.catch((cause) => setError(messageOf(cause))); }}>Tomorrow</button>}>
+            <TaskRecurrence task={task} />
+          </ChecklistRow>)}</ul>
         </SortableContext>
       </DndContext>
     </section> : <section aria-label="All done" className="flex flex-col items-center gap-4 py-16">
@@ -64,15 +68,3 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   </div>;
 }
 
-function Row({ id, text, task, icon, onComplete, onOpen, onPostpone }: { id: string; text: string; task: Task; icon?: string; onComplete: () => void; onOpen: () => void; onPostpone: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  return <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1 : undefined }} className="group flex items-center gap-3 rounded-xl border bg-card px-4 py-4">
-    <button type="button" aria-label={`Reorder "${text}"`} className="shrink-0 cursor-grab touch-none rounded-md px-1 text-muted-foreground active:cursor-grabbing" {...attributes} {...listeners}>
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>{[4, 8, 12].map((y) => <g key={y}><circle cx="5" cy={y} r="1.4" /><circle cx="11" cy={y} r="1.4" /></g>)}</svg>
-    </button>
-    <button type="button" aria-label={`Complete "${text}"`} className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 hover:border-primary" onClick={onComplete} />
-    {icon ? <span aria-hidden>{icon}</span> : null}
-    <button type="button" className="min-w-0 flex-1 break-words text-left" aria-label={[`Edit "${text}"`, taskRecurrenceLabel(task)].filter(Boolean).join(", ")} onClick={onOpen}><span>{text}</span><TaskRecurrence task={task} /></button>
-    <button type="button" aria-label={`Postpone "${text}" to tomorrow`} className="shrink-0 rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-foreground" onClick={onPostpone}>Tomorrow</button>
-  </li>;
-}

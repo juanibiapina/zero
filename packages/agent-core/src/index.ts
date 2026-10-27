@@ -4,7 +4,8 @@ export { MedicineModel, medicineToday, medicineEndDate, medicineOccurrences, med
 export { MedicineDraft, type MedicineCourse } from "./medicines/draft";
 export { DEFAULT_LEAD_DAYS, daysLeft, lastPillDay, pillCount, type CourseEnd, restockThreshold, supplyIsLow, supplyLabel } from "./medicines/supply";
 export { restockWithUndo } from "./medicines/restock-action";
-export type { TodoMedicines, TodoNightRoutine, TodoRecordings } from "./taskdo/replica";
+export type { TodoMedicines, TodoNightRoutine, TodoRecordings, TodoShopping } from "./taskdo/replica";
+export { ShoppingListModel, type ShoppingItem, type ShoppingResult } from "./shopping/model";
 export { RecordingModel, type Recording, type RecordingSource } from "./recordings/model";
 export { NIGHT_ENDS_AT, DEFAULT_OPENS_AT, nightOf, nightView, readNights, NightRoutineModel, type Night, type NightStep, type NightStepMark, type DoneNightStep, type PastNight, type NightStepCount, type NightView } from "./night-routine/model";
 export { createMedicineReminders, type MedicineReminders } from "./medicines/reminders";

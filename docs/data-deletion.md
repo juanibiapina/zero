@@ -12,7 +12,7 @@ presses the button again. Every step is idempotent.
 
 | Store | What it holds | How it goes |
 |---|---|---|
-| `TaskDO` | Tasks, Projects, Waiting conditions, Afters, Medicines, the night routine | `purge()`, then `reset()` |
+| `TaskDO` | Tasks, Projects, Waiting conditions, Afters, Medicines, the night routine, the shopping list | `purge()`, then `reset()` |
 | `UserDO` | settings (timezone, creation date) | `deleteAllData()`, then `reset()` |
 
 Both objects are emptied before either is aborted, so a 200 never hides a store

@@ -8,24 +8,15 @@ import {
   type TodoTasks,
 } from '@zero/agent-core';
 import type { ReactElement } from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
-  Platform,
-  Pressable,
-  RefreshControl,
   StyleSheet,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import ReorderableList, {
-  reorderItems,
-  useReorderableDrag,
-  type ReorderableListReorderEvent,
-} from 'react-native-reorderable-list';
 import Animated, {
   Easing,
-  LinearTransition,
   ReduceMotion,
   useAnimatedStyle,
   useReducedMotion,
@@ -36,9 +27,8 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 import { useResolveClassNames } from 'uniwind';
 
-import { CheckCircle } from '@/components/ui/list-row';
+import { ChecklistDivider, ChecklistPressable, ReorderableChecklist } from '@/components/reorderable-checklist';
 import { Text } from '@/components/ui/text';
-import { useColor } from '@/lib/theme';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const SWIPE_THRESHOLD = 140;
@@ -73,10 +63,8 @@ function TaskRow({
 }) {
   const { width } = useWindowDimensions();
   const reduced = useReducedMotion();
-  const drag = useReorderableDrag();
   const x = useSharedValue(0);
   const startX = useSharedValue(0);
-  const ripple = useColor('--color-ripple');
   const surfaceStyle = useResolveClassNames('bg-background');
 
   const pan = useMemo(
@@ -151,45 +139,36 @@ function TaskRow({
         </View>
         <GestureDetector gesture={pan}>
           <Animated.View style={[surfaceStyle, rowStyle]}>
-            <Pressable
-              accessibilityRole="button"
+            <ChecklistPressable
               accessibilityLabel={
                 [presentation.accessibilityLabel ?? `Edit "${item.text}"`, taskRecurrenceLabel(item)].filter(Boolean).join(', ')
               }
-              android_ripple={{ color: ripple }}
-              className="flex-row items-center gap-3 px-screen-x py-row-y"
+              checkLabel={`Complete "${item.text}"`}
+              onCheck={() => onComplete(item)}
               onPress={() => onOpen(item)}
-              onLongPress={() => drag()}
-              delayLongPress={500}
             >
-              <CheckCircle
-                label={`Complete "${item.text}"`}
-                onPress={() => onComplete(item)}
-              />
-              <View className="flex-1 gap-0.5">
-                <View className="flex-row items-center gap-3">
-                  {presentation.icon != null ? (
-                    <Text className="text-[16px]">{presentation.icon}</Text>
-                  ) : null}
-                  <Text className="flex-1">{item.text}</Text>
-                </View>
-                <TaskRecurrence task={item} />
-                {presentation.caption ? (
-                  <Text variant="caption">{presentation.caption}</Text>
+              <View className="flex-row items-center gap-3">
+                {presentation.icon != null ? (
+                  <Text className="text-[16px]">{presentation.icon}</Text>
                 ) : null}
+                <Text className="flex-1">{item.text}</Text>
               </View>
-            </Pressable>
+              <TaskRecurrence task={item} />
+              {presentation.caption ? (
+                <Text variant="caption">{presentation.caption}</Text>
+              ) : null}
+            </ChecklistPressable>
           </Animated.View>
         </GestureDetector>
       </View>
-      <View className="ml-[50px] h-px bg-divider" />
+      <ChecklistDivider />
     </View>
   );
 }
 
-// One interaction module for every manually ordered task list. It owns the
-// coupled horizontal swipe, long-press drag, vertical scroll, and Android
-// RefreshControl rules so Home and project detail cannot drift apart.
+// The Task adapter over ReorderableChecklist: it adds the horizontal date
+// swipe, the Task row content, and turns a drop into a sort key, so Home and
+// project detail cannot drift apart.
 export function ReorderableTaskList({
   api,
   tasks,
@@ -221,27 +200,6 @@ export function ReorderableTaskList({
   empty?: ReactElement | null;
   keyboardShouldPersistTaps?: 'always' | 'never' | 'handled';
 }) {
-  const accent = useColor('--color-accent');
-  const reorderPanGesture = useMemo(
-    () => Gesture.Pan().activateAfterLongPress(520),
-    [],
-  );
-  const [refreshEnabled, setRefreshEnabled] = useState(true);
-
-  const onDragStart = useCallback(() => {
-    'worklet';
-    if (Platform.OS === 'android' && !refreshing) {
-      scheduleOnRN(setRefreshEnabled, false);
-    }
-  }, [refreshing]);
-
-  const onDragEnd = useCallback(() => {
-    'worklet';
-    if (Platform.OS === 'android') {
-      scheduleOnRN(setRefreshEnabled, true);
-    }
-  }, []);
-
   const onSwipe = useCallback(
     (item: Task) => {
       onError(null);
@@ -255,14 +213,10 @@ export function ReorderableTaskList({
     [api, onError, swipeAction, today],
   );
 
-  const onReorder = useCallback(
-    ({ from, to }: ReorderableListReorderEvent) => {
-      if (from === to) return;
-      const moved = reorderItems(tasks, from, to);
-      const item = moved[to];
-      if (!item) return;
-      const previous = moved[to - 1]?.sortKey ?? null;
-      const next = moved[to + 1]?.sortKey ?? null;
+  const onMove = useCallback(
+    (item: Task, to: number, reordered: Task[]) => {
+      const previous = reordered[to - 1]?.sortKey ?? null;
+      const next = reordered[to + 1]?.sortKey ?? null;
       onError(null);
       const transaction = api.reorder(
         item.id,
@@ -272,11 +226,11 @@ export function ReorderableTaskList({
         onError(messageOf(error)),
       );
     },
-    [api, onError, tasks],
+    [api, onError],
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: Task }) => (
+    (item: Task) => (
       <TaskRow
         item={item}
         presentation={presentationOf?.(item) ?? {}}
@@ -290,30 +244,16 @@ export function ReorderableTaskList({
   );
 
   return (
-    <ReorderableList
-      style={{ flex: 1 }}
-      contentContainerStyle={{ flexGrow: 1, paddingBottom: 96 }}
-      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          enabled={refreshEnabled}
-          tintColor={accent}
-          colors={[accent]}
-        />
-      }
-      data={tasks}
-      keyExtractor={(item) => item.id}
-      panGesture={reorderPanGesture}
+    <ReorderableChecklist
+      items={tasks}
       renderItem={renderItem}
-      ListHeaderComponent={header}
-      ListFooterComponent={footer}
-      ListEmptyComponent={empty}
-      itemLayoutAnimation={LinearTransition.duration(200)}
-      onReorder={onReorder}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      onMove={onMove}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      header={header}
+      footer={footer}
+      empty={empty}
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
     />
   );
 }

@@ -2,8 +2,8 @@
 
 `zero-api` serves a remote MCP server at `https://zero.juanibiapina.dev/mcp`. An
 MCP client such as pi signs in as a Zero user, reads and changes that user's
-Tasks, Projects, Waiting conditions, and Afters, and reads their Medicines with
-their Doses and Intakes.
+Tasks, Projects, Waiting conditions, Afters, and Shopping list items, and reads their
+Medicines with their Doses and Intakes.
 Writes land in the user's `TaskDO`, so they reach mobile and web through the
 normal sync.
 
@@ -17,7 +17,7 @@ Add the server to `~/.pi/agent/mcp.json`:
     "zero": {
       "url": "https://zero.juanibiapina.dev/mcp",
       "oauth": { "clientRegistration": "cimd" },
-      "description": "Zero todo workspace: Tasks, Projects, Waiting conditions, Afters, Medicines"
+      "description": "Zero todo workspace: Tasks, Projects, Waiting conditions, Afters, Shopping list, Medicines"
     }
   }
 }
@@ -72,7 +72,8 @@ Worker (`zero-web`) and its SPA fallback never answer them.
 Tools are generated from `todoOperations` in `@zero/agent-core/operations`
 (`packages/agent-core/src/operations/`). Each operation declares its name,
 description, kind (`read`, `write`, `destructive`), and zod input schema, and
-runs against the TinyBase store through `TodoModel` and `MedicineModel`. The MCP
+runs against the TinyBase store through `TodoModel`, `MedicineModel`, and
+`ShoppingListModel`. The MCP
 route has no per-tool code; adding an operation to the catalog adds a tool.
 
 - `runTodoOperation` validates input, mints IDs that the caller omits, and
@@ -88,7 +89,9 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
 
 ### Left out on purpose
 
-- **Reorder** needs fractional sort keys that only list UIs produce.
+- **Task reorder** needs fractional sort keys that only list UIs produce.
+  `shopping_move` avoids this: it takes a position in the list and the model
+  mints the key.
 - **Undo** carries UI snapshots taken before a change.
 - **Recovery repair** is a user decision on Home; `recoveries_list` reports the
   rows.

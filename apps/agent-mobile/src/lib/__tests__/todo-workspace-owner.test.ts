@@ -13,6 +13,7 @@ const EMPTY_SNAPSHOT: TodoSnapshot = {
   intakes: [],
   nights: [],
   recordings: [],
+  shopping: [],
   recoveries: [],
 };
 

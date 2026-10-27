@@ -253,6 +253,26 @@ describe('HomeScreen', () => {
     );
   });
 
+  it('adds a shopping item from Home without adding a task', async () => {
+    const screen = await renderScreen();
+    await fireEvent.press(screen.getByLabelText('Add'));
+    await fireEvent.press(screen.getByLabelText('Add a shopping list item'));
+    const input = screen.getByPlaceholderText('Add to shopping list');
+    await fireEvent.changeText(input, 'Milk tomorrow');
+    expect(screen.queryByTestId('schedule-highlight', { includeHiddenElements: true })).toBeNull();
+    await fireEvent(input, 'submitEditing');
+
+    await waitFor(() => expect(defaultToastController.getSnapshot()[0]?.message).toBe('Added to shopping list'));
+    expect(screen.data.replica!.snapshot().shopping.map((item) => item.text)).toEqual(['Milk tomorrow']);
+    expect([...screen.data.replica!.tasks.collection.values()]).toEqual([]);
+    expect(screen.queryByText('Milk tomorrow')).toBeNull();
+
+    const toast = defaultToastController.getSnapshot()[0];
+    expect(toast?.description).toBe('Milk tomorrow');
+    await act(async () => toast?.action?.onPress());
+    expect(mockNavigate).toHaveBeenCalledWith('/browse/shopping-list', { withAnchor: true });
+  });
+
   it('keeps independent Task and Project drafts when switching creation modes', async () => {
     const screen = await renderScreen();
     await fireEvent.press(screen.getByLabelText('Add'));

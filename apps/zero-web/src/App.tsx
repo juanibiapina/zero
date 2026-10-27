@@ -14,6 +14,7 @@ import { UpcomingPage } from "./pages/UpcomingPage";
 import { MedicinesPage } from "./pages/MedicinesPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage";
+import { ShoppingPage } from "./pages/ShoppingPage";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 if (!PUBLISHABLE_KEY) throw new Error("VITE_CLERK_PUBLISHABLE_KEY is missing: start the app with `pnpm dev`, which loads it from ZeroVault");
@@ -55,6 +56,7 @@ function AppRoutes() {
       <Route path="medicines/:id" element={<MedicinesPage />} />
       <Route path="projects" element={<ProjectsPage />} />
       <Route path="projects/:id" element={<ProjectDetailPage />} />
+      <Route path="shopping" element={<ShoppingPage />} />
       <Route path="sign-in/*" element={<CenteredPage><SignIn forceRedirectUrl="/home" /></CenteredPage>} />
       <Route element={<AccountArea />}>
         <Route path="settings" element={<SettingsPage />} />

@@ -15,13 +15,14 @@ import { useTodoData } from "@/lib/todo-data";
 import { useNewProjectIcon } from "@/lib/new-project-icon";
 import { useProjectSuggestion } from "@/lib/project-suggestion";
 
-export type TodoAddKind = "task" | "project" | "waiting" | "after";
-const LABELS: Record<TodoAddKind, string> = { task: "Task", project: "Project", waiting: "Waiting condition", after: "After project" };
+export type TodoAddKind = "task" | "project" | "waiting" | "after" | "shopping";
+const LABELS: Record<TodoAddKind, string> = { task: "Task", project: "Project", waiting: "Waiting condition", after: "After project", shopping: "Shopping" };
 
-export function TodoComposer({ replica, projectId: contextProjectId = null, initialKind = "task", onCreated, onDraftChange }: {
+export function TodoComposer({ replica, projectId: contextProjectId = null, initialKind = "task", kinds: kindsOverride, onCreated, onDraftChange }: {
   replica: TaskdoReplica;
   projectId?: string | null;
   initialKind?: TodoAddKind;
+  kinds?: TodoAddKind[];
   onCreated?: () => void;
   onDraftChange?: (hasDraft: boolean) => void;
 }) {
@@ -54,8 +55,8 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
   const projectIcon = useNewProjectIcon({ title: kind === "project" ? text : "", enabled: authenticatedFeatures && kind === "project" });
   const projectId = projectChoice.selection.projectId;
   const context = projects.find((project) => project.id === contextProjectId);
-  const kinds: TodoAddKind[] = contextProjectId ? ["task", "waiting", "after", "project"] : ["task", "project"];
-  const placeholder = kind === "project" ? "Name an outcome" : kind === "waiting" ? "What are you waiting for?" : "Add a task";
+  const kinds: TodoAddKind[] = kindsOverride ?? (contextProjectId ? ["task", "waiting", "after", "project"] : ["task", "project", "shopping"]);
+  const placeholder = kind === "project" ? "Name an outcome" : kind === "waiting" ? "What are you waiting for?" : kind === "shopping" ? "Add to shopping list" : "Add a task";
   const reset = () => {
     setDraft(TaskDraft.create()); projectChoice.reset(contextSelection); projectIcon.reset(); onDraftChange?.(false);
   };
@@ -94,6 +95,11 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
       } else if (kind === "waiting") {
         if (!contextProjectId) return;
         await persist(replica.waits.addWaiting(contextProjectId, title));
+      } else if (kind === "shopping") {
+        await replica.shopping.add(title);
+        if (!kinds.every((value) => value === "shopping")) {
+          toast("Added to shopping list", { description: title, action: { label: "View", onPress: () => void navigate("/shopping") } });
+        }
       } else if (kind === "project") {
         const tx = replica.projects.add(title, projectIcon.choice.icon);
         const id = String(tx.mutations[0]?.key);
@@ -121,11 +127,11 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
   return <form className="flex flex-col gap-3" onSubmit={(event) => { event.preventDefault(); void add(); }}>
     <fieldset disabled={pending || retryAddition !== null} className="flex flex-col gap-3">
       <legend className="sr-only">What to add</legend>
-      <div role="radiogroup" aria-label="What to add" className="flex flex-wrap gap-2">
+      {kinds.length > 1 ? <div role="radiogroup" aria-label="What to add" className="flex flex-wrap gap-2">
         {kinds.map((value) => <label key={value} className="flex min-h-10 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm focus-within:ring-2 focus-within:ring-ring">
           <input type="radio" name="add-kind" checked={kind === value} onChange={() => setKind(value)} />{LABELS[value]}
         </label>)}
-      </div>
+      </div> : null}
       {(kind === "waiting" || kind === "after") && context ? <p className="text-sm text-muted-foreground">For {context.icon} {context.title}</p> : null}
       {kind === "after" ? <ProjectOptionList projects={projects} tasks={tasks} conditions={conditions} today={today} afterSourceProjectId={contextProjectId ?? undefined} emptyCopy="No available projects" onPick={(id) => { if (id) void add(id); }} /> : <>
         <TaskFields compact draft={draftView}

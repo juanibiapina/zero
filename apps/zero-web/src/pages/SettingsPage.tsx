@@ -66,8 +66,8 @@ function DangerZone() {
       </CardHeader>
       <CardContent className="space-y-3">
         <StatusText>
-          Deleted: your tasks, projects, medicines, night routine, and
-          settings.
+          Deleted: your tasks, projects, shopping list, medicines, night
+          routine, and settings.
         </StatusText>
         <StatusText>
           Kept: your sign-in account. Usage logs age out on their own.

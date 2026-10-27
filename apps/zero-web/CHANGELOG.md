@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-26: Add a Shopping list, under Shopping in the navigation. Add things to buy, drag them into order, click one to edit it, and tick it off when you buy it, with Undo. Choose Shopping in Home's add form to add an item without it showing up as a task.
+
 - 2026-10-25: Remove the Telegram and Google connections and the onboarding steps from Settings. Delete my data now lists what it erases: your tasks, projects, medicines and settings.
 
 - 2026-10-24: Change an empty Home to a simple All done screen. It no longer lists your Next and Waiting projects.

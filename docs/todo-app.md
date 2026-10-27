@@ -39,6 +39,7 @@ the connection returns.
 - Home: the Tasks available today, and the place to add new work.
 - Upcoming: Tasks with a future date.
 - Projects: Projects grouped by attention, each with its own workspace.
+- Shopping list: things to buy, kept off Home. Under Browse on mobile.
 - Medicines: medicine routines and their doses.
 - Night routine: the checklist before bed, on Home from its opening time and
   always under Browse.

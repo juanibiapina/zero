@@ -314,6 +314,38 @@ describe("HomePage", () => {
     expect(screen.getByRole('button', { name: 'Future project' })).toBeInTheDocument();
   });
 
+  it("adds a shopping item from Home, keeps it off Home, and toasts a link to the list", async () => {
+    setApi();
+    function Probe() {
+      return <output aria-label="Current path">{useLocation().pathname}</output>;
+    }
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <HomePage />
+        <Probe />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("radio", { name: "Shopping" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Add to shopping list" }), { target: { value: "Milk tomorrow" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    });
+
+    await waitFor(() => expect(defaultToastController.getSnapshot()).toHaveLength(1));
+    const [t] = defaultToastController.getSnapshot();
+    expect(t.message).toBe("Added to shopping list");
+    expect(t.description).toBe("Milk tomorrow");
+    expect(h.replica!.snapshot().shopping.map((item) => item.text)).toEqual(["Milk tomorrow"]);
+    expect(h.replica!.snapshot().tasks).toEqual([]);
+    expect(screen.queryByRole("button", { name: 'Edit "Milk tomorrow"' })).toBeNull();
+
+    await act(async () => {
+      t.action?.onPress();
+    });
+    await waitFor(() => expect(screen.getByRole("status", { name: "Current path" })).toHaveTextContent("/shopping"));
+  });
+
   it("creates a project from the Project mode, stays on Home, and toasts a link to it", async () => {
     setApi();
     function Probe() {

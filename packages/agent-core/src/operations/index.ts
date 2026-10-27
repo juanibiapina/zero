@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { MedicineModel } from "../medicines/model";
 import { projectDisplayStatus } from "../projects/derive";
+import { ShoppingListModel, type ShoppingResult } from "../shopping/model";
 import { TodoModel, type TodoModelResult } from "../taskdo/model";
 import type { Project, Task, TaskParent } from "../taskdo/types";
 
@@ -87,6 +88,13 @@ function hasParent(task: Task, filter: z.infer<typeof ParentFilter>): boolean {
 }
 
 const read = (value: unknown): OperationOutcome => ({ ok: true, changed: false, value });
+const shopping = (ctx: OperationContext) => new ShoppingListModel(ctx.store, ctx.now);
+const fromShopping = <T>(result: ShoppingResult<T>): OperationOutcome => result.ok
+  ? { ok: true, changed: result.changed, value: result.value }
+  : { ok: false, error: result.conflict };
+const SHOPPING =
+  "Shopping items are things the user needs to buy, on their own Shopping list. They are not Tasks: they never appear in tasks_list, " +
+  "on Home, or in Projects. Buying an item removes it from the list.";
 const todo = (ctx: OperationContext) => new TodoModel({ store: ctx.store, now: ctx.now });
 const medicines = (ctx: OperationContext) => new MedicineModel(ctx.store, ctx.now);
 
@@ -323,6 +331,56 @@ export const todoOperations: readonly TodoOperation[] = [
         intakes: snapshot.intakes.filter((intake) => intake.takenAt >= since),
       });
     },
+  }),
+  define({
+    name: "shopping_list",
+    title: "List the Shopping list",
+    description: `${SHOPPING} Lists the items not yet bought, in the user's order (first = top).`,
+    kind: "read",
+    input: z.object({}),
+    run: (ctx) => read({ items: shopping(ctx).open() }),
+  }),
+  define({
+    name: "shopping_add",
+    title: "Add a Shopping item",
+    description: `${SHOPPING} Adds an item at the bottom of the list. Omit id to have one generated; pass your own UUID to make retries safe.`,
+    kind: "write",
+    input: z.object({ id: Id.optional(), text: z.string().trim().min(1) }),
+    run: (ctx, input) => fromShopping(shopping(ctx).add(input.id ?? ctx.newId(), input.text)),
+  }),
+  define({
+    name: "shopping_update",
+    title: "Change a Shopping item's text",
+    description: `${SHOPPING} Changes an item's text.`,
+    kind: "write",
+    input: z.object({ id: Id, text: z.string().trim().min(1) }),
+    run: (ctx, input) => fromShopping(shopping(ctx).edit(input.id, input.text)),
+  }),
+  define({
+    name: "shopping_move",
+    title: "Move a Shopping item",
+    description:
+      `${SHOPPING} Moves an item that is not bought to a position in the list: toIndex 0 is the top, and an index past the end moves it to the bottom. ` +
+      "Positions count the items shopping_list returns.",
+    kind: "write",
+    input: z.object({ id: Id, toIndex: z.number().int().min(0) }),
+    run: (ctx, input) => fromShopping(shopping(ctx).move(input.id, input.toIndex)),
+  }),
+  define({
+    name: "shopping_buy",
+    title: "Mark a Shopping item bought",
+    description: `${SHOPPING} Marks an item bought, which removes it from the list.`,
+    kind: "write",
+    input: z.object({ id: Id }),
+    run: (ctx, input) => fromShopping(shopping(ctx).buy(input.id)),
+  }),
+  define({
+    name: "shopping_unbuy",
+    title: "Put a bought Shopping item back on the list",
+    description: `${SHOPPING} Undoes a buy: the item returns to the list in its previous place.`,
+    kind: "write",
+    input: z.object({ id: Id }),
+    run: (ctx, input) => fromShopping(shopping(ctx).unbuy(input.id)),
   }),
   define({
     name: "recoveries_list",

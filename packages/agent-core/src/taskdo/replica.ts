@@ -12,6 +12,7 @@ import { TodoModel, type TodoIssue } from "./model";
 import { MedicineModel, type MedicineInput, type Medicine, type Dose, type Intake, type MedicineReceipt, type MedicineRestock } from "../medicines/model";
 import { NightRoutineModel, readNights, type Night, type NightStep } from "../night-routine/model";
 import { RecordingModel, type Recording } from "../recordings/model";
+import { ShoppingListModel, type ShoppingItem, type ShoppingResult } from "../shopping/model";
 
 export type TodoRecoveryRepair =
   | "make-task-loose"
@@ -36,6 +37,7 @@ export type TodoSnapshot = {
   intakes: Intake[];
   nights: Night[];
   recordings: Recording[];
+  shopping: ShoppingItem[];
 };
 
 export type ProjectEditFields = {
@@ -117,6 +119,14 @@ export type TodoRecordings = {
   onDeleted: (listener: (id: string) => void) => () => void;
 };
 
+export type TodoShopping = {
+  add: (text: string) => Promise<ShoppingItem>;
+  edit: (id: string, text: string) => Promise<void>;
+  move: (id: string, toIndex: number) => Promise<void>;
+  buy: (id: string) => Promise<void>;
+  unbuy: (id: string) => Promise<void>;
+};
+
 export type TaskdoReplica = {
   store: MergeableStore;
   tasks: TodoTasks;
@@ -125,6 +135,7 @@ export type TaskdoReplica = {
   medicines: TodoMedicines;
   nightRoutine: TodoNightRoutine;
   recordings: TodoRecordings;
+  shopping: TodoShopping;
   snapshot: () => TodoSnapshot;
   subscribe: (listener: (snapshot: TodoSnapshot) => void) => () => void;
   refresh: () => Promise<void>;
@@ -189,6 +200,7 @@ export function projectTodoData(store: MergeableStore): TodoSnapshot {
     intakes: medicineSnapshot.intakes,
     nights: readNights(store),
     recordings: new RecordingModel(store).list(),
+    shopping: new ShoppingListModel(store).open(),
   };
 }
 
@@ -207,6 +219,13 @@ function taskError(conflict: string): never {
   if (conflict === "invalid-recurrence") throw new Error("Recover the invalid recurrence before completing this Task");
   if (conflict === "missing-task") throw new Error("Task not found");
   throw new Error("Task id already exists");
+}
+
+function shoppingValue<T>(result: ShoppingResult<T>): T {
+  if (result.ok) return result.value;
+  if (result.conflict === "empty-text") throw new Error("Write something to buy");
+  if (result.conflict === "missing-item") throw new Error("Shopping item not found");
+  throw new Error("Shopping item id already exists");
 }
 
 function projectError(conflict: string): never {
@@ -243,6 +262,7 @@ export function createTaskdoReplica({
   const medicineModel = new MedicineModel(store, now, randomId);
   const nightModel = new NightRoutineModel(store, now, randomId);
   const recordingModel = new RecordingModel(store);
+  const shoppingModel = new ShoppingListModel(store, now);
   const keys = {
     tasks: ["taskdo", ...queryKeyScope, "tasks"],
     projects: ["taskdo", ...queryKeyScope, "projects"],
@@ -264,7 +284,7 @@ export function createTaskdoReplica({
     for (const listener of listeners) listener(snapshot);
   };
   publish();
-  const storeListeners = ["tasks", "projects", "conditions", "medicines", "doses", "intakes", "nights", "recordings"].map((table) => store.addTableListener(table, publish));
+  const storeListeners = ["tasks", "projects", "conditions", "medicines", "doses", "intakes", "nights", "recordings", "shoppingItems"].map((table) => store.addTableListener(table, publish));
   const write = async (mutate: () => void) => {
     if (closed) throw new Error("Local account is closed");
     store.transaction(mutate);
@@ -498,6 +518,17 @@ export function createTaskdoReplica({
       remove: (id) => write(() => { recordingModel.remove(id); }),
       deleted: () => recordingModel.deleted(),
       onDeleted: (listener) => recordingModel.onDeleted(listener),
+    },
+    shopping: {
+      async add(text) {
+        let item!: ShoppingItem;
+        await write(() => { item = shoppingValue(shoppingModel.add(randomId(), text)); });
+        return item;
+      },
+      edit: (id, text) => write(() => { shoppingValue(shoppingModel.edit(id, text)); }),
+      move: (id, toIndex) => write(() => { shoppingValue(shoppingModel.move(id, toIndex)); }),
+      buy: (id) => write(() => { shoppingValue(shoppingModel.buy(id)); }),
+      unbuy: (id) => write(() => { shoppingValue(shoppingModel.unbuy(id)); }),
     },
     snapshot: () => snapshot,
     subscribe(listener) {

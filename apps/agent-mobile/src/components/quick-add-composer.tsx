@@ -35,7 +35,8 @@ export type QuickAddSurface =
   | { kind: 'upcoming' }
   | { kind: 'projects' }
   | { kind: 'project'; project: Project | null }
-  | { kind: 'night-routine' };
+  | { kind: 'night-routine' }
+  | { kind: 'shopping-list' };
 
 export type QuickAddController = {
   element: ReactNode;
@@ -52,7 +53,9 @@ const PROJECT_MODES: AddMode[] = ['task', 'waiting', 'after', 'project'];
 
 function modesFor(surface: QuickAddSurface['kind'], destination: Project | null): AddMode[] {
   if (surface === 'night-routine') return ['step'];
+  if (surface === 'shopping-list') return ['shopping'];
   if (destination) return PROJECT_MODES;
+  if (surface === 'home') return ['task', 'project', 'shopping'];
   return surface === 'projects' ? ['project', 'task'] : ['task', 'project'];
 }
 
@@ -109,6 +112,7 @@ export function useQuickAdd({
     after: '',
     project: '',
     step: '',
+    shopping: '',
   });
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
@@ -153,7 +157,7 @@ export function useQuickAdd({
   const closeAdd = useCallback(() => {
     ignoreNextKeyboardHide.current = true;
     Keyboard.dismiss();
-    setDrafts({ waiting: '', after: '', project: '', step: '' });
+    setDrafts({ waiting: '', after: '', project: '', step: '', shopping: '' });
     setTaskDraft(TaskDraft.create());
     setAdding(false);
     setOverlay(null);
@@ -234,6 +238,21 @@ export function useQuickAdd({
       return;
     }
 
+    if (mode === 'shopping') {
+      persistThen({ isPersisted: { promise: replica.shopping.add(trimmed) } }, () => {
+        closeAdd();
+        if (surface.kind === 'shopping-list') return;
+        toast('Added to shopping list', {
+          description: trimmed,
+          action: {
+            label: 'View',
+            onPress: () => router.navigate('/browse/shopping-list', { withAnchor: true }),
+          },
+        });
+      });
+      return;
+    }
+
     if (mode === 'project') {
       const icon = projectIcon.choice.icon;
       const tx = replica.projects.add(trimmed, icon);
@@ -284,6 +303,7 @@ export function useQuickAdd({
     effectiveRecurrence,
     contextProjectId,
     projects,
+    surface.kind,
   ]);
 
   const pickIcon = useCallback(
@@ -341,7 +361,9 @@ export function useQuickAdd({
         ? 'Add project'
         : mode === 'step'
           ? 'Add step'
-          : 'Add';
+          : mode === 'shopping'
+            ? 'Add to shopping list'
+            : 'Add';
 
   const element = (
     <>
