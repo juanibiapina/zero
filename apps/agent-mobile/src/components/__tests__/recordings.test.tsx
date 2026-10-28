@@ -264,22 +264,32 @@ describe('Microphone', () => {
 describe('Recordings', () => {
   const berlin: Recording = { id: 'b', startedAt: '2026-10-20T18:30:00.000Z', timeZone: 'Europe/Berlin', durationMs: 42_000, source: 'widget', device: 'Pixel 7', transcript: null };
   const newYork: Recording = { id: 'n', startedAt: '2026-10-21T01:00:00.000Z', timeZone: 'America/New_York', durationMs: 75_000, source: 'app', device: 'Pixel 9', transcript: null };
-  const transcribe = (data: Awaited<ReturnType<typeof open>>['data'], id: string, text: string) => act(async () => {
-    new RecordingModel(data.replica!.store).setTranscript(id, { text, verbatim: text, model: 'm', transcribedAt: '2026-10-20T18:31:00.000Z' });
+  const transcribe = (data: Awaited<ReturnType<typeof open>>['data'], id: string, text: string, title = '') => act(async () => {
+    new RecordingModel(data.replica!.store).setTranscript(id, { text, verbatim: text, title, model: 'm', transcribedAt: '2026-10-20T18:31:00.000Z' });
   });
 
-  it('shows what was said once the transcript arrives, and says so while it is on its way', async () => {
+  it('lists each voice note by its title over its date once the transcript arrives, and says so while it is on its way', async () => {
     mockFiles.add('file:///documents/recordings/b.m4a');
     const { screen, data } = await open('/browse/recordings', [berlin, newYork]);
     expect(screen.getByText('Transcribing…')).toBeTruthy();
 
-    await transcribe(data, 'b', 'Call Ana on Friday.');
-    await transcribe(data, 'n', 'Buy grout.');
+    await transcribe(data, 'b', 'Call Ana on Friday about the party.', 'Call Ana about the party');
+    await transcribe(data, 'n', 'Buy grout.', 'Buy grout');
 
     expect(screen.queryByText('Transcribing…')).toBeNull();
-    expect(screen.getByText('Call Ana on Friday.')).toBeTruthy();
-    expect(screen.getByText('Buy grout.')).toBeTruthy();
-    expect(screen.getByLabelText('Play recording from Tue 20 Oct, 20:30: Call Ana on Friday.')).toBeTruthy();
+    expect(screen.getByText('Call Ana about the party')).toBeTruthy();
+    expect(screen.getByText('Buy grout')).toBeTruthy();
+    expect(screen.getByText('Tue 20 Oct, 20:30')).toBeTruthy();
+    expect(screen.queryByText('Call Ana on Friday about the party.')).toBeNull();
+    expect(screen.getByLabelText('Call Ana about the party. Play recording from Tue 20 Oct, 20:30')).toBeTruthy();
+  });
+
+  it('lists a voice note transcribed before titles existed by its date alone', async () => {
+    const { screen, data } = await open('/browse/recordings', [newYork]);
+    await transcribe(data, 'n', 'Buy grout.');
+    expect(screen.getByLabelText('Recording from Tue 20 Oct, 21:00, on Pixel 9')).toBeTruthy();
+    expect(screen.getByText('Tue 20 Oct, 21:00')).toBeTruthy();
+    expect(screen.queryByText('Buy grout.')).toBeNull();
   });
 
   it('says No speech for a silent voice note', async () => {
@@ -289,12 +299,14 @@ describe('Recordings', () => {
     expect(screen.getByText('No speech')).toBeTruthy();
   });
 
-  it('shows the whole transcript when a voice note is held', async () => {
+  it('shows the title, date and whole transcript when a voice note is held', async () => {
     const long = 'First thought. '.repeat(40).trim();
     const { screen, data } = await open('/browse/recordings', [newYork]);
-    await transcribe(data, 'n', long);
-    await fireEvent(screen.getByLabelText(`Recording from Tue 20 Oct, 21:00, on Pixel 9: ${long}`), 'longPress');
-    expect(screen.getAllByText(long)).toHaveLength(2);
+    await transcribe(data, 'n', long, 'First thoughts');
+    await fireEvent(screen.getByLabelText('First thoughts. Recording from Tue 20 Oct, 21:00, on Pixel 9'), 'longPress');
+    expect(screen.getAllByText('First thoughts')).toHaveLength(2);
+    expect(screen.getAllByText('Tue 20 Oct, 21:00')).toHaveLength(2);
+    expect(screen.getByText(long)).toBeTruthy();
   });
 
   it('lists the newest first, each at its own local time', async () => {

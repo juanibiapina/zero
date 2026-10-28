@@ -18,6 +18,7 @@ const listed = (overrides: Partial<Recording> = {}): Recording => ({ ...recordin
 const transcript: Transcript = {
   text: "Call Ana on Friday.",
   verbatim: "Um, call Ana on Thursday, no, Friday.",
+  title: "Call Ana on Friday",
   model: "gpt-transcribe+gpt-6-luna",
   transcribedAt: "2026-10-20T18:31:00.000Z",
 };
@@ -46,6 +47,15 @@ describe("Transcripts", () => {
     model.add(recording());
     expect(() => model.setTranscript("r1", { ...transcript, model: "" })).toThrow("Invalid transcript");
     expect(model.get("r1")).toEqual(listed());
+  });
+
+  it("reads a transcript stored before titles existed with an empty title", () => {
+    const store = createMergeableStore();
+    const model = new RecordingModel(store);
+    model.add(recording());
+    const { title: _title, ...untitled } = transcript;
+    store.setCell("recordings", "r1", "transcript", JSON.stringify(untitled));
+    expect(model.get("r1")).toEqual(listed({ transcript: { ...transcript, title: "" } }));
   });
 
   it("reads a malformed transcript cell as no transcript", () => {

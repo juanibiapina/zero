@@ -7,6 +7,7 @@ export type RecordingSource = "widget" | "app";
 export type Transcript = {
   text: string;
   verbatim: string;
+  title: string;
   model: string;
   transcribedAt: string;
 };
@@ -27,9 +28,10 @@ export type SetTranscriptResult = "set" | "missing" | "exists";
 
 function isTranscript(value: unknown): value is Transcript {
   if (typeof value !== "object" || value === null) return false;
-  const { text, verbatim, model, transcribedAt } = value as Record<string, unknown>;
+  const { text, verbatim, title, model, transcribedAt } = value as Record<string, unknown>;
   return typeof text === "string"
     && typeof verbatim === "string"
+    && typeof title === "string"
     && typeof model === "string" && model !== ""
     && typeof transcribedAt === "string" && !Number.isNaN(Date.parse(transcribedAt));
 }
@@ -37,10 +39,11 @@ function isTranscript(value: unknown): value is Transcript {
 function readTranscript(cell: unknown): Transcript | null {
   if (typeof cell !== "string") return null;
   try {
-    const value: unknown = JSON.parse(cell);
+    const parsed: unknown = JSON.parse(cell);
+    const value = typeof parsed === "object" && parsed !== null && !("title" in parsed) ? { ...parsed, title: "" } : parsed;
     if (!isTranscript(value)) return null;
-    const { text, verbatim, model, transcribedAt } = value;
-    return { text, verbatim, model, transcribedAt };
+    const { text, verbatim, title, model, transcribedAt } = value;
+    return { text, verbatim, title, model, transcribedAt };
   } catch {
     return null;
   }
@@ -82,11 +85,11 @@ function view<T>(recording: Recording, detail: (transcript: Transcript) => T): R
   };
 }
 
-export const recordingSummary = (recording: Recording): RecordingView<{ text: string }> =>
-  view(recording, ({ text }) => ({ text }));
+export const recordingSummary = (recording: Recording): RecordingView<{ title: string; text: string }> =>
+  view(recording, ({ title, text }) => ({ title, text }));
 
 export const recordingDetail = (recording: Recording): RecordingView<Transcript> =>
-  view(recording, ({ text, verbatim, model, transcribedAt }) => ({ text, verbatim, model, transcribedAt }));
+  view(recording, ({ text, verbatim, title, model, transcribedAt }) => ({ text, verbatim, title, model, transcribedAt }));
 
 export class RecordingModel {
   constructor(private readonly store: MergeableStore) {}
@@ -108,8 +111,8 @@ export class RecordingModel {
     const recording = this.get(id);
     if (!recording) return "missing";
     if (recording.transcript) return "exists";
-    const { text, verbatim, model, transcribedAt } = transcript;
-    this.store.setCell(TABLE, id, "transcript", JSON.stringify({ text, verbatim, model, transcribedAt }));
+    const { text, verbatim, title, model, transcribedAt } = transcript;
+    this.store.setCell(TABLE, id, "transcript", JSON.stringify({ text, verbatim, title, model, transcribedAt }));
     return "set";
   }
 

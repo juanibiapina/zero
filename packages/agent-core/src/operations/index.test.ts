@@ -195,7 +195,7 @@ describe("todo operation catalog", () => {
   });
 
   describe("Recordings", () => {
-    const transcript = (text: string, verbatim = text) => ({ text, verbatim, model: "stt+cleanup", transcribedAt: "2026-03-10T08:00:00.000Z" });
+    const transcript = (text: string, verbatim = text, title = text === "" ? "" : "A title") => ({ text, verbatim, title, model: "stt+cleanup", transcribedAt: "2026-03-10T08:00:00.000Z" });
 
     function withRecordings() {
       const ws = workspace();
@@ -206,7 +206,7 @@ describe("todo operation catalog", () => {
       add("silent", "2026-03-08T07:05:00.000Z");
       add("pending", "2026-03-07T12:00:00.000Z", "America/New_York");
       add("old", "2026-03-01T09:00:00.000Z");
-      model.setTranscript("late", transcript("Call the plumber on Friday", "Call the, uh, plumber on Thursday, no, Friday"));
+      model.setTranscript("late", transcript("Call the plumber on Friday", "Call the, uh, plumber on Thursday, no, Friday", "Call the plumber"));
       model.setTranscript("silent", transcript(""));
       model.setTranscript("old", transcript("Old note"));
       return ws;
@@ -217,7 +217,7 @@ describe("todo operation catalog", () => {
       expect(value(run("recordings_list"))).toEqual({
         recordings: [
           { id: "late", startedAt: "2026-03-09T23:30:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-10", recordedAt: "00:30",
-            durationMs: 4200, device: "Pixel 7", transcript: { text: "Call the plumber on Friday" } },
+            durationMs: 4200, device: "Pixel 7", transcript: { title: "Call the plumber", text: "Call the plumber on Friday" } },
           { id: "silent", startedAt: "2026-03-08T07:05:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-08", recordedAt: "08:05",
             durationMs: 4200, device: "Pixel 7", transcript: "no-speech" },
           { id: "pending", startedAt: "2026-03-07T12:00:00.000Z", timeZone: "America/New_York", recordedOn: "2026-03-07", recordedAt: "07:00",
@@ -241,6 +241,7 @@ describe("todo operation catalog", () => {
         transcript: {
           text: "Call the plumber on Friday",
           verbatim: "Call the, uh, plumber on Thursday, no, Friday",
+          title: "Call the plumber",
           model: "stt+cleanup",
           transcribedAt: "2026-03-10T08:00:00.000Z",
         },

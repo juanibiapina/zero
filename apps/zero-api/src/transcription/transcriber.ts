@@ -14,6 +14,10 @@ export type Cleanup = {
   clean(verbatim: string, hints: TranscriptionHints): Promise<string>;
 };
 
+export type Titler = {
+  title(text: string): Promise<string>;
+};
+
 export type Transcriber = (audio: Blob, hints: TranscriptionHints) => Promise<Transcript>;
 
 const countWords = (text: string): number => text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0;
@@ -26,21 +30,26 @@ const plausible = (verbatim: string, cleaned: string): boolean => {
   return before < 20 || after >= before * 0.3;
 };
 
-export function createTranscriber({ speechToText, cleanup, now = () => new Date() }: {
+const oneLine = (title: string): string => title.replace(/\s+/g, " ").trim();
+
+export function createTranscriber({ speechToText, cleanup, titler, now = () => new Date() }: {
   speechToText: SpeechToText;
   cleanup: Cleanup;
+  titler: Titler;
   now?: () => Date;
 }): Transcriber {
   return async (audio, hints) => {
     const verbatim = (await speechToText.transcribe(audio, hints)).trim();
     const transcribedAt = () => now().toISOString();
     if (countWords(verbatim) === 0) {
-      return { text: "", verbatim, model: speechToText.model, transcribedAt: transcribedAt() };
+      return { text: "", verbatim, title: "", model: speechToText.model, transcribedAt: transcribedAt() };
     }
     const cleaned = (await cleanup.clean(verbatim, hints)).trim();
-    if (!plausible(verbatim, cleaned)) {
-      return { text: verbatim, verbatim, model: speechToText.model, transcribedAt: transcribedAt() };
-    }
-    return { text: cleaned, verbatim, model: `${speechToText.model}+${cleanup.model}`, transcribedAt: transcribedAt() };
+    const kept = plausible(verbatim, cleaned);
+    const text = kept ? cleaned : verbatim;
+    const title = oneLine(await titler.title(text));
+    if (title === "") throw new Error("The titler returned an empty title");
+    const model = kept ? `${speechToText.model}+${cleanup.model}` : speechToText.model;
+    return { text, verbatim, title, model, transcribedAt: transcribedAt() };
   };
 }
