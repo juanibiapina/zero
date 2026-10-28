@@ -41,9 +41,9 @@ export const createRecordingsRoutes = (deps: { transcriber?: MakeTranscriber; ti
   const makeTitler = deps.titler ?? defaultTitler;
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-  // A title is a convenience on top of the transcript, written once with no
-  // retry: when it cannot be written, the Recording keeps its transcript and
-  // stays untitled.
+  // A title is a convenience on top of the transcript. It is written in the
+  // background after the response, once, with no retry: when it cannot be
+  // written, the Recording keeps its transcript and stays untitled.
   const giveTitle = async (env: Env, userId: string, id: string, text: string) => {
     if (text === "") return;
     try {
@@ -112,7 +112,7 @@ export const createRecordingsRoutes = (deps: { transcriber?: MakeTranscriber; ti
       latency_ms: Date.now() - started,
       empty: transcript.text === "",
     });
-    if (result === "set") await giveTitle(c.env, userId, id, transcript.text);
+    if (result === "set") c.executionCtx.waitUntil(giveTitle(c.env, userId, id, transcript.text));
     if (result === "exists") {
       const stored = (await taskDO.recording(id))?.transcript;
       if (stored) return c.json({ transcript: stored }, 200);

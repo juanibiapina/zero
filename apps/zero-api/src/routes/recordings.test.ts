@@ -34,7 +34,10 @@ function buildApp(methods: object, transcriber: Transcriber, titler: Titler = as
     await next();
   });
   app.route("/", createRecordingsRoutes({ transcriber: () => transcriber, titler: () => titler }));
-  return (path: string, init?: RequestInit) => app.fetch(new Request(`http://localhost${path}`, init), env);
+  const background: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (promise: Promise<unknown>) => { background.push(promise); }, passThroughOnException: () => {}, props: {} } as unknown as ExecutionContext;
+  const fetch = (path: string, init?: RequestInit) => app.fetch(new Request(`http://localhost${path}`, init), env, ctx);
+  return Object.assign(fetch, { settled: () => Promise.all(background) });
 }
 
 const upload = (audio: Blob | null = new Blob([new Uint8Array(1000)], { type: "audio/mp4" })): RequestInit => {
@@ -74,8 +77,9 @@ describe("recording transcript route", () => {
     expect(titler).not.toHaveBeenCalled();
   });
 
-  it("titles a Recording from its transcript once the transcript is stored", async () => {
-    const titler = vi.fn<Titler>(async () => "Call Ana on Friday");
+  it("answers once the transcript is stored and titles the Recording in the background", async () => {
+    let finishTitle: (title: string) => void = () => {};
+    const titler = vi.fn<Titler>(() => new Promise((resolve) => { finishTitle = resolve; }));
     const setRecordingTitle = vi.fn(async () => "set");
     const app = buildApp({
       recording: async () => recording,
@@ -84,8 +88,15 @@ describe("recording transcript route", () => {
       setRecordingTitle,
     }, async () => transcript, titler);
 
-    expect((await app("/api/recordings/r1/transcript", upload())).status).toBe(200);
+    const response = await app("/api/recordings/r1/transcript", upload());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ transcript });
     expect(titler).toHaveBeenCalledWith("Call Ana on Friday.");
+    expect(setRecordingTitle).not.toHaveBeenCalled();
+
+    finishTitle("Call Ana on Friday");
+    await app.settled();
     expect(setRecordingTitle).toHaveBeenCalledWith("r1", "Call Ana on Friday");
   });
 
@@ -103,6 +114,7 @@ describe("recording transcript route", () => {
 
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ transcript });
+      await app.settled();
       expect(setRecordingTitle).not.toHaveBeenCalled();
     }
   });
@@ -116,6 +128,7 @@ describe("recording transcript route", () => {
     }, async () => ({ ...transcript, text: "", verbatim: "" }), titler);
 
     expect((await app("/api/recordings/r1/transcript", upload())).status).toBe(200);
+    await app.settled();
     expect(titler).not.toHaveBeenCalled();
   });
 
