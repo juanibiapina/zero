@@ -20,6 +20,7 @@ const recording: Recording = {
 const transcript: Transcript = {
   text: "Call Ana on Friday.",
   verbatim: "Um, call Ana on Thursday, no, Friday.",
+  title: "Call Ana on Friday",
   model: "stt+cleanup",
   transcribedAt: "2026-10-20T18:31:00.000Z",
 };

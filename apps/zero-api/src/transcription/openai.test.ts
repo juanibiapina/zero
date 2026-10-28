@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { openaiCleanup, openaiSpeechToText, transcriptionKeywords } from "./openai";
+import { openaiCleanup, openaiSpeechToText, openaiTitler, transcriptionKeywords } from "./openai";
 
 const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 
@@ -46,6 +46,30 @@ describe("OpenAI cleanup", () => {
     const cleanup = openaiCleanup({ apiKey: "key", fetch: async () => reply(429, {}) });
 
     await expect(cleanup.clean("x", { keywords: [] })).rejects.toThrow("OpenAI cleanup failed: 429");
+  });
+});
+
+describe("OpenAI titler", () => {
+  it("asks for a short title in the spoken language and returns the model's text", async () => {
+    const send = vi.fn<typeof fetch>(async () => reply(200, {
+      output: [{ type: "message", content: [{ type: "output_text", text: "Call Ana" }] }],
+    }));
+    const titler = openaiTitler({ apiKey: "key", fetch: send });
+
+    expect(await titler.title("Call Ana on Friday.")).toBe("Call Ana");
+    const [url, init] = send.mock.calls[0] ?? [];
+    const body = JSON.parse(init?.body as string) as { model: string; input: string; instructions: string };
+    expect(url).toBe("https://api.openai.com/v1/responses");
+    expect(body.model).toBe("gpt-6-luna");
+    expect(body.input).toBe("Call Ana on Friday.");
+    expect(body.instructions).toContain("2 to 6 words");
+    expect(body.instructions).toContain("Never translate");
+  });
+
+  it("throws on an error response", async () => {
+    const titler = openaiTitler({ apiKey: "key", fetch: async () => reply(500, {}) });
+
+    await expect(titler.title("x")).rejects.toThrow("OpenAI title failed: 500");
   });
 });
 

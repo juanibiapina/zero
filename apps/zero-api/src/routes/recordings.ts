@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { fmtErr, log, logError } from "../log";
 import { getTaskDO } from "../TaskDO/stub";
-import { openaiCleanup, openaiSpeechToText } from "../transcription/openai";
+import { openaiCleanup, openaiSpeechToText, openaiTitler } from "../transcription/openai";
 import { createTranscriber, type Transcriber } from "../transcription/transcriber";
 import type { Env } from "../types";
 
@@ -21,11 +21,13 @@ export type MakeTranscriber = (env: Env) => Transcriber;
 const defaultTranscriber: MakeTranscriber = (env) => createTranscriber({
   speechToText: openaiSpeechToText({ apiKey: env.OPENAI_API_KEY }),
   cleanup: openaiCleanup({ apiKey: env.OPENAI_API_KEY }),
+  titler: openaiTitler({ apiKey: env.OPENAI_API_KEY }),
 });
 
 const TranscriptSchema = z.object({
   text: z.string(),
   verbatim: z.string(),
+  title: z.string(),
   model: z.string(),
   transcribedAt: z.string(),
 });

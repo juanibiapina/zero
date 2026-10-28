@@ -3,7 +3,7 @@ import type { Recording, Transcript } from '@zero/agent-core';
 
 import { startTranscriptionOutbox, type TranscriptionUpload } from '../transcription-outbox';
 
-const transcript: Transcript = { text: 'Hi.', verbatim: 'Hi.', model: 'm', transcribedAt: '2026-10-20T18:31:00.000Z' };
+const transcript: Transcript = { text: 'Hi.', verbatim: 'Hi.', title: 'Greeting', model: 'm', transcribedAt: '2026-10-20T18:31:00.000Z' };
 
 const recording = (id: string, overrides: Partial<Recording> = {}): Recording => ({
   id,

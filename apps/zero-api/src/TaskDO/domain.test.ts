@@ -126,7 +126,7 @@ describe("TaskDomain catalog operations", () => {
   it("adds a Recording's transcript once, saves it, and refuses it after erasure", async () => {
     const { domain, store, saves, erase } = setup();
     store.setRow("recordings", "r1", { startedAt: NOW, timeZone: "Europe/Berlin", durationMs: 1000, source: "app", device: "Pixel 7" });
-    const transcript = { text: "Hi.", verbatim: "Uh, hi.", model: "m", transcribedAt: NOW };
+    const transcript = { text: "Hi.", verbatim: "Uh, hi.", title: "Greeting", model: "m", transcribedAt: NOW };
 
     expect(await domain.setRecordingTranscript("r1", transcript)).toBe("set");
     expect(await domain.setRecordingTranscript("r1", transcript)).toBe("exists");
