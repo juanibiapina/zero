@@ -19,11 +19,14 @@ export type Recording = {
   source: RecordingSource;
   device: string;
   transcript: Transcript | null;
+  title: string | null;
 };
 
-export type NewRecording = Omit<Recording, "transcript">;
+export type NewRecording = Omit<Recording, "transcript" | "title">;
 
 export type SetTranscriptResult = "set" | "missing" | "exists";
+
+export type SetTitleResult = "set" | "missing" | "exists";
 
 function isTranscript(value: unknown): value is Transcript {
   if (typeof value !== "object" || value === null) return false;
@@ -53,7 +56,8 @@ function readRecording(id: string, row: Row): Recording | null {
   if (typeof durationMs !== "number" || durationMs < 0) return null;
   if (source !== "widget" && source !== "app") return null;
   if (typeof device !== "string") return null;
-  return { id, startedAt, timeZone, durationMs, source, device, transcript: readTranscript(row.transcript) };
+  const title = typeof row.title === "string" && row.title.trim() !== "" ? row.title : null;
+  return { id, startedAt, timeZone, durationMs, source, device, transcript: readTranscript(row.transcript), title };
 }
 
 export type RecordingView<T> = {
@@ -64,6 +68,7 @@ export type RecordingView<T> = {
   recordedAt: string;
   durationMs: number;
   device: string;
+  title: string | null;
   transcript: "pending" | "no-speech" | T;
 };
 
@@ -75,9 +80,9 @@ function localStart({ startedAt, timeZone }: Recording): { recordedOn: string; r
 }
 
 function view<T>(recording: Recording, detail: (transcript: Transcript) => T): RecordingView<T> {
-  const { id, startedAt, timeZone, durationMs, device, transcript } = recording;
+  const { id, startedAt, timeZone, durationMs, device, title, transcript } = recording;
   return {
-    id, startedAt, timeZone, ...localStart(recording), durationMs, device,
+    id, startedAt, timeZone, ...localStart(recording), durationMs, device, title,
     transcript: !transcript ? "pending" : transcript.text === "" ? "no-speech" : detail(transcript),
   };
 }
@@ -111,6 +116,21 @@ export class RecordingModel {
     const { text, verbatim, model, transcribedAt } = transcript;
     this.store.setCell(TABLE, id, "transcript", JSON.stringify({ text, verbatim, model, transcribedAt }));
     return "set";
+  }
+
+  // Only TaskDO writes a title, once, after the transcript has text.
+  setTitle(id: string, title: string): SetTitleResult {
+    if (title.trim() === "") throw new Error("Invalid title");
+    const recording = this.get(id);
+    if (!recording) return "missing";
+    if (recording.title) return "exists";
+    if (!recording.transcript?.text) throw new Error("Recording has no transcript text");
+    this.store.setCell(TABLE, id, "title", title);
+    return "set";
+  }
+
+  untitled(): Recording[] {
+    return this.list().filter((recording) => recording.transcript?.text && !recording.title);
   }
 
   remove(id: string): void {

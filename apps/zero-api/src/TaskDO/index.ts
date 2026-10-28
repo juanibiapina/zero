@@ -4,6 +4,9 @@ import { WsServerDurableObject } from "tinybase/synchronizers/synchronizer-ws-se
 import type { OperationOutcome } from "@zero/agent-core/operations";
 import type { Recurrence } from "@zeroapps/recurrence";
 
+import { reportError } from "../reporting/zero-errors";
+import { openaiTitler } from "../transcription/openai";
+import type { Titler } from "../transcription/titler";
 import type { Env } from "../types";
 import {
   TaskDomain,
@@ -18,9 +21,11 @@ import {
   type WaitingCondition,
 } from "./domain";
 import type { SetTranscriptResult } from "@zero/agent-core";
+import { createTitleQueue, type TitleAttempt, type TitleAttempts } from "./titles";
 
 export const TASKDO_SQL_STORAGE_PREFIX = "taskdo_";
 export const TASKDO_FIXTURE_DELETED_KEY = "fixtureDeleted";
+export const TASKDO_TITLE_ATTEMPT_PREFIX = "recordingTitle:";
 
 // The per-account todo authority. It adapts the in-process domain to Durable
 // Object persistence, WebSocket synchronization, and account erasure.
@@ -28,6 +33,13 @@ export class TaskDO extends WsServerDurableObject<Env> {
   private domain!: TaskDomain;
   private persister!: ReturnType<typeof createDurableObjectSqlStoragePersister>;
   private purging = false;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    // Runs after TinyBase's own block has loaded the store, so voice notes
+    // transcribed before titles existed, or interrupted mid-title, get one.
+    void ctx.blockConcurrencyWhile(() => this.scheduleUntitled());
+  }
 
   override createPersister() {
     const store = createMergeableStore();
@@ -150,9 +162,49 @@ export class TaskDO extends WsServerDurableObject<Env> {
     return this.domain.recording(id);
   }
 
-  setRecordingTranscript(id: string, transcript: Transcript): Promise<SetTranscriptResult> {
-    if (this.purging) return Promise.resolve("missing");
-    return this.domain.setRecordingTranscript(id, transcript);
+  async setRecordingTranscript(id: string, transcript: Transcript): Promise<SetTranscriptResult> {
+    if (this.purging) return "missing";
+    const result = await this.domain.setRecordingTranscript(id, transcript);
+    if (result === "set" && transcript.text !== "") await this.ctx.storage.setAlarm(Date.now());
+    return result;
+  }
+
+  async scheduleUntitled(): Promise<void> {
+    if (await this.isErased()) return;
+    if (this.domain.untitledRecordings().length > 0) await this.ctx.storage.setAlarm(Date.now());
+  }
+
+  createTitler(): Titler {
+    return openaiTitler({ apiKey: this.env.OPENAI_API_KEY });
+  }
+
+  // The alarm only titles voice notes. Each untitled one keeps its retry
+  // state under recordingTitle:<id>, which purge's deleteAll erases.
+  async alarm(): Promise<void> {
+    if (await this.isErased()) return;
+    const storage = this.ctx.storage;
+    const attempts: TitleAttempts = {
+      list: async () => {
+        const stored = await storage.list<TitleAttempt>({ prefix: TASKDO_TITLE_ATTEMPT_PREFIX });
+        return new Map([...stored].map(([key, value]) => [key.slice(TASKDO_TITLE_ATTEMPT_PREFIX.length), value]));
+      },
+      put: async (id, attempt) => {
+        if (await this.isErased()) return;
+        await storage.put(TASKDO_TITLE_ATTEMPT_PREFIX + id, attempt);
+      },
+      delete: async (id) => { await storage.delete(TASKDO_TITLE_ATTEMPT_PREFIX + id); },
+    };
+    const queue = createTitleQueue({
+      recordings: {
+        untitled: () => this.domain.untitledRecordings(),
+        setTitle: (id, title) => this.domain.setRecordingTitle(id, title),
+      },
+      titler: this.createTitler(),
+      attempts,
+      report: (error, context) => reportError(this.env, error, context, { level: "error" }),
+    });
+    const next = await queue.runDue(Date.now());
+    if (next !== null && !(await this.isErased())) await storage.setAlarm(next);
   }
 
   // The TinyBase synchronizer has live listeners. Stop them and close sockets
@@ -163,6 +215,8 @@ export class TaskDO extends WsServerDurableObject<Env> {
       for (const socket of this.ctx.getWebSockets()) socket.close(1000, "Account erased");
       await this.persister.destroy();
       await this.ctx.storage.deleteAll();
+      // deleteAll may leave a pending alarm behind.
+      await this.ctx.storage.deleteAlarm();
       // Keep one bit so an offline client cannot repopulate an erased account.
       await this.ctx.storage.put(TASKDO_FIXTURE_DELETED_KEY, true);
     } catch (error) {

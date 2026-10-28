@@ -13,6 +13,7 @@ const recording = (id: string, overrides: Partial<Recording> = {}): Recording =>
   source: 'app',
   device: 'Pixel 7',
   transcript: null,
+  title: null,
   ...overrides,
 });
 

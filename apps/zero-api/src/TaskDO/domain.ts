@@ -7,6 +7,7 @@ import {
   type ProjectState,
   type Project,
   type Recording,
+  type SetTitleResult,
   type SetTranscriptResult,
   type Task,
   type TaskParent,
@@ -252,6 +253,17 @@ export class TaskDomain {
   async setRecordingTranscript(id: string, transcript: Transcript): Promise<SetTranscriptResult> {
     if (await this.isErased()) return "missing";
     const result = this.recordings.setTranscript(id, transcript);
+    if (result === "set") await this.save();
+    return result;
+  }
+
+  untitledRecordings(): Recording[] {
+    return this.recordings.untitled();
+  }
+
+  async setRecordingTitle(id: string, title: string): Promise<SetTitleResult> {
+    if (await this.isErased()) return "missing";
+    const result = this.recordings.setTitle(id, title);
     if (result === "set") await this.save();
     return result;
   }

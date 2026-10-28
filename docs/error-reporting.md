@@ -26,6 +26,7 @@ content or request bodies are ever sent.
 | `site` | Level | Meaning |
 |---|---|---|
 | `http` | error | An HTTP route threw. |
+| `recording_title` | error | A voice note's 5th title attempt failed. Retries continue daily; context carries only `recording_id`. |
 
 An issue's **level is stamped when the issue is created** and never changes. A
 message that first arrives as a `warning` stays a warning even if a later report

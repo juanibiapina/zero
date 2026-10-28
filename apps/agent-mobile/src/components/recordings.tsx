@@ -132,9 +132,11 @@ function useRecordings(replica: TaskdoReplica | null): Recording[] | null {
   );
 }
 
+// The phone holding the audio says "Transcribing…" until the note has its
+// title, which the server writes a few seconds after the transcript.
 function transcriptStatus(recording: Recording, here: boolean): string | null {
-  if (recording.transcript) return recording.transcript.text === '' ? 'No speech' : null;
-  return here ? 'Transcribing…' : null;
+  if (recording.transcript?.text === '') return 'No speech';
+  return here && !recording.title ? 'Transcribing…' : null;
 }
 
 function RecordingRow({ recording, playing, onToggle, onHold }: {
@@ -144,7 +146,7 @@ function RecordingRow({ recording, playing, onToggle, onHold }: {
   const muted = useColor('--color-foreground-muted');
   const here = localAudio(recording.id) !== null;
   const when = formatStartedAt(recording);
-  const text = recording.transcript?.text || null;
+  const { title } = recording;
   const status = transcriptStatus(recording, here);
   const base = here ? `${playing ? 'Pause' : 'Play'} recording from ${when}` : `Recording from ${when}, on ${recording.device}`;
   return (
@@ -155,7 +157,7 @@ function RecordingRow({ recording, playing, onToggle, onHold }: {
         </Host>
       )}
       trailing={<Text variant="subtitle" style={{ fontVariant: ['tabular-nums'] }}>{formatDuration(recording.durationMs)}</Text>}
-      accessibilityLabel={text ? `${base}: ${text}` : base}
+      accessibilityLabel={title ? `${title}. ${base}` : base}
       onPress={here ? () => onToggle(recording) : undefined}
       onLongPress={() => onHold(recording)}
       accessibilityHint="Long press for options"
@@ -163,8 +165,8 @@ function RecordingRow({ recording, playing, onToggle, onHold }: {
       onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'delete') onHold(recording); }}
       className="min-h-12"
     >
-      <Text>{when}</Text>
-      {text ? <Text variant="subtitle" numberOfLines={4}>{text}</Text> : null}
+      <Text>{title ?? when}</Text>
+      {title ? <Text variant="subtitle">{when}</Text> : null}
       {status ? <Text variant="caption">{status}</Text> : null}
       {here ? null : <Text variant="caption">{`On ${recording.device}`}</Text>}
     </ListRow>
@@ -236,7 +238,8 @@ export function RecordingsScreen() {
       )}
       <Sheet open={!!holding} onClose={() => setHolding(null)} contextBridge={null}>
         <View className="pb-4">
-          <Text className="px-screen-x text-[20px] font-semibold">{holding ? formatStartedAt(holding) : ''}</Text>
+          <Text className="px-screen-x text-[20px] font-semibold">{holding ? holding.title ?? formatStartedAt(holding) : ''}</Text>
+          {holding?.title ? <Text variant="subtitle" className="px-screen-x pt-1">{formatStartedAt(holding)}</Text> : null}
           {holding && !holdingHere ? (
             <Text variant="subtitle" className="px-screen-x pt-1">{`Recorded on ${holding.device}. Its audio isn’t on this phone.`}</Text>
           ) : null}

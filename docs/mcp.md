@@ -112,7 +112,9 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
   (see [`storage.md`](storage.md), Medicine and Dose storage).
 - **Project icon suggestion** is a UI helper.
 - **Recording deletion** also deletes the audio on the phone that holds it.
-  Agents read Recordings: `recordings_list` gives each transcript's text,
-  `recordings_get` adds the verbatim words.
+  Agents read Recordings: `recordings_list` gives each title and transcript's
+  text, `recordings_get` adds the verbatim words. `title` is null until the
+  server titles the note, shortly after its transcript, and stays null for a
+  silent one.
 - **Transcription** is requested by the phone that holds the audio; a
   Recording without a transcript reads as `pending`.

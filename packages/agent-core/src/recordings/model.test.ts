@@ -13,7 +13,7 @@ const recording = (overrides: Partial<NewRecording> = {}): NewRecording => ({
   ...overrides,
 });
 
-const listed = (overrides: Partial<Recording> = {}): Recording => ({ ...recording(), transcript: null, ...overrides });
+const listed = (overrides: Partial<Recording> = {}): Recording => ({ ...recording(), transcript: null, title: null, ...overrides });
 
 const transcript: Transcript = {
   text: "Call Ana on Friday.",
@@ -77,6 +77,52 @@ describe("Transcripts", () => {
     phone.merge(tablet);
     expect(new RecordingModel(phone).list()).toEqual([]);
     expect(new RecordingModel(phone).deleted()).toEqual(["r1"]);
+  });
+});
+
+describe("Titles", () => {
+  it("adds a title to a transcribed recording once", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    model.setTranscript("r1", transcript);
+    expect(model.setTitle("r1", "Call Ana on Friday")).toBe("set");
+    expect(model.setTitle("r1", "Something else")).toBe("exists");
+    expect(model.get("r1")).toEqual(listed({ transcript, title: "Call Ana on Friday" }));
+  });
+
+  it("does not title a recording that is missing, untranscribed or silent", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording({ id: "pending" }));
+    model.add(recording({ id: "silent" }));
+    model.setTranscript("silent", { ...transcript, text: "" });
+    expect(model.setTitle("gone", "Title")).toBe("missing");
+    expect(() => model.setTitle("pending", "Title")).toThrow("Recording has no transcript text");
+    expect(() => model.setTitle("silent", "Title")).toThrow("Recording has no transcript text");
+    expect(model.list().map(({ title }) => title)).toEqual([null, null]);
+  });
+
+  it("refuses an empty title", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    model.setTranscript("r1", transcript);
+    expect(() => model.setTitle("r1", "  ")).toThrow("Invalid title");
+    expect(model.get("r1")?.title).toBeNull();
+  });
+
+  it("lists only transcribed recordings with text and no title as untitled", () => {
+    const model = new RecordingModel(createMergeableStore());
+    for (const id of ["pending", "silent", "spoken", "titled"]) model.add(recording({ id }));
+    model.setTranscript("silent", { ...transcript, text: "" });
+    model.setTranscript("spoken", transcript);
+    model.setTranscript("titled", transcript);
+    model.setTitle("titled", "Call Ana");
+    expect(model.untitled().map(({ id }) => id)).toEqual(["spoken"]);
+  });
+
+  it("reads a row without a title cell as untitled", () => {
+    const store = createMergeableStore();
+    store.setRow("recordings", "r1", { ...recording(), transcript: JSON.stringify(transcript) });
+    expect(new RecordingModel(store).get("r1")?.title).toBeNull();
   });
 });
 
