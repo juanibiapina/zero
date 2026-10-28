@@ -24,6 +24,8 @@ function setup() {
   const titler: Titler = { model: "luna", title: ask };
   const reports: Array<{ error: unknown; context: Record<string, unknown> }> = [];
   const saves = vi.fn();
+  const time = { now: START };
+  const account = { erased: false };
   const queue = createTitleQueue({
     recordings: {
       untitled: () => model.untitled(),
@@ -36,9 +38,12 @@ function setup() {
       delete: async (id) => { stored.delete(id); },
     },
     report: async (error, context) => { reports.push({ error, context }); },
+    isErased: async () => account.erased,
+    clock: () => time.now,
   });
+  const run = (at: number) => { time.now = at; return queue.runDue(); };
   const title = (id: string) => model.get(id)?.title ?? null;
-  return { model, say, stored, replies, ask, reports, saves, queue, title };
+  return { model, say, stored, replies, ask, reports, saves, run, title, time, account };
 }
 
 beforeEach(() => {
@@ -48,12 +53,12 @@ beforeEach(() => {
 
 describe("Recording titles", () => {
   it("titles every untitled voice note and has nothing left to do", async () => {
-    const { say, replies, queue, title, stored } = setup();
+    const { say, replies, run, title, stored } = setup();
     say("a", "Call Ana on Friday.");
     say("b", "Ideas for the garden.");
     replies.push("Call Ana on Friday", "Garden ideas");
 
-    expect(await queue.runDue(START)).toBeNull();
+    expect(await run(START)).toBeNull();
 
     expect(title("a")).toBe("Call Ana on Friday");
     expect(title("b")).toBe("Garden ideas");
@@ -61,17 +66,17 @@ describe("Recording titles", () => {
   });
 
   it("skips silent and already titled notes", async () => {
-    const { model, say, queue, ask } = setup();
+    const { model, say, run, ask } = setup();
     say("silent", "");
     say("done", "Buy grout.");
     model.setTitle("done", "Buy grout");
 
-    expect(await queue.runDue(START)).toBeNull();
+    expect(await run(START)).toBeNull();
     expect(ask).not.toHaveBeenCalled();
   });
 
   it("retries after 1, 5 and 30 minutes and 2 hours, then reports the 5th failure once and retries daily", async () => {
-    const { say, replies, queue, reports, title } = setup();
+    const { say, replies, run, reports, title } = setup();
     say("a", "Call Ana on Friday.");
     const down = new Error("OpenAI title failed: 503");
     replies.push(down, down, down, down, down, down);
@@ -79,7 +84,7 @@ describe("Recording titles", () => {
     let now = START;
     const waits: number[] = [];
     for (let attempt = 0; attempt < 6; attempt += 1) {
-      const next = await queue.runDue(now);
+      const next = await run(now);
       expect(next).not.toBeNull();
       waits.push((next! - now) / MINUTE);
       expect(reports).toHaveLength(attempt >= 4 ? 1 : 0);
@@ -91,62 +96,106 @@ describe("Recording titles", () => {
     expect(JSON.stringify(reports[0]?.context)).not.toContain("Ana");
 
     replies.push("Call Ana on Friday");
-    expect(await queue.runDue(now)).toBeNull();
+    expect(await run(now)).toBeNull();
     expect(title("a")).toBe("Call Ana on Friday");
   });
 
   it("waits for a failed note's next attempt instead of retrying early", async () => {
-    const { say, replies, queue, ask } = setup();
+    const { say, replies, run, ask } = setup();
     say("a", "Call Ana.");
     replies.push(new Error("down"));
-    await queue.runDue(START);
+    await run(START);
 
-    expect(await queue.runDue(START + 30_000)).toBe(START + MINUTE);
+    expect(await run(START + 30_000)).toBe(START + MINUTE);
     expect(ask).toHaveBeenCalledTimes(1);
   });
 
   it("comes back at once for a note transcribed while another note's title was failing", async () => {
-    const { say, replies, queue, title } = setup();
+    const { say, replies, run, title } = setup();
     say("a", "Call Ana.");
     replies.push(new Error("down"));
-    const failing = queue.runDue(START);
+    const failing = run(START);
     say("b", "Buy grout.");
 
     expect(await failing).toBe(START);
 
     replies.push("Buy grout");
-    expect(await queue.runDue(START)).toBe(START + MINUTE);
+    expect(await run(START)).toBe(START + MINUTE);
     expect(title("b")).toBe("Buy grout");
   });
 
   it("clears a note's attempts once it is titled", async () => {
-    const { say, replies, queue, stored } = setup();
+    const { say, replies, run, stored } = setup();
     say("a", "Call Ana.");
     replies.push(new Error("down"));
-    await queue.runDue(START);
+    await run(START);
     expect(stored.get("a")).toEqual({ attempts: 1, nextAt: START + MINUTE, reported: false });
 
-    await queue.runDue(START + MINUTE);
+    await run(START + MINUTE);
     expect(stored.size).toBe(0);
   });
 
   it("drops the attempts of a deleted note", async () => {
-    const { model, say, replies, queue, stored } = setup();
+    const { model, say, replies, run, stored } = setup();
     say("a", "Call Ana.");
     replies.push(new Error("down"));
-    await queue.runDue(START);
+    await run(START);
     model.remove("a");
 
-    expect(await queue.runDue(START + MINUTE)).toBeNull();
+    expect(await run(START + MINUTE)).toBeNull();
+    expect(stored.size).toBe(0);
+  });
+
+  it("waits a full minute after a failure that took the Titler 90 seconds", async () => {
+    const { say, ask, run, time, stored } = setup();
+    say("a", "Call Ana.");
+    say("b", "Buy grout.");
+    ask.mockImplementation(async () => {
+      time.now += 90_000;
+      throw new Error("timeout");
+    });
+
+    expect(await run(START)).toBe(START + 90_000 + MINUTE);
+    expect(stored.get("a")?.nextAt).toBe(START + 90_000 + MINUTE);
+    expect(stored.get("b")?.nextAt).toBe(START + 180_000 + MINUTE);
+  });
+
+  it("sends nothing more to the Titler once the account is erased", async () => {
+    const { say, ask, run, account } = setup();
+    say("a", "Call Ana.");
+    say("b", "Buy grout.");
+    ask.mockImplementation(async () => {
+      account.erased = true;
+      return "Call Ana";
+    });
+
+    expect(await run(START)).toBeNull();
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips a note deleted or titled elsewhere while an earlier title was in flight", async () => {
+    const { model, say, ask, run, stored, title } = setup();
+    say("a", "Call Ana.");
+    say("b", "Buy grout.");
+    say("c", "Garden ideas.");
+    ask.mockImplementationOnce(async () => {
+      model.remove("b");
+      model.setTitle("c", "My garden");
+      return "Call Ana";
+    });
+
+    expect(await run(START)).toBeNull();
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(title("c")).toBe("My garden");
     expect(stored.size).toBe(0);
   });
 
   it("counts an empty reply as a failed attempt", async () => {
-    const { say, replies, queue, title, stored } = setup();
+    const { say, replies, run, title, stored } = setup();
     say("a", "Call Ana.");
     replies.push(' "." ');
 
-    expect(await queue.runDue(START)).toBe(START + MINUTE);
+    expect(await run(START)).toBe(START + MINUTE);
     expect(title("a")).toBeNull();
     expect(stored.get("a")?.attempts).toBe(1);
   });
@@ -158,10 +207,10 @@ describe("Recording titles", () => {
     ["Wait for it…", "Wait for it…"],
     [`Plan ${"the very long garden renovation ".repeat(3)}`, "Plan the very long garden renovation the very long garden"],
   ])("cleans the reply %j into one short line", async (reply, expected) => {
-    const { say, replies, queue, title } = setup();
+    const { say, replies, run, title } = setup();
     say("a", "Something.");
     replies.push(reply);
-    await queue.runDue(START);
+    await run(START);
     expect(title("a")).toBe(expected);
     expect(expected.length).toBeLessThanOrEqual(60);
   });

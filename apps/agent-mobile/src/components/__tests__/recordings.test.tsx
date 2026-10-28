@@ -300,9 +300,9 @@ describe('Recordings', () => {
     const long = 'First thought. '.repeat(40).trim();
     const { screen, data } = await open('/browse/recordings', [newYork]);
     await transcribe(data, 'n', long);
-    await entitle(data, 'n', 'First thoughts');
     expect(screen.queryByText(long)).toBeNull();
-    await fireEvent(screen.getByLabelText('First thoughts. Recording from Tue 20 Oct, 21:00, on Pixel 9'), 'longPress');
+    await fireEvent(screen.getByLabelText('Recording from Tue 20 Oct, 21:00, on Pixel 9'), 'longPress');
+    await entitle(data, 'n', 'First thoughts');
     expect(screen.getAllByText('First thoughts')).toHaveLength(2);
     expect(screen.getAllByText('Tue 20 Oct, 21:00')).toHaveLength(2);
     expect(screen.getByText(long)).toBeTruthy();

@@ -179,7 +179,10 @@ export function RecordingsScreen() {
   const player = useAudioPlayer(null);
   const playback = useAudioPlayerStatus(player);
   const [current, setCurrent] = useState<string | null>(null);
-  const [holding, setHolding] = useState<Recording | null>(null);
+  // Keep the held note's ID so the sheet shows its latest synced title.
+  const [holdingId, setHoldingId] = useState<string | null>(null);
+  const holding = recordings?.find(({ id }) => id === holdingId) ?? null;
+  const hold = useCallback((recording: Recording) => setHoldingId(recording.id), []);
   const [deleting, setDeleting] = useState<Recording | null>(null);
   const ripple = useColor('--color-ripple');
 
@@ -232,11 +235,11 @@ export function RecordingsScreen() {
           data={recordings}
           keyExtractor={(recording) => recording.id}
           renderItem={({ item }) => (
-            <RecordingRow recording={item} playing={current === item.id && playback.playing} onToggle={toggle} onHold={setHolding} />
+            <RecordingRow recording={item} playing={current === item.id && playback.playing} onToggle={toggle} onHold={hold} />
           )}
         />
       )}
-      <Sheet open={!!holding} onClose={() => setHolding(null)} contextBridge={null}>
+      <Sheet open={!!holding} onClose={() => setHoldingId(null)} contextBridge={null}>
         <View className="pb-4">
           <Text className="px-screen-x text-[20px] font-semibold">{holding ? holding.title ?? formatStartedAt(holding) : ''}</Text>
           {holding?.title ? <Text variant="subtitle" className="px-screen-x pt-1">{formatStartedAt(holding)}</Text> : null}
@@ -249,7 +252,7 @@ export function RecordingsScreen() {
           <Pressable
             accessibilityRole="button"
             android_ripple={{ color: ripple }}
-            onPress={() => { setDeleting(holding); setHolding(null); }}
+            onPress={() => { setDeleting(holding); setHoldingId(null); }}
             className="mt-2 min-h-14 justify-center px-screen-x"
           >
             <Text className="text-[16px] text-danger">Delete recording</Text>

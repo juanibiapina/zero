@@ -202,8 +202,9 @@ export class TaskDO extends WsServerDurableObject<Env> {
       titler: this.createTitler(),
       attempts,
       report: (error, context) => reportError(this.env, error, context, { level: "error" }),
+      isErased: () => this.isErased(),
     });
-    const next = await queue.runDue(Date.now());
+    const next = await queue.runDue();
     if (next !== null && !(await this.isErased())) await storage.setAlarm(next);
   }
 
