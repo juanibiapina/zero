@@ -42,7 +42,8 @@ the connection returns.
 - Shopping list: things to buy, kept off Home. Under Browse on mobile.
 - Medicines: medicine routines and their doses.
 - Night routine: the checklist before bed, on Home from its opening time and
-  always under Browse.
+  always under Browse. Going to bed ends the night, closes the page, and locks
+  the phone on Android.
 
 Mobile is the main daily surface, and web is the companion. Both show the same
 model, and both work before sign-in.

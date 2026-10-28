@@ -18,6 +18,14 @@ jest.mock('@clerk/expo', () => ({
 jest.mock('expo-router/build/testing-library/mocks', () => ({}));
 jest.mock('react-native-safe-area-context', () => jest.requireActual<typeof import('react-native-safe-area-context/jest/mock')>('react-native-safe-area-context/jest/mock').default);
 
+const mockScreenLock = { locks: 0, onLock: null as (() => void) | null };
+jest.mock('../../../modules/screen-lock', () => ({
+  lockScreen: () => {
+    mockScreenLock.locks += 1;
+    mockScreenLock.onLock?.();
+  },
+}));
+
 declare global {
   var __reorderableOnReorder: ((event: { from: number; to: number }) => void) | undefined;
 }
@@ -26,6 +34,8 @@ afterEach(() => {
   jest.useRealTimers();
   jest.restoreAllMocks();
   defaultToastController.dismiss();
+  mockScreenLock.locks = 0;
+  mockScreenLock.onLock = null;
 });
 
 async function open(at: string, initialUrl: string, steps: string[] = ['Shower', 'Meditate']) {
@@ -103,17 +113,51 @@ describe('Night routine', () => {
   });
 
   it('ends the night on Going to bed and leaves undone steps undone', async () => {
-    const { screen } = await open('2026-10-19T23:42:00', '/browse/night-routine');
+    const { screen, result } = await open('2026-10-19T23:42:00', '/browse');
+    await fireEvent.press(screen.getByLabelText('Night routine'));
     await fireEvent.press(screen.getByLabelText('Complete "Meditate"'));
     await waitFor(() => expect(screen.queryByLabelText('Complete "Meditate"')).toBeNull());
     await fireEvent.press(screen.getByLabelText('Going to bed'));
+    await waitFor(() => expect(result.getPathname()).toBe('/browse'));
+
+    await fireEvent.press(screen.getByLabelText('Night routine'));
     await waitFor(() => expect(screen.getByText('Good night · 1 of 2 done · bed at 23:42')).toBeTruthy());
     expect(screen.queryByLabelText('Complete "Shower"')).toBeNull();
     expect(screen.queryByLabelText('Add')).toBeNull();
 
     const toast = defaultToastController.getSnapshot()[0];
+    expect(toast?.message).toBe('Good night');
     await act(async () => toast?.action?.onPress());
     await waitFor(() => expect(screen.getByLabelText('Complete "Shower"')).toBeTruthy());
+  });
+
+  it('returns to Home and locks the phone after Going to bed from the moon', async () => {
+    const { screen, result, data } = await open('2026-10-19T23:42:00', '/');
+    let bedAtLock: string | null | undefined;
+    mockScreenLock.onLock = () => { bedAtLock = data.replica!.snapshot().nights[0]?.wentToBedAt; };
+    await fireEvent.press(screen.getByLabelText('Night routine'));
+    await fireEvent.press(screen.getByLabelText('Going to bed'));
+    await waitFor(() => expect(result.getPathname()).toBe('/'));
+    expect(mockScreenLock.locks).toBe(1);
+    expect(bedAtLock).toBeTruthy();
+  });
+
+  it('returns to Browse and locks the phone after Going to bed from Browse', async () => {
+    const { screen, result } = await open('2026-10-19T23:42:00', '/browse');
+    await fireEvent.press(screen.getByLabelText('Night routine'));
+    await fireEvent.press(screen.getByLabelText('Going to bed'));
+    await waitFor(() => expect(result.getPathname()).toBe('/browse'));
+    expect(mockScreenLock.locks).toBe(1);
+  });
+
+  it('stays on the page and does not lock when the bedtime cannot be saved', async () => {
+    const { screen, result, data } = await open('2026-10-19T23:42:00', '/browse');
+    jest.spyOn(data.replica!.nightRoutine, 'goToBed').mockRejectedValue(new Error('Could not save the bedtime'));
+    await fireEvent.press(screen.getByLabelText('Night routine'));
+    await fireEvent.press(screen.getByLabelText('Going to bed'));
+    await waitFor(() => expect(screen.getByText('Could not save the bedtime')).toBeTruthy());
+    expect(result.getPathname()).toBe('/browse/night-routine');
+    expect(mockScreenLock.locks).toBe(0);
   });
 
   it('renames and removes a step', async () => {

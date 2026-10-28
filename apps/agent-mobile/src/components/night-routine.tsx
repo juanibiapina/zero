@@ -17,6 +17,8 @@ import { Text } from '@/components/ui/text';
 import { useNightRoutine } from '@/lib/night-routine';
 import { useColor } from '@/lib/theme';
 
+import { lockScreen } from '../../modules/screen-lock';
+
 const NIGHT_ROUTINE_HREF = '/browse/night-routine';
 const backToBrowse = () => router.dismissTo('/browse');
 const backToHome = () => {
@@ -50,11 +52,12 @@ export function NightRoutineScreen() {
   const { replica, view } = useNightRoutine();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromHome = from === 'home';
+  const back = fromHome ? BACK_TO_HOME : BACK_TO_BROWSE;
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Night routine" back={fromHome ? BACK_TO_HOME : BACK_TO_BROWSE} />
+      <ScreenHeader title="Night routine" back={back} />
       {replica && view ? (
-        <NightRoutineContent replica={replica} view={view} onSystemBack={fromHome ? backToHome : null} />
+        <NightRoutineContent replica={replica} view={view} onSystemBack={fromHome ? backToHome : null} onLeave={back.onPress} />
       ) : (
         <Text variant="subtitle" className="px-screen-x py-6">Opening your night routine…</Text>
       )}
@@ -62,7 +65,12 @@ export function NightRoutineScreen() {
   );
 }
 
-function NightRoutineContent({ replica, view, onSystemBack }: { replica: TaskdoReplica; view: NightView; onSystemBack: (() => void) | null }) {
+function NightRoutineContent({ replica, view, onSystemBack, onLeave }: {
+  replica: TaskdoReplica;
+  view: NightView;
+  onSystemBack: (() => void) | null;
+  onLeave: () => void;
+}) {
   const insets = useSafeAreaInsets();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<NightStep | null>(null);
@@ -94,10 +102,15 @@ function NightRoutineContent({ replica, view, onSystemBack }: { replica: TaskdoR
   const goToBed = useCallback(() => {
     setError(null);
     routine.goToBed().then(
-      (night) => toast('Good night', { id: 'undo', action: { label: 'Undo', onPress: () => { routine.undoBed(night).catch(fail); } } }),
+      (night) => {
+        // The page is gone by the time Undo runs, so an Undo failure shows as a toast.
+        toast('Good night', { id: 'undo', action: { label: 'Undo', onPress: () => { routine.undoBed(night).catch((cause) => toast(messageOf(cause))); } } });
+        onLeave();
+        lockScreen();
+      },
       fail,
     );
-  }, [routine, fail]);
+  }, [routine, fail, onLeave]);
 
   const onReorder = useCallback(({ from, to }: ReorderableListReorderEvent) => {
     const step = view.open[from];
