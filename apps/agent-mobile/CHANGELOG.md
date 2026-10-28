@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-28: Add a short title to each voice note once its transcript is ready. Recordings shows the title above when you recorded it, and agents connected to Zero see it too.
+
 - 2026-10-28: Let agents connected to Zero, such as pi, read your voice notes and their transcripts.
 
 - 2026-10-28: Add written transcripts to voice notes. A few seconds after you record, Recordings shows what you said as clean text, without filler words and with your own corrections applied. Hold a voice note to read its whole transcript. Voice notes already on this phone get one too.

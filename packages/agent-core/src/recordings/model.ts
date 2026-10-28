@@ -19,11 +19,19 @@ export type Recording = {
   source: RecordingSource;
   device: string;
   transcript: Transcript | null;
+  title: string | null;
 };
 
-export type NewRecording = Omit<Recording, "transcript">;
+export type NewRecording = Omit<Recording, "transcript" | "title">;
 
 export type SetTranscriptResult = "set" | "missing" | "exists";
+
+export type SetTitleResult = "set" | "missing" | "exists";
+
+export const MAX_TITLE_LENGTH = 80;
+
+export const isRecordingTitle = (value: unknown): value is string =>
+  typeof value === "string" && value.trim() === value && value !== "" && value.length <= MAX_TITLE_LENGTH && !/[\r\n]/.test(value);
 
 function isTranscript(value: unknown): value is Transcript {
   if (typeof value !== "object" || value === null) return false;
@@ -53,7 +61,8 @@ function readRecording(id: string, row: Row): Recording | null {
   if (typeof durationMs !== "number" || durationMs < 0) return null;
   if (source !== "widget" && source !== "app") return null;
   if (typeof device !== "string") return null;
-  return { id, startedAt, timeZone, durationMs, source, device, transcript: readTranscript(row.transcript) };
+  const title = isRecordingTitle(row.title) ? row.title : null;
+  return { id, startedAt, timeZone, durationMs, source, device, transcript: readTranscript(row.transcript), title };
 }
 
 export type RecordingView<T> = {
@@ -64,6 +73,7 @@ export type RecordingView<T> = {
   recordedAt: string;
   durationMs: number;
   device: string;
+  title: string | null;
   transcript: "pending" | "no-speech" | T;
 };
 
@@ -75,9 +85,9 @@ function localStart({ startedAt, timeZone }: Recording): { recordedOn: string; r
 }
 
 function view<T>(recording: Recording, detail: (transcript: Transcript) => T): RecordingView<T> {
-  const { id, startedAt, timeZone, durationMs, device, transcript } = recording;
+  const { id, startedAt, timeZone, durationMs, device, transcript, title } = recording;
   return {
-    id, startedAt, timeZone, ...localStart(recording), durationMs, device,
+    id, startedAt, timeZone, ...localStart(recording), durationMs, device, title,
     transcript: !transcript ? "pending" : transcript.text === "" ? "no-speech" : detail(transcript),
   };
 }
@@ -110,6 +120,15 @@ export class RecordingModel {
     if (recording.transcript) return "exists";
     const { text, verbatim, model, transcribedAt } = transcript;
     this.store.setCell(TABLE, id, "transcript", JSON.stringify({ text, verbatim, model, transcribedAt }));
+    return "set";
+  }
+
+  setTitle(id: string, title: string): SetTitleResult {
+    if (!isRecordingTitle(title)) throw new Error("Invalid title");
+    const recording = this.get(id);
+    if (!recording) return "missing";
+    if (recording.title) return "exists";
+    this.store.setCell(TABLE, id, "title", title);
     return "set";
   }
 

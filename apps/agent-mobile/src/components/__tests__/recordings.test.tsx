@@ -169,6 +169,7 @@ describe('Voice capture', () => {
       source: 'app',
       device: 'Pixel 7',
       transcript: null,
+      title: null,
     }]);
     expect([...mockFiles]).toEqual(['file:///documents/recordings/rec-1.m4a']);
     await waitFor(() => screen.getByText('Saved · 0:42'));
@@ -262,8 +263,8 @@ describe('Microphone', () => {
 });
 
 describe('Recordings', () => {
-  const berlin: Recording = { id: 'b', startedAt: '2026-10-20T18:30:00.000Z', timeZone: 'Europe/Berlin', durationMs: 42_000, source: 'widget', device: 'Pixel 7', transcript: null };
-  const newYork: Recording = { id: 'n', startedAt: '2026-10-21T01:00:00.000Z', timeZone: 'America/New_York', durationMs: 75_000, source: 'app', device: 'Pixel 9', transcript: null };
+  const berlin: Recording = { id: 'b', startedAt: '2026-10-20T18:30:00.000Z', timeZone: 'Europe/Berlin', durationMs: 42_000, source: 'widget', device: 'Pixel 7', transcript: null, title: null };
+  const newYork: Recording = { id: 'n', startedAt: '2026-10-21T01:00:00.000Z', timeZone: 'America/New_York', durationMs: 75_000, source: 'app', device: 'Pixel 9', transcript: null, title: null };
   const transcribe = (data: Awaited<ReturnType<typeof open>>['data'], id: string, text: string) => act(async () => {
     new RecordingModel(data.replica!.store).setTranscript(id, { text, verbatim: text, model: 'm', transcribedAt: '2026-10-20T18:31:00.000Z' });
   });
@@ -280,6 +281,23 @@ describe('Recordings', () => {
     expect(screen.getByText('Call Ana on Friday.')).toBeTruthy();
     expect(screen.getByText('Buy grout.')).toBeTruthy();
     expect(screen.getByLabelText('Play recording from Tue 20 Oct, 20:30: Call Ana on Friday.')).toBeTruthy();
+  });
+
+  it('heads a voice note with its title once one is written, above when it was recorded', async () => {
+    mockFiles.add('file:///documents/recordings/b.m4a');
+    const { screen, data } = await open('/browse/recordings', [berlin]);
+    await transcribe(data, 'b', 'Call Ana on Friday about the boiler.');
+    expect(screen.queryByText('Boiler call with Ana')).toBeNull();
+
+    await act(async () => { new RecordingModel(data.replica!.store).setTitle('b', 'Boiler call with Ana'); });
+
+    expect(screen.getByText('Boiler call with Ana')).toBeTruthy();
+    expect(screen.getByText('Tue 20 Oct, 20:30')).toBeTruthy();
+    expect(screen.getByText('Call Ana on Friday about the boiler.')).toBeTruthy();
+    const row = 'Play recording from Tue 20 Oct, 20:30: Boiler call with Ana. Call Ana on Friday about the boiler.';
+    await fireEvent(screen.getByLabelText(row), 'longPress');
+    expect(screen.getAllByText('Boiler call with Ana')).toHaveLength(2);
+    expect(screen.getAllByText('Tue 20 Oct, 20:30')).toHaveLength(2);
   });
 
   it('says No speech for a silent voice note', async () => {

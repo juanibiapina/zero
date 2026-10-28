@@ -99,7 +99,8 @@ const SHOPPING =
 const RECORDINGS =
   "A Recording is a voice note the user spoke into their phone; its audio stays on the phone. recordedOn and recordedAt are the day and time " +
   "where it was recorded, in its timeZone. transcript is pending until the server has transcribed it, no-speech for a silent note, or the text: " +
-  "what the user said, with filler words removed and spoken corrections applied. Turn notes into Tasks or Shopping items with the other tools.";
+  "what the user said, with filler words removed and spoken corrections applied. title is a short title written from the transcript, or null " +
+  "until one is written or when none could be. Turn notes into Tasks or Shopping items with the other tools.";
 const recordings = (ctx: OperationContext) => new RecordingModel(ctx.store);
 const todo = (ctx: OperationContext) => new TodoModel({ store: ctx.store, now: ctx.now });
 const medicines = (ctx: OperationContext) => new MedicineModel(ctx.store, ctx.now);

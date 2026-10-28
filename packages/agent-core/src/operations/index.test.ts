@@ -209,6 +209,7 @@ describe("todo operation catalog", () => {
       model.setTranscript("late", transcript("Call the plumber on Friday", "Call the, uh, plumber on Thursday, no, Friday"));
       model.setTranscript("silent", transcript(""));
       model.setTranscript("old", transcript("Old note"));
+      model.setTitle("late", "Call the plumber");
       return ws;
     }
 
@@ -217,11 +218,11 @@ describe("todo operation catalog", () => {
       expect(value(run("recordings_list"))).toEqual({
         recordings: [
           { id: "late", startedAt: "2026-03-09T23:30:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-10", recordedAt: "00:30",
-            durationMs: 4200, device: "Pixel 7", transcript: { text: "Call the plumber on Friday" } },
+            durationMs: 4200, device: "Pixel 7", title: "Call the plumber", transcript: { text: "Call the plumber on Friday" } },
           { id: "silent", startedAt: "2026-03-08T07:05:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-08", recordedAt: "08:05",
-            durationMs: 4200, device: "Pixel 7", transcript: "no-speech" },
+            durationMs: 4200, device: "Pixel 7", title: null, transcript: "no-speech" },
           { id: "pending", startedAt: "2026-03-07T12:00:00.000Z", timeZone: "America/New_York", recordedOn: "2026-03-07", recordedAt: "07:00",
-            durationMs: 4200, device: "Pixel 7", transcript: "pending" },
+            durationMs: 4200, device: "Pixel 7", title: null, transcript: "pending" },
         ],
       });
     });
@@ -238,6 +239,7 @@ describe("todo operation catalog", () => {
       expect(value(run("recordings_get", { id: "late" }))).toMatchObject({
         id: "late",
         recordedOn: "2026-03-10",
+        title: "Call the plumber",
         transcript: {
           text: "Call the plumber on Friday",
           verbatim: "Call the, uh, plumber on Thursday, no, Friday",

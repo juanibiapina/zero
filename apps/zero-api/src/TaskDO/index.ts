@@ -17,7 +17,7 @@ import {
   type Transcript,
   type WaitingCondition,
 } from "./domain";
-import type { SetTranscriptResult } from "@zero/agent-core";
+import type { SetTitleResult, SetTranscriptResult } from "@zero/agent-core";
 
 export const TASKDO_SQL_STORAGE_PREFIX = "taskdo_";
 export const TASKDO_FIXTURE_DELETED_KEY = "fixtureDeleted";
@@ -153,6 +153,11 @@ export class TaskDO extends WsServerDurableObject<Env> {
   setRecordingTranscript(id: string, transcript: Transcript): Promise<SetTranscriptResult> {
     if (this.purging) return Promise.resolve("missing");
     return this.domain.setRecordingTranscript(id, transcript);
+  }
+
+  setRecordingTitle(id: string, title: string): Promise<SetTitleResult> {
+    if (this.purging) return Promise.resolve("missing");
+    return this.domain.setRecordingTitle(id, title);
   }
 
   // The TinyBase synchronizer has live listeners. Stop them and close sockets

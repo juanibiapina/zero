@@ -4,7 +4,8 @@ import { z } from "zod";
 
 import { fmtErr, log, logError } from "../log";
 import { getTaskDO } from "../TaskDO/stub";
-import { openaiCleanup, openaiSpeechToText } from "../transcription/openai";
+import { openaiCleanup, openaiSpeechToText, openaiTitleWriter } from "../transcription/openai";
+import { createTitler, type Titler } from "../transcription/title";
 import { createTranscriber, type Transcriber } from "../transcription/transcriber";
 import type { Env } from "../types";
 
@@ -17,11 +18,14 @@ export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const APP_TERMS = ["Zero"];
 
 export type MakeTranscriber = (env: Env) => Transcriber;
+export type MakeTitler = (env: Env) => Titler;
 
 const defaultTranscriber: MakeTranscriber = (env) => createTranscriber({
   speechToText: openaiSpeechToText({ apiKey: env.OPENAI_API_KEY }),
   cleanup: openaiCleanup({ apiKey: env.OPENAI_API_KEY }),
 });
+
+const defaultTitler: MakeTitler = (env) => createTitler(openaiTitleWriter({ apiKey: env.OPENAI_API_KEY }));
 
 const TranscriptSchema = z.object({
   text: z.string(),
@@ -32,15 +36,32 @@ const TranscriptSchema = z.object({
 
 const ErrorSchema = z.object({ error: z.string() });
 
-export const createRecordingsRoutes = (deps: { transcriber?: MakeTranscriber } = {}) => {
+export const createRecordingsRoutes = (deps: { transcriber?: MakeTranscriber; titler?: MakeTitler } = {}) => {
   const makeTranscriber = deps.transcriber ?? defaultTranscriber;
+  const makeTitler = deps.titler ?? defaultTitler;
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
+
+  // A title is a convenience on top of the transcript: when it cannot be
+  // written, the Recording keeps its transcript and simply has no title.
+  const giveTitle = async (env: Env, userId: string, id: string, text: string) => {
+    if (text === "") return;
+    try {
+      const title = await makeTitler(env)(text);
+      if (!title) {
+        log("recording_title_skipped", { clerk_user_id: userId });
+        return;
+      }
+      await getTaskDO(env, userId).setRecordingTitle(id, title);
+    } catch (error) {
+      logError("recording_title_failed", { clerk_user_id: userId, error: fmtErr(error) });
+    }
+  };
 
   const transcribeRoute = createRoute({
     method: "post",
     path: "/api/recordings/{id}/transcript",
     tags: ["Recordings"],
-    summary: "Transcribe a Recording from its audio, once",
+    summary: "Transcribe a Recording from its audio, once, and give it a title",
     request: {
       params: z.object({ id: z.string().min(1) }),
     },
@@ -65,7 +86,10 @@ export const createRecordingsRoutes = (deps: { transcriber?: MakeTranscriber } =
     const taskDO = getTaskDO(c.env, userId);
     const recording = await taskDO.recording(id);
     if (!recording) return c.json({ error: "recording not found" }, 404);
-    if (recording.transcript) return c.json({ transcript: recording.transcript }, 200);
+    if (recording.transcript) {
+      if (!recording.title) await giveTitle(c.env, userId, id, recording.transcript.text);
+      return c.json({ transcript: recording.transcript }, 200);
+    }
 
     const audio = await c.req.formData().then((form) => form.get("audio")).catch(() => null);
     if (!(audio instanceof Blob) || audio.size === 0) return c.json({ error: "missing audio file" }, 400);
@@ -90,6 +114,7 @@ export const createRecordingsRoutes = (deps: { transcriber?: MakeTranscriber } =
       latency_ms: Date.now() - started,
       empty: transcript.text === "",
     });
+    if (result === "set") await giveTitle(c.env, userId, id, transcript.text);
     if (result === "exists") {
       const stored = (await taskDO.recording(id))?.transcript;
       if (stored) return c.json({ transcript: stored }, 200);

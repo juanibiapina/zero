@@ -9,7 +9,9 @@ Recording. Each one keeps when it started, the phone's time zone at that
 moment, how long it ran, where you started it, and which phone holds the audio.
 A few seconds after it is saved, it also gets a transcript: what you said,
 written as you meant it, with filler words removed and your spoken corrections
-applied ("Thursday, no, Friday" becomes "Friday").
+applied ("Thursday, no, Friday" becomes "Friday"). Once the transcript is in,
+the Recording also gets a short title written from it, such as "Boiler call
+with Ana".
 
 ## Why it is its own block
 
@@ -22,7 +24,8 @@ transcription and other blocks can build on it afterwards.
 - Recording starts as soon as the recorder opens, without a second tap.
 - Stop, Back and the Stop button in the recording notification all save the
   Recording. It keeps recording with the screen off or in another app.
-- A saved Recording never changes, except that its transcript is added once.
+- A saved Recording never changes, except that its transcript and then its
+  title are each added once.
 - The phone that holds the audio sends it to the server for its transcript
   right after saving, and again when the app returns or reconnects if that
   failed. The server passes the audio to the transcription provider and keeps
@@ -30,6 +33,10 @@ transcription and other blocks can build on it afterwards.
 - The transcript is cleaned up from the verbatim words, which are kept with
   it. A cleanup that drops most of a long note, or adds words, is discarded,
   and the verbatim words are shown instead. A silent note gets no text.
+- The title is written from the transcript's text, in the note's language, in
+  at most ten words. A silent note gets none. When writing the title fails or
+  the answer does not read as a short title, the Recording has no title and
+  shows as before.
 - Holding a Recording offers Delete, which asks first and then removes it from
   every device. The phone that holds the audio deletes it, at once or the next
   time it syncs. A Recording from another phone says so before you delete it.
@@ -43,25 +50,27 @@ A mic button in Home's header, left of the 🌙 button, and a 1×1 red mic widge
 for the home screen. Both open the recorder: a running time and a large red
 Stop button. Saving shows "Saved · 0:42" on Home.
 
-Browse lists Recordings, newest first, with the date and time where it was
-recorded, up to four lines of its transcript, and the duration. A note still
+Browse lists Recordings, newest first, with the title above the date and time
+where it was recorded (or only the date and time without a title), up to four
+lines of its transcript, and the duration. A note still
 waiting for its transcript on the phone that holds it says "Transcribing…",
 and a silent one says "No speech". Tapping one plays it, and tapping again
 pauses. A Recording made on another phone shows "On Pixel 7" and does not
-play. Holding one opens a menu with its date and time, its whole transcript,
+play. Holding one opens a menu with its title, its date and time, its whole transcript,
 and Delete recording; for a Recording from another phone the menu adds
 "Recorded on Pixel 7. Its audio isn't on this phone."
 
 ## Interactions
 
 - Task, Project, Waiting, After, Medicine, Night routine: none, on purpose.
-- Agents: read Recordings and their transcripts over MCP, with the date and
-  time where each was recorded. They cannot delete one.
+- Agents: read Recordings with their titles and transcripts over MCP, with
+  the date and time where each was recorded. They cannot delete one.
 
 ## Left out on purpose
 
 - Location.
-- Renaming or sharing a Recording, and seeking inside one.
+- Renaming or sharing a Recording, and seeking inside one. The title is
+  written once and cannot be edited.
 - Recordings on the web.
 
 ## Ideas

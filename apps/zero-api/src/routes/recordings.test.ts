@@ -3,6 +3,7 @@ import type { Recording, Transcript } from "@zero/agent-core";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Env } from "../types";
+import type { Titler } from "../transcription/title";
 import type { Transcriber } from "../transcription/transcriber";
 import { createRecordingsRoutes, MAX_AUDIO_BYTES } from "./recordings";
 import { taskDoEnv } from "./taskdo-test-stub";
@@ -15,6 +16,7 @@ const recording: Recording = {
   source: "app",
   device: "Pixel 7",
   transcript: null,
+  title: null,
 };
 
 const transcript: Transcript = {
@@ -24,14 +26,14 @@ const transcript: Transcript = {
   transcribedAt: "2026-10-20T18:31:00.000Z",
 };
 
-function buildApp(methods: object, transcriber: Transcriber) {
+function buildApp(methods: object, transcriber: Transcriber, titler: Titler = async () => null) {
   const env = taskDoEnv(methods);
   const app = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
   app.use("/api/*", async (context, next) => {
     context.set("userId", "user-abc");
     await next();
   });
-  app.route("/", createRecordingsRoutes({ transcriber: () => transcriber }));
+  app.route("/", createRecordingsRoutes({ transcriber: () => transcriber, titler: () => titler }));
   return (path: string, init?: RequestInit) => app.fetch(new Request(`http://localhost${path}`, init), env);
 }
 
@@ -59,15 +61,73 @@ describe("recording transcript route", () => {
     expect(setRecordingTranscript).toHaveBeenCalledWith("r1", transcript);
   });
 
-  it("returns a stored transcript without transcribing again", async () => {
+  it("returns a stored transcript without transcribing or titling again", async () => {
     const transcriber = vi.fn<Transcriber>();
-    const app = buildApp({ recording: async () => ({ ...recording, transcript }) }, transcriber);
+    const titler = vi.fn<Titler>();
+    const app = buildApp({ recording: async () => ({ ...recording, transcript, title: "Call Ana" }) }, transcriber, titler);
 
     const response = await app("/api/recordings/r1/transcript", upload());
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ transcript });
     expect(transcriber).not.toHaveBeenCalled();
+    expect(titler).not.toHaveBeenCalled();
+  });
+
+  it("titles a Recording from its transcript once the transcript is stored", async () => {
+    const titler = vi.fn<Titler>(async () => "Call Ana on Friday");
+    const setRecordingTitle = vi.fn(async () => "set");
+    const app = buildApp({
+      recording: async () => recording,
+      listProjects: async () => [],
+      setRecordingTranscript: async () => "set",
+      setRecordingTitle,
+    }, async () => transcript, titler);
+
+    expect((await app("/api/recordings/r1/transcript", upload())).status).toBe(200);
+    expect(titler).toHaveBeenCalledWith("Call Ana on Friday.");
+    expect(setRecordingTitle).toHaveBeenCalledWith("r1", "Call Ana on Friday");
+  });
+
+  it("titles a transcribed Recording that has no title yet", async () => {
+    const setRecordingTitle = vi.fn(async () => "set");
+    const app = buildApp({
+      recording: async () => ({ ...recording, transcript }),
+      setRecordingTitle,
+    }, vi.fn<Transcriber>(), async () => "Call Ana on Friday");
+
+    expect(await (await app("/api/recordings/r1/transcript", upload())).json()).toEqual({ transcript });
+    expect(setRecordingTitle).toHaveBeenCalledWith("r1", "Call Ana on Friday");
+  });
+
+  it("keeps the transcript and stores no title when titling fails or has nothing to say", async () => {
+    for (const titler of [async () => { throw new Error("provider down"); }, async () => null] as Titler[]) {
+      const setRecordingTitle = vi.fn();
+      const app = buildApp({
+        recording: async () => recording,
+        listProjects: async () => [],
+        setRecordingTranscript: async () => "set",
+        setRecordingTitle,
+      }, async () => transcript, titler);
+
+      const response = await app("/api/recordings/r1/transcript", upload());
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ transcript });
+      expect(setRecordingTitle).not.toHaveBeenCalled();
+    }
+  });
+
+  it("does not title a silent note", async () => {
+    const titler = vi.fn<Titler>();
+    const app = buildApp({
+      recording: async () => recording,
+      listProjects: async () => [],
+      setRecordingTranscript: async () => "set",
+    }, async () => ({ ...transcript, text: "", verbatim: "" }), titler);
+
+    expect((await app("/api/recordings/r1/transcript", upload())).status).toBe(200);
+    expect(titler).not.toHaveBeenCalled();
   });
 
   it("answers 404 for a Recording the server does not have yet", async () => {

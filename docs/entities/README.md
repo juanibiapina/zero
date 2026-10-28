@@ -60,7 +60,7 @@ Read a row as "this block, when it meets that one".
 | **After** | None | Points from one Project to another. No cycles | Ranks below Waiting | Several on one Project must all resolve | None | None | None | None |
 | **Medicine** | A low supply adds one restock Task. Deleting it leaves its Tasks loose | None | None | None | Each Medicine has its own Doses, or its own Intakes when taken as needed | None | None | None |
 | **Night routine** | None | None | None | None | None | One per user. Each night is a copy of the one before | None | None |
-| **Recording** | None | None | None | None | None | None | Each stands alone. Only its transcript is added after saving | None |
+| **Recording** | None | None | None | None | None | None | Each stands alone. Only its transcript and title are added after saving | None |
 | **Shopping item** | None | None | None | None | None | None | None | Shares one manual order |
 
 Medicine stands apart from Projects on purpose. It never changes how much
@@ -78,7 +78,7 @@ Places and agents:
 | **After** | | | In its Project, and as its own Projects section | | List, add, delete |
 | **Medicine** | Its restock Tasks, as loose Tasks | | | Its own list and detail | List only |
 | **Night routine** | A 🌙 button from its opening time | | | | None |
-| **Recording** | A mic button that starts one | | | | List and read transcripts |
+| **Recording** | A mic button that starts one | | | | List and read titles and transcripts |
 | **Shopping item** | The Shopping option in the add drawer | | | | List, add, edit, move, buy, put back |
 
 ## Removed blocks

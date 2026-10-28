@@ -13,7 +13,7 @@ const recording = (overrides: Partial<NewRecording> = {}): NewRecording => ({
   ...overrides,
 });
 
-const listed = (overrides: Partial<Recording> = {}): Recording => ({ ...recording(), transcript: null, ...overrides });
+const listed = (overrides: Partial<Recording> = {}): Recording => ({ ...recording(), transcript: null, title: null, ...overrides });
 
 const transcript: Transcript = {
   text: "Call Ana on Friday.",
@@ -77,6 +77,52 @@ describe("Transcripts", () => {
     phone.merge(tablet);
     expect(new RecordingModel(phone).list()).toEqual([]);
     expect(new RecordingModel(phone).deleted()).toEqual(["r1"]);
+  });
+});
+
+describe("Titles", () => {
+  it("adds a title to a transcribed recording once", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    model.setTranscript("r1", transcript);
+    expect(model.setTitle("r1", "Call Ana on Friday")).toBe("set");
+    expect(model.setTitle("r1", "Something else")).toBe("exists");
+    expect(model.list()).toEqual([listed({ transcript, title: "Call Ana on Friday" })]);
+  });
+
+  it("does not create a recording for a title of one that is missing or deleted", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    model.remove("r1");
+    expect(model.setTitle("r1", "Call Ana")).toBe("missing");
+    expect(model.list()).toEqual([]);
+  });
+
+  it("refuses an empty, padded, multiline or overlong title", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    for (const title of ["", " Call Ana", "Call\nAna", "x".repeat(81)]) {
+      expect(() => model.setTitle("r1", title)).toThrow("Invalid title");
+    }
+    expect(model.get("r1")).toEqual(listed());
+  });
+
+  it("reads a malformed title cell as no title", () => {
+    const store = createMergeableStore();
+    const model = new RecordingModel(store);
+    model.add(recording());
+    store.setCell("recordings", "r1", "title", 42);
+    expect(model.get("r1")).toEqual(listed());
+  });
+
+  it("brings the title to every device", () => {
+    const phone = createMergeableStore();
+    const server = createMergeableStore();
+    new RecordingModel(phone).add(recording());
+    server.merge(phone);
+    new RecordingModel(server).setTitle("r1", "Call Ana");
+    phone.merge(server);
+    expect(new RecordingModel(phone).get("r1")?.title).toBe("Call Ana");
   });
 });
 

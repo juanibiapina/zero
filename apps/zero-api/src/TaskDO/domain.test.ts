@@ -138,4 +138,18 @@ describe("TaskDomain catalog operations", () => {
     expect(await domain.recording("r1")).toBeNull();
     expect(await domain.setRecordingTranscript("r1", transcript)).toBe("missing");
   });
+
+  it("adds a Recording's title once, saves it, and refuses it after erasure", async () => {
+    const { domain, store, saves, erase } = setup();
+    store.setRow("recordings", "r1", { startedAt: NOW, timeZone: "Europe/Berlin", durationMs: 1000, source: "app", device: "Pixel 7" });
+
+    expect(await domain.setRecordingTitle("r1", "Say hi")).toBe("set");
+    expect(await domain.setRecordingTitle("r1", "Other")).toBe("exists");
+    expect(await domain.setRecordingTitle("missing", "Say hi")).toBe("missing");
+    expect(saves()).toBe(1);
+    expect((await domain.recording("r1"))?.title).toBe("Say hi");
+
+    erase();
+    expect(await domain.setRecordingTitle("r1", "Say hi")).toBe("missing");
+  });
 });
