@@ -105,6 +105,20 @@ describe("Recording titles", () => {
     expect(ask).toHaveBeenCalledTimes(1);
   });
 
+  it("comes back at once for a note transcribed while another note's title was failing", async () => {
+    const { say, replies, queue, title } = setup();
+    say("a", "Call Ana.");
+    replies.push(new Error("down"));
+    const failing = queue.runDue(START);
+    say("b", "Buy grout.");
+
+    expect(await failing).toBe(START);
+
+    replies.push("Buy grout");
+    expect(await queue.runDue(START)).toBe(START + MINUTE);
+    expect(title("b")).toBe("Buy grout");
+  });
+
   it("clears a note's attempts once it is titled", async () => {
     const { say, replies, queue, stored } = setup();
     say("a", "Call Ana.");

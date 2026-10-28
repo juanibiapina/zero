@@ -68,6 +68,9 @@ export function createTitleQueue({ recordings, titler, attempts, report }: {
         later(nextAt);
       }
     }
+    // A transcript stored while this run awaited the Titler set an alarm for
+    // now; the caller's setAlarm(next) would overwrite it with a backoff time.
+    if (recordings.untitled().some(({ id }) => !waiting.has(id))) later(now);
     return next;
   }
 
