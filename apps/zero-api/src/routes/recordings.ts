@@ -41,8 +41,9 @@ export const createRecordingsRoutes = (deps: { transcriber?: MakeTranscriber; ti
   const makeTitler = deps.titler ?? defaultTitler;
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-  // A title is a convenience on top of the transcript: when it cannot be
-  // written, the Recording keeps its transcript and simply has no title.
+  // A title is a convenience on top of the transcript, written once with no
+  // retry: when it cannot be written, the Recording keeps its transcript and
+  // stays untitled.
   const giveTitle = async (env: Env, userId: string, id: string, text: string) => {
     if (text === "") return;
     try {
@@ -86,10 +87,7 @@ export const createRecordingsRoutes = (deps: { transcriber?: MakeTranscriber; ti
     const taskDO = getTaskDO(c.env, userId);
     const recording = await taskDO.recording(id);
     if (!recording) return c.json({ error: "recording not found" }, 404);
-    if (recording.transcript) {
-      if (!recording.title) await giveTitle(c.env, userId, id, recording.transcript.text);
-      return c.json({ transcript: recording.transcript }, 200);
-    }
+    if (recording.transcript) return c.json({ transcript: recording.transcript }, 200);
 
     const audio = await c.req.formData().then((form) => form.get("audio")).catch(() => null);
     if (!(audio instanceof Blob) || audio.size === 0) return c.json({ error: "missing audio file" }, 400);

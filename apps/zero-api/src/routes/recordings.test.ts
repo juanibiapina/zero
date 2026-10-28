@@ -64,7 +64,7 @@ describe("recording transcript route", () => {
   it("returns a stored transcript without transcribing or titling again", async () => {
     const transcriber = vi.fn<Transcriber>();
     const titler = vi.fn<Titler>();
-    const app = buildApp({ recording: async () => ({ ...recording, transcript, title: "Call Ana" }) }, transcriber, titler);
+    const app = buildApp({ recording: async () => ({ ...recording, transcript }) }, transcriber, titler);
 
     const response = await app("/api/recordings/r1/transcript", upload());
 
@@ -86,17 +86,6 @@ describe("recording transcript route", () => {
 
     expect((await app("/api/recordings/r1/transcript", upload())).status).toBe(200);
     expect(titler).toHaveBeenCalledWith("Call Ana on Friday.");
-    expect(setRecordingTitle).toHaveBeenCalledWith("r1", "Call Ana on Friday");
-  });
-
-  it("titles a transcribed Recording that has no title yet", async () => {
-    const setRecordingTitle = vi.fn(async () => "set");
-    const app = buildApp({
-      recording: async () => ({ ...recording, transcript }),
-      setRecordingTitle,
-    }, vi.fn<Transcriber>(), async () => "Call Ana on Friday");
-
-    expect(await (await app("/api/recordings/r1/transcript", upload())).json()).toEqual({ transcript });
     expect(setRecordingTitle).toHaveBeenCalledWith("r1", "Call Ana on Friday");
   });
 

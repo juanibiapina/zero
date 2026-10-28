@@ -34,9 +34,9 @@ transcription and other blocks can build on it afterwards.
   it. A cleanup that drops most of a long note, or adds words, is discarded,
   and the verbatim words are shown instead. A silent note gets no text.
 - The title is written from the transcript's text, in the note's language, in
-  at most ten words. A silent note gets none. When writing the title fails or
-  the answer does not read as a short title, the Recording has no title and
-  shows as before.
+  at most ten words. A silent note gets none. It is tried once: when writing
+  the title fails or the answer does not read as a short title, the Recording
+  stays untitled and shows as before.
 - Holding a Recording offers Delete, which asks first and then removes it from
   every device. The phone that holds the audio deletes it, at once or the next
   time it syncs. A Recording from another phone says so before you delete it.
