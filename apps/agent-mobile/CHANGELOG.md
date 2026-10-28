@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-28: Add written transcripts to voice notes. A few seconds after you record, Recordings shows what you said as clean text, without filler words and with your own corrections applied. Hold a voice note to read its whole transcript. Voice notes already on this phone get one too.
+
 - 2026-10-26: Add a Shopping list under Browse. Add things to buy, drag them into order, tap one to edit it, and tick it off when you buy it, with Undo. Choose Shopping in Home's + drawer to add an item without it showing up as a task.
 
 - 2026-10-24: Record voice notes through your Bluetooth headset's microphone when one is connected. The Record screen vibrates and starts the timer once the microphone is listening, and shows which microphone it is using.

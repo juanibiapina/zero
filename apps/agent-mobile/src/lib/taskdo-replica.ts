@@ -13,11 +13,12 @@ import {
   type TaskdoSyncState,
 } from '@zero/agent-core';
 
-import type { TokenGetter } from './api';
+import { uploadRecordingForTranscript, type TokenGetter } from './api';
 import { API_BASE_URL } from './env';
-import { cleanUpDeletedAudio } from './recording-audio';
+import { cleanUpDeletedAudio, localAudio } from './recording-audio';
 import { loadLastSync, saveLastSync } from './sync-metadata';
 import type { TodoWorkspaceDescriptor } from './todo-workspace';
+import { startTranscriptionOutbox, type TranscriptionUpload } from './transcription-outbox';
 
 export type MobileTaskdoPersistence = {
   store: MergeableStore;
@@ -59,6 +60,10 @@ type CreateTaskdoReplicaOpenerOptions = {
   ) => Promise<MobileTaskdoPersistence>;
   openSocket: (accountId: string, getToken: TokenGetter) => Promise<WebSocket>;
   subscribeToForeground: (onActive: () => void) => () => void;
+  transcribe?: {
+    localAudio: (id: string) => string | null;
+    upload: (getToken: TokenGetter, id: string, uri: string) => Promise<TranscriptionUpload>;
+  };
 };
 
 function assertDatabaseName(databaseName: string) {
@@ -117,6 +122,7 @@ export function createTaskdoReplicaOpener({
   openPersistence,
   openSocket,
   subscribeToForeground,
+  transcribe,
 }: CreateTaskdoReplicaOpenerOptions) {
   return async ({
     descriptor,
@@ -178,6 +184,7 @@ export function createTaskdoReplicaOpener({
     let removeForeground = () => {};
     let unsubscribe = () => {};
     let stopAudioCleanup = () => {};
+    let stopTranscription = () => {};
     try {
       await reload();
       try {
@@ -201,6 +208,7 @@ export function createTaskdoReplicaOpener({
       } else {
         const accountId = descriptor.binding.accountId;
         const initialLastSyncedAt = await loadLastSync(accountId);
+        const resumeTranscription = new Set<() => void>();
         const session = createSyncedTaskdoReplicaSession({
           store: persistence.store,
           queryClient,
@@ -209,7 +217,10 @@ export function createTaskdoReplicaOpener({
           onSnapshot,
           refreshLocal: reload,
           sync: {
-            onConnection,
+            onConnection: (connected) => {
+              onConnection(connected);
+              if (connected) resumeTranscription.forEach((resume) => resume());
+            },
             initialLastSyncedAt,
             onSyncState: (state) => {
               onSyncState(state);
@@ -220,6 +231,21 @@ export function createTaskdoReplicaOpener({
         });
         replica = session;
         removeForeground = subscribeToForeground(() => { void session.reconnect(); });
+        if (transcribe) {
+          stopTranscription = startTranscriptionOutbox({
+            replica: session,
+            localAudio: transcribe.localAudio,
+            upload: (id, uri) => transcribe.upload(getToken, id, uri),
+            onResume: (resume) => {
+              resumeTranscription.add(resume);
+              const stopForeground = subscribeToForeground(resume);
+              return () => {
+                resumeTranscription.delete(resume);
+                stopForeground();
+              };
+            },
+          });
+        }
       }
 
       stopAudioCleanup = cleanUpDeletedAudio(replica.recordings);
@@ -229,6 +255,7 @@ export function createTaskdoReplicaOpener({
         ...openedReplica,
         close() {
           closePromise ??= (async () => {
+            stopTranscription();
             stopAudioCleanup();
             removeForeground();
             unsubscribe();
@@ -240,6 +267,7 @@ export function createTaskdoReplicaOpener({
         },
       };
     } catch (error) {
+      stopTranscription();
       stopAudioCleanup();
       removeForeground();
       unsubscribe();
@@ -317,6 +345,7 @@ const openAuthenticatedSocket = async (_accountId: string, getToken: TokenGetter
 export const openTaskDOReplica = createTaskdoReplicaOpener({
   openPersistence: openTaskdoPersistence,
   openSocket: openAuthenticatedSocket,
+  transcribe: { localAudio, upload: uploadRecordingForTranscript },
   subscribeToForeground: (onActive) => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') onActive();

@@ -1,6 +1,7 @@
 import type { ProjectSuggestionCandidate } from '@zero/agent-core';
 
 import { API_BASE_URL } from './env';
+import type { TranscriptionUpload } from './transcription-outbox';
 
 // Returns the current Clerk session JWT (or null when signed out). Matches the
 // shape of `getToken` from `@clerk/expo`'s `useAuth()`.
@@ -86,4 +87,23 @@ export async function fetchProjectSuggestion(
   if (!res.ok) return null;
   const body = (await res.json()) as { projectId: string | null };
   return body.projectId;
+}
+
+export async function uploadRecordingForTranscript(
+  getToken: TokenGetter,
+  id: string,
+  uri: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<TranscriptionUpload> {
+  const form = new FormData();
+  form.append('audio', { uri, name: `${id}.m4a`, type: 'audio/mp4' } as unknown as Blob);
+  const res = await apiFetch(
+    getToken,
+    `/api/recordings/${encodeURIComponent(id)}/transcript`,
+    { method: 'POST', body: form },
+    baseUrl,
+  );
+  if (res.ok) return 'done';
+  if (res.status === 404) return 'not-synced';
+  return 'later';
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
-import { apiFetch, fetchIconSuggestions, patchTimezone } from '../api';
+import { apiFetch, fetchIconSuggestions, patchTimezone, uploadRecordingForTranscript } from '../api';
 
 describe('mobile HTTP API', () => {
   afterEach(() => {
@@ -76,5 +76,22 @@ describe('mobile HTTP API', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://example.test/api/projects/icon-suggestions');
     expect(init.method).toBe('POST');
+  });
+
+  it('sends a voice note for its transcript and tells whether the server had it', async () => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch');
+    const getToken = jest.fn<() => Promise<string | null>>().mockResolvedValue('tok');
+    const send = async (status: number) => {
+      fetchMock.mockResolvedValueOnce(new Response('{}', { status }));
+      return uploadRecordingForTranscript(getToken, 'rec-1', 'file:///recordings/rec-1.m4a', 'https://example.test');
+    };
+
+    expect(await send(200)).toBe('done');
+    expect(await send(404)).toBe('not-synced');
+    expect(await send(502)).toBe('later');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://example.test/api/recordings/rec-1/transcript');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeInstanceOf(FormData);
   });
 });
