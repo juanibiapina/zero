@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { MedicineModel } from "../medicines/model";
 import { projectDisplayStatus } from "../projects/derive";
+import { RecordingModel, recordingDetail, recordingSummary } from "../recordings/model";
 import { ShoppingListModel, type ShoppingResult } from "../shopping/model";
 import { TodoModel, type TodoModelResult } from "../taskdo/model";
 import type { Project, Task, TaskParent } from "../taskdo/types";
@@ -95,6 +96,11 @@ const fromShopping = <T>(result: ShoppingResult<T>): OperationOutcome => result.
 const SHOPPING =
   "Shopping items are things the user needs to buy, on their own Shopping list. They are not Tasks: they never appear in tasks_list, " +
   "on Home, or in Projects. Buying an item removes it from the list.";
+const RECORDINGS =
+  "A Recording is a voice note the user spoke into their phone; its audio stays on the phone. recordedOn and recordedAt are the day and time " +
+  "where it was recorded, in its timeZone. transcript is pending until the server has transcribed it, no-speech for a silent note, or the text: " +
+  "what the user said, with filler words removed and spoken corrections applied. Turn notes into Tasks or Shopping items with the other tools.";
+const recordings = (ctx: OperationContext) => new RecordingModel(ctx.store);
 const todo = (ctx: OperationContext) => new TodoModel({ store: ctx.store, now: ctx.now });
 const medicines = (ctx: OperationContext) => new MedicineModel(ctx.store, ctx.now);
 
@@ -381,6 +387,30 @@ export const todoOperations: readonly TodoOperation[] = [
     kind: "write",
     input: z.object({ id: Id }),
     run: (ctx, input) => fromShopping(shopping(ctx).unbuy(input.id)),
+  }),
+  define({
+    name: "recordings_list",
+    title: "List Recordings with their transcripts",
+    description: `${RECORDINGS} Lists Recordings newest first.`,
+    kind: "read",
+    input: z.object({ since: PlainDate.optional().describe("Earliest recordedOn day; defaults to 7 days ago") }),
+    run: (ctx, input) => {
+      const since = input.since ?? shiftDay(ctx.today, -7);
+      return read({ recordings: recordings(ctx).list().map(recordingSummary).filter((recording) => recording.recordedOn >= since) });
+    },
+  }),
+  define({
+    name: "recordings_get",
+    title: "Read a Recording's full transcript",
+    description:
+      `${RECORDINGS} Reads one Recording. Its transcript also carries verbatim, the words exactly as transcribed before cleanup, ` +
+      "which equals text when the cleanup was discarded.",
+    kind: "read",
+    input: z.object({ id: Id }),
+    run: (ctx, input) => {
+      const recording = recordings(ctx).get(input.id);
+      return recording ? read(recordingDetail(recording)) : { ok: false, error: "missing-recording" };
+    },
   }),
   define({
     name: "recoveries_list",

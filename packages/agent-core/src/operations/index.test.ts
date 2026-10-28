@@ -2,6 +2,7 @@ import { createMergeableStore } from "tinybase";
 import { describe, expect, it } from "vitest";
 
 import { MedicineModel, medicineOccurrences } from "../medicines/model";
+import { RecordingModel } from "../recordings/model";
 import { runTodoOperation, todoOperations, type OperationContext, type OperationOutcome } from "./index";
 
 function workspace(today = "2026-03-10") {
@@ -33,7 +34,7 @@ describe("todo operation catalog", () => {
 
   it("offers a list operation for every synchronized entity table", () => {
     const reads = todoOperations.filter((operation) => operation.kind === "read").map((operation) => operation.name);
-    expect(reads).toEqual(expect.arrayContaining(["tasks_list", "projects_list", "conditions_list", "medicines_list", "recoveries_list"]));
+    expect(reads).toEqual(expect.arrayContaining(["tasks_list", "projects_list", "conditions_list", "medicines_list", "shopping_list", "recordings_list", "recoveries_list"]));
   });
 
   it("creates Tasks with generated ids and lists them in manual order", () => {
@@ -183,6 +184,70 @@ describe("todo operation catalog", () => {
     expect(texts()).toEqual(before);
     expect(value<{ tasks: unknown[] }>(run("tasks_list")).tasks).toEqual([]);
     expect(run("shopping_buy", { id: "gone" })).toEqual({ ok: false, error: "missing-item" });
+  });
+
+  it("only reads Recordings, because deleting one also deletes its audio on the phone", () => {
+    const recordingOperations = todoOperations.filter((operation) => operation.name.startsWith("recordings_"));
+    expect(recordingOperations.map((operation) => [operation.name, operation.kind])).toEqual([
+      ["recordings_list", "read"],
+      ["recordings_get", "read"],
+    ]);
+  });
+
+  describe("Recordings", () => {
+    const transcript = (text: string, verbatim = text) => ({ text, verbatim, model: "stt+cleanup", transcribedAt: "2026-03-10T08:00:00.000Z" });
+
+    function withRecordings() {
+      const ws = workspace();
+      const model = new RecordingModel(ws.ctx.store);
+      const add = (id: string, startedAt: string, timeZone = "Europe/Berlin") =>
+        model.add({ id, startedAt, timeZone, durationMs: 4200, source: "app", device: "Pixel 7" });
+      add("late", "2026-03-09T23:30:00.000Z");
+      add("silent", "2026-03-08T07:05:00.000Z");
+      add("pending", "2026-03-07T12:00:00.000Z", "America/New_York");
+      add("old", "2026-03-01T09:00:00.000Z");
+      model.setTranscript("late", transcript("Call the plumber on Friday", "Call the, uh, plumber on Thursday, no, Friday"));
+      model.setTranscript("silent", transcript(""));
+      model.setTranscript("old", transcript("Old note"));
+      return ws;
+    }
+
+    it("lists the last week's Recordings newest first, with their text and local time where they were recorded", () => {
+      const { run, value } = withRecordings();
+      expect(value(run("recordings_list"))).toEqual({
+        recordings: [
+          { id: "late", startedAt: "2026-03-09T23:30:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-10", recordedAt: "00:30",
+            durationMs: 4200, device: "Pixel 7", transcript: { text: "Call the plumber on Friday" } },
+          { id: "silent", startedAt: "2026-03-08T07:05:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-08", recordedAt: "08:05",
+            durationMs: 4200, device: "Pixel 7", transcript: "no-speech" },
+          { id: "pending", startedAt: "2026-03-07T12:00:00.000Z", timeZone: "America/New_York", recordedOn: "2026-03-07", recordedAt: "07:00",
+            durationMs: 4200, device: "Pixel 7", transcript: "pending" },
+        ],
+      });
+    });
+
+    it("lists Recordings since a day in their own calendar", () => {
+      const { run, value } = withRecordings();
+      const ids = (since: string) => value<{ recordings: Array<{ id: string }> }>(run("recordings_list", { since })).recordings.map((r) => r.id);
+      expect(ids("2026-03-10")).toEqual(["late"]);
+      expect(ids("2026-03-01")).toEqual(["late", "silent", "pending", "old"]);
+    });
+
+    it("reads one Recording with its verbatim words", () => {
+      const { run, value } = withRecordings();
+      expect(value(run("recordings_get", { id: "late" }))).toMatchObject({
+        id: "late",
+        recordedOn: "2026-03-10",
+        transcript: {
+          text: "Call the plumber on Friday",
+          verbatim: "Call the, uh, plumber on Thursday, no, Friday",
+          model: "stt+cleanup",
+          transcribedAt: "2026-03-10T08:00:00.000Z",
+        },
+      });
+      expect(value(run("recordings_get", { id: "pending" }))).toMatchObject({ transcript: "pending" });
+      expect(run("recordings_get", { id: "gone" })).toEqual({ ok: false, error: "missing-recording" });
+    });
   });
 
   it("reports invalid synchronized rows as recoveries instead of listing them", () => {

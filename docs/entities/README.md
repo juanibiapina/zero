@@ -78,7 +78,7 @@ Places and agents:
 | **After** | | | In its Project, and as its own Projects section | | List, add, delete |
 | **Medicine** | Its restock Tasks, as loose Tasks | | | Its own list and detail | List only |
 | **Night routine** | A 🌙 button from its opening time | | | | None |
-| **Recording** | A mic button that starts one | | | | None |
+| **Recording** | A mic button that starts one | | | | List and read transcripts |
 | **Shopping item** | The Shopping option in the add drawer | | | | List, add, edit, move, buy, put back |
 
 ## Removed blocks

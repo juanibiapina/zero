@@ -24,8 +24,8 @@ const userToday: ResolveToday = async (env, userId) => {
 };
 
 const INSTRUCTIONS =
-  "Zero's todo workspace for the signed-in user: Tasks, Projects, Waiting conditions, Afters, and Medicines. " +
-  "Changes sync to the user's phone and web app immediately. Medicines are read-only here; the user changes them in the Zero app. " +
+  "Zero's todo workspace for the signed-in user: Tasks, Projects, Waiting conditions, Afters, Shopping list, Medicines, and Recordings (voice notes with transcripts). " +
+  "Changes sync to the user's phone and web app immediately. Medicines and Recordings are read-only here; the user changes them in the Zero app. " +
   "Read with the *_list tools before changing anything, " +
   "and refer to items by the ids they return. Dates are YYYY-MM-DD in the user's local calendar.";
 

@@ -56,6 +56,38 @@ function readRecording(id: string, row: Row): Recording | null {
   return { id, startedAt, timeZone, durationMs, source, device, transcript: readTranscript(row.transcript) };
 }
 
+export type RecordingView<T> = {
+  id: string;
+  startedAt: string;
+  timeZone: string;
+  recordedOn: string;
+  recordedAt: string;
+  durationMs: number;
+  device: string;
+  transcript: "pending" | "no-speech" | T;
+};
+
+function localStart({ startedAt, timeZone }: Recording): { recordedOn: string; recordedAt: string } {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(startedAt)).map(({ type, value }) => [type, value]));
+  return { recordedOn: `${parts.year}-${parts.month}-${parts.day}`, recordedAt: `${parts.hour}:${parts.minute}` };
+}
+
+function view<T>(recording: Recording, detail: (transcript: Transcript) => T): RecordingView<T> {
+  const { id, startedAt, timeZone, durationMs, device, transcript } = recording;
+  return {
+    id, startedAt, timeZone, ...localStart(recording), durationMs, device,
+    transcript: !transcript ? "pending" : transcript.text === "" ? "no-speech" : detail(transcript),
+  };
+}
+
+export const recordingSummary = (recording: Recording): RecordingView<{ text: string }> =>
+  view(recording, ({ text }) => ({ text }));
+
+export const recordingDetail = (recording: Recording): RecordingView<Transcript> =>
+  view(recording, ({ text, verbatim, model, transcribedAt }) => ({ text, verbatim, model, transcribedAt }));
+
 export class RecordingModel {
   constructor(private readonly store: MergeableStore) {}
 

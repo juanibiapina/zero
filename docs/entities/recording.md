@@ -55,7 +55,8 @@ and Delete recording; for a Recording from another phone the menu adds
 ## Interactions
 
 - Task, Project, Waiting, After, Medicine, Night routine: none, on purpose.
-- Agents: none.
+- Agents: read Recordings and their transcripts over MCP, with the date and
+  time where each was recorded. They cannot delete one.
 
 ## Left out on purpose
 
@@ -66,4 +67,3 @@ and Delete recording; for a Recording from another phone the menu adds
 ## Ideas
 
 - Upload the audio and stream it on other devices.
-- Offer each transcript to agents over MCP.

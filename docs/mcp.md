@@ -3,7 +3,7 @@
 `zero-api` serves a remote MCP server at `https://zero.juanibiapina.dev/mcp`. An
 MCP client such as pi signs in as a Zero user, reads and changes that user's
 Tasks, Projects, Waiting conditions, Afters, and Shopping list items, and reads their
-Medicines with their Doses and Intakes.
+Medicines with their Doses and Intakes and their Recordings with transcripts.
 Writes land in the user's `TaskDO`, so they reach mobile and web through the
 normal sync.
 
@@ -17,7 +17,7 @@ Add the server to `~/.pi/agent/mcp.json`:
     "zero": {
       "url": "https://zero.juanibiapina.dev/mcp",
       "oauth": { "clientRegistration": "cimd" },
-      "description": "Zero todo workspace: Tasks, Projects, Waiting conditions, Afters, Shopping list, Medicines"
+      "description": "Zero todo workspace: Tasks, Projects, Waiting conditions, Afters, Shopping list, Medicines, Recordings"
     }
   }
 }
@@ -72,8 +72,8 @@ Worker (`zero-web`) and its SPA fallback never answer them.
 Tools are generated from `todoOperations` in `@zero/agent-core/operations`
 (`packages/agent-core/src/operations/`). Each operation declares its name,
 description, kind (`read`, `write`, `destructive`), and zod input schema, and
-runs against the TinyBase store through `TodoModel`, `MedicineModel`, and
-`ShoppingListModel`. The MCP
+runs against the TinyBase store through `TodoModel`, `MedicineModel`,
+`ShoppingListModel`, and `RecordingModel`. The MCP
 route has no per-tool code; adding an operation to the catalog adds a tool.
 
 - `runTodoOperation` validates input, mints IDs that the caller omits, and
@@ -111,3 +111,8 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
 - **Dose confirmation** belongs to the Android receipt flow
   (see [`storage.md`](storage.md), Medicine and Dose storage).
 - **Project icon suggestion** is a UI helper.
+- **Recording deletion** also deletes the audio on the phone that holds it.
+  Agents read Recordings: `recordings_list` gives each transcript's text,
+  `recordings_get` adds the verbatim words.
+- **Transcription** is requested by the phone that holds the audio; a
+  Recording without a transcript reads as `pending`.
