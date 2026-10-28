@@ -2,6 +2,18 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
 import { apiFetch, fetchIconSuggestions, patchTimezone, uploadRecordingForTranscript } from '../api';
 
+const mockUpload = jest.fn<(uri: string, url: string, options: unknown) => Promise<{ status: number; body: string; headers: Record<string, string> }>>();
+
+jest.mock('expo-file-system', () => ({
+  UploadType: { BINARY_CONTENT: 0, MULTIPART: 1 },
+  File: class {
+    mockUri: string;
+    constructor(mockUri: string) { this.mockUri = mockUri; }
+    upload(url: string, options: unknown) { return mockUpload(this.mockUri, url, options); }
+  },
+}));
+
+
 describe('mobile HTTP API', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -78,20 +90,27 @@ describe('mobile HTTP API', () => {
     expect(init.method).toBe('POST');
   });
 
-  it('sends a voice note for its transcript and tells whether the server had it', async () => {
-    const fetchMock = jest.spyOn(globalThis, 'fetch');
+  it('uploads a voice note file for its transcript and tells whether the server had it', async () => {
     const getToken = jest.fn<() => Promise<string | null>>().mockResolvedValue('tok');
     const send = async (status: number) => {
-      fetchMock.mockResolvedValueOnce(new Response('{}', { status }));
+      mockUpload.mockResolvedValueOnce({ status, body: '{}', headers: {} });
       return uploadRecordingForTranscript(getToken, 'rec-1', 'file:///recordings/rec-1.m4a', 'https://example.test');
     };
 
     expect(await send(200)).toBe('done');
     expect(await send(404)).toBe('not-synced');
     expect(await send(502)).toBe('later');
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://example.test/api/recordings/rec-1/transcript');
-    expect(init.method).toBe('POST');
-    expect(init.body).toBeInstanceOf(FormData);
+    expect(mockUpload.mock.calls[0]).toEqual([
+      'file:///recordings/rec-1.m4a',
+      'https://example.test/api/recordings/rec-1/transcript',
+      expect.objectContaining({ fieldName: 'audio', mimeType: 'audio/mp4', headers: { Authorization: 'Bearer tok' } }),
+    ]);
+  });
+
+  it('waits for a session before uploading a voice note', async () => {
+    const getToken = jest.fn<() => Promise<string | null>>().mockResolvedValue(null);
+    mockUpload.mockClear();
+    expect(await uploadRecordingForTranscript(getToken, 'rec-1', 'file:///recordings/rec-1.m4a', 'https://example.test')).toBe('later');
+    expect(mockUpload).not.toHaveBeenCalled();
   });
 });

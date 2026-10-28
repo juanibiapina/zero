@@ -1,4 +1,5 @@
 import type { ProjectSuggestionCandidate } from '@zero/agent-core';
+import { File, UploadType } from 'expo-file-system';
 
 import { API_BASE_URL } from './env';
 import type { TranscriptionUpload } from './transcription-outbox';
@@ -95,15 +96,19 @@ export async function uploadRecordingForTranscript(
   uri: string,
   baseUrl: string = API_BASE_URL,
 ): Promise<TranscriptionUpload> {
-  const form = new FormData();
-  form.append('audio', { uri, name: `${id}.m4a`, type: 'audio/mp4' } as unknown as Blob);
-  const res = await apiFetch(
-    getToken,
-    `/api/recordings/${encodeURIComponent(id)}/transcript`,
-    { method: 'POST', body: form },
-    baseUrl,
+  const token = await getToken();
+  if (!token) return 'later';
+  const { status } = await new File(uri).upload(
+    `${baseUrl}/api/recordings/${encodeURIComponent(id)}/transcript`,
+    {
+      httpMethod: 'POST',
+      uploadType: UploadType.MULTIPART,
+      fieldName: 'audio',
+      mimeType: 'audio/mp4',
+      headers: { Authorization: `Bearer ${token}` },
+    },
   );
-  if (res.ok) return 'done';
-  if (res.status === 404) return 'not-synced';
+  if (status >= 200 && status < 300) return 'done';
+  if (status === 404) return 'not-synced';
   return 'later';
 }
