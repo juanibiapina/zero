@@ -3,7 +3,7 @@ import { toast, type NewRecording, type Recording, type TaskdoReplica } from '@z
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { BackHandler, FlatList, InteractionManager, Linking, Pressable, ScrollView, View } from 'react-native';
+import { BackHandler, FlatList, InteractionManager, Linking, Pressable, View } from 'react-native';
 
 import { ScreenHeader } from '@/components/screen-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -241,9 +241,7 @@ export function RecordingsScreen() {
             <Text variant="subtitle" className="px-screen-x pt-1">{`Recorded on ${holding.device}. Its audio isn’t on this phone.`}</Text>
           ) : null}
           {holding?.transcript?.text ? (
-            <ScrollView style={{ maxHeight: 320 }} className="mt-2">
-              <Text selectable className="px-screen-x">{holding.transcript.text}</Text>
-            </ScrollView>
+            <Text selectable className="mt-2 px-screen-x">{holding.transcript.text}</Text>
           ) : null}
           <Pressable
             accessibilityRole="button"
