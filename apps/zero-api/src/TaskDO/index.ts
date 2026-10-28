@@ -11,10 +11,13 @@ import {
   type Project,
   type ProjectDefaults,
   type ProjectState,
+  type Recording,
   type Task,
   type TaskParent,
+  type Transcript,
   type WaitingCondition,
 } from "./domain";
+import type { SetTranscriptResult } from "@zero/agent-core";
 
 export const TASKDO_SQL_STORAGE_PREFIX = "taskdo_";
 export const TASKDO_FIXTURE_DELETED_KEY = "fixtureDeleted";
@@ -140,6 +143,16 @@ export class TaskDO extends WsServerDurableObject<Env> {
   undoTaskOccurrence(id: string, expectedRecurrenceDate: string,
     recurrenceDateBefore: string, showUpDateBefore: string | null): Promise<Task | "invalid-recurrence" | null> {
     return this.domain.undoTaskOccurrence(id, expectedRecurrenceDate, recurrenceDateBefore, showUpDateBefore);
+  }
+
+  recording(id: string): Promise<Recording | null> {
+    if (this.purging) return Promise.resolve(null);
+    return this.domain.recording(id);
+  }
+
+  setRecordingTranscript(id: string, transcript: Transcript): Promise<SetTranscriptResult> {
+    if (this.purging) return Promise.resolve("missing");
+    return this.domain.setRecordingTranscript(id, transcript);
   }
 
   // The TinyBase synchronizer has live listeners. Stop them and close sockets

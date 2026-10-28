@@ -1,4 +1,4 @@
-import type { Recording, RecordingSource } from '@zero/agent-core';
+import type { NewRecording, RecordingSource } from '@zero/agent-core';
 import * as Device from 'expo-device';
 import { randomUUID } from 'expo-crypto';
 import {
@@ -45,7 +45,7 @@ const READY_VIBRATION_MS = 60;
 
 export function useVoiceCapture({ source, save }: {
   source: RecordingSource;
-  save: (recording: Recording) => Promise<void>;
+  save: (recording: NewRecording) => Promise<void>;
 }): VoiceCapture {
   const [status, setStatus] = useState<CaptureStatus>('starting');
   const [mic, setMic] = useState<Microphone | null>(null);

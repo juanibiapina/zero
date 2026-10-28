@@ -1,13 +1,17 @@
 import {
+  RecordingModel,
   TodoModel,
   type ProjectAfter,
   type ProjectAfterConflict,
   type ProjectDefaults,
   type ProjectState,
   type Project,
+  type Recording,
+  type SetTranscriptResult,
   type Task,
   type TaskParent,
   type TodoIssue,
+  type Transcript,
   type WaitingCondition,
 } from "@zero/agent-core";
 import { findTodoOperation, runTodoOperation, type OperationOutcome } from "@zero/agent-core/operations";
@@ -44,6 +48,7 @@ type TaskDomainOptions = {
 // RPC result contracts. Todo row rules live in @zero/agent-core.
 export class TaskDomain {
   private readonly model: TodoModel;
+  private readonly recordings: RecordingModel;
   private readonly store: MergeableStore;
   private readonly now: () => Date;
   private readonly save: () => Promise<void>;
@@ -51,6 +56,7 @@ export class TaskDomain {
 
   constructor({ store, save, isErased = async () => false, now = () => new Date() }: TaskDomainOptions) {
     this.model = new TodoModel({ store, now });
+    this.recordings = new RecordingModel(store);
     this.store = store;
     this.now = now;
     this.save = save;
@@ -237,6 +243,18 @@ export class TaskDomain {
     if (result.changed) await this.save();
     return result.value;
   }
+
+  async recording(id: string): Promise<Recording | null> {
+    if (await this.isErased()) return null;
+    return this.recordings.get(id);
+  }
+
+  async setRecordingTranscript(id: string, transcript: Transcript): Promise<SetTranscriptResult> {
+    if (await this.isErased()) return "missing";
+    const result = this.recordings.setTranscript(id, transcript);
+    if (result === "set") await this.save();
+    return result;
+  }
 }
 
 export type {
@@ -245,7 +263,9 @@ export type {
   ProjectDefaults,
   Project,
   ProjectState,
+  Recording,
   Task,
   TaskParent,
+  Transcript,
   WaitingCondition,
 } from "@zero/agent-core";

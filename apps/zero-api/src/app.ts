@@ -13,6 +13,7 @@ import { createUserSettingsRoutes } from "./routes/user-settings";
 import { createTasksRoutes } from "./routes/tasks";
 import { createProjectsRoutes } from "./routes/projects";
 import { createWaitsRoutes } from "./routes/waits";
+import { createRecordingsRoutes } from "./routes/recordings";
 import { createTaskSyncRoutes } from "./routes/task-sync";
 import { createMcpRoutes } from "./routes/mcp";
 
@@ -87,6 +88,7 @@ export const createApp = () => {
   app.route("/", createTasksRoutes());
   app.route("/", createProjectsRoutes());
   app.route("/", createWaitsRoutes());
+  app.route("/", createRecordingsRoutes());
 
   return app;
 };

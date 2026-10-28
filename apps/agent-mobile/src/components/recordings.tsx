@@ -1,9 +1,9 @@
 import { Host, Icon } from '@expo/ui';
-import { toast, type Recording, type TaskdoReplica } from '@zero/agent-core';
+import { toast, type NewRecording, type Recording, type TaskdoReplica } from '@zero/agent-core';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { BackHandler, FlatList, InteractionManager, Linking, Pressable, View } from 'react-native';
+import { BackHandler, FlatList, InteractionManager, Linking, Pressable, ScrollView, View } from 'react-native';
 
 import { ScreenHeader } from '@/components/screen-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -70,7 +70,7 @@ function describeMicrophone(mic: Microphone | null): string {
 export function RecordScreen() {
   const replica = useTodoReplica();
   const { source } = useLocalSearchParams<{ source?: string }>();
-  const save = useCallback(async (recording: Recording) => {
+  const save = useCallback(async (recording: NewRecording) => {
     if (!replica) throw new Error('Your workspace is not open');
     await replica.recordings.add(recording);
     backToHome();
@@ -132,6 +132,11 @@ function useRecordings(replica: TaskdoReplica | null): Recording[] | null {
   );
 }
 
+function transcriptStatus(recording: Recording, here: boolean): string | null {
+  if (recording.transcript) return recording.transcript.text === '' ? 'No speech' : null;
+  return here ? 'Transcribing…' : null;
+}
+
 function RecordingRow({ recording, playing, onToggle, onHold }: {
   recording: Recording; playing: boolean; onToggle: (recording: Recording) => void; onHold: (recording: Recording) => void;
 }) {
@@ -139,6 +144,9 @@ function RecordingRow({ recording, playing, onToggle, onHold }: {
   const muted = useColor('--color-foreground-muted');
   const here = localAudio(recording.id) !== null;
   const when = formatStartedAt(recording);
+  const text = recording.transcript?.text || null;
+  const status = transcriptStatus(recording, here);
+  const base = here ? `${playing ? 'Pause' : 'Play'} recording from ${when}` : `Recording from ${when}, on ${recording.device}`;
   return (
     <ListRow
       leading={(
@@ -147,7 +155,7 @@ function RecordingRow({ recording, playing, onToggle, onHold }: {
         </Host>
       )}
       trailing={<Text variant="subtitle" style={{ fontVariant: ['tabular-nums'] }}>{formatDuration(recording.durationMs)}</Text>}
-      accessibilityLabel={here ? `${playing ? 'Pause' : 'Play'} recording from ${when}` : `Recording from ${when}, on ${recording.device}`}
+      accessibilityLabel={text ? `${base}: ${text}` : base}
       onPress={here ? () => onToggle(recording) : undefined}
       onLongPress={() => onHold(recording)}
       accessibilityHint="Long press for options"
@@ -156,6 +164,8 @@ function RecordingRow({ recording, playing, onToggle, onHold }: {
       className="min-h-12"
     >
       <Text>{when}</Text>
+      {text ? <Text variant="subtitle" numberOfLines={4}>{text}</Text> : null}
+      {status ? <Text variant="caption">{status}</Text> : null}
       {here ? null : <Text variant="caption">{`On ${recording.device}`}</Text>}
     </ListRow>
   );
@@ -229,6 +239,11 @@ export function RecordingsScreen() {
           <Text className="px-screen-x text-[20px] font-semibold">{holding ? formatStartedAt(holding) : ''}</Text>
           {holding && !holdingHere ? (
             <Text variant="subtitle" className="px-screen-x pt-1">{`Recorded on ${holding.device}. Its audio isn’t on this phone.`}</Text>
+          ) : null}
+          {holding?.transcript?.text ? (
+            <ScrollView style={{ maxHeight: 320 }} className="mt-2">
+              <Text selectable className="px-screen-x">{holding.transcript.text}</Text>
+            </ScrollView>
           ) : null}
           <Pressable
             accessibilityRole="button"

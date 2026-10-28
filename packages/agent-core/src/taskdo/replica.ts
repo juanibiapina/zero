@@ -11,7 +11,7 @@ import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
 import { MedicineModel, type MedicineInput, type Medicine, type Dose, type Intake, type MedicineReceipt, type MedicineRestock } from "../medicines/model";
 import { NightRoutineModel, readNights, type Night, type NightStep } from "../night-routine/model";
-import { RecordingModel, type Recording } from "../recordings/model";
+import { RecordingModel, type NewRecording, type Recording } from "../recordings/model";
 import { ShoppingListModel, type ShoppingItem, type ShoppingResult } from "../shopping/model";
 
 export type TodoRecoveryRepair =
@@ -113,7 +113,7 @@ export type TodoNightRoutine = {
 };
 
 export type TodoRecordings = {
-  add: (recording: Recording) => Promise<void>;
+  add: (recording: NewRecording) => Promise<void>;
   remove: (id: string) => Promise<void>;
   deleted: () => string[];
   onDeleted: (listener: (id: string) => void) => () => void;

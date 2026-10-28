@@ -168,6 +168,7 @@ describe('Voice capture', () => {
       durationMs: 42_000,
       source: 'app',
       device: 'Pixel 7',
+      transcript: null,
     }]);
     expect([...mockFiles]).toEqual(['file:///documents/recordings/rec-1.m4a']);
     await waitFor(() => screen.getByText('Saved · 0:42'));
@@ -261,8 +262,40 @@ describe('Microphone', () => {
 });
 
 describe('Recordings', () => {
-  const berlin: Recording = { id: 'b', startedAt: '2026-10-20T18:30:00.000Z', timeZone: 'Europe/Berlin', durationMs: 42_000, source: 'widget', device: 'Pixel 7' };
-  const newYork: Recording = { id: 'n', startedAt: '2026-10-21T01:00:00.000Z', timeZone: 'America/New_York', durationMs: 75_000, source: 'app', device: 'Pixel 9' };
+  const berlin: Recording = { id: 'b', startedAt: '2026-10-20T18:30:00.000Z', timeZone: 'Europe/Berlin', durationMs: 42_000, source: 'widget', device: 'Pixel 7', transcript: null };
+  const newYork: Recording = { id: 'n', startedAt: '2026-10-21T01:00:00.000Z', timeZone: 'America/New_York', durationMs: 75_000, source: 'app', device: 'Pixel 9', transcript: null };
+  const transcribe = (data: Awaited<ReturnType<typeof open>>['data'], id: string, text: string) => act(async () => {
+    new RecordingModel(data.replica!.store).setTranscript(id, { text, verbatim: text, model: 'm', transcribedAt: '2026-10-20T18:31:00.000Z' });
+  });
+
+  it('shows what was said once the transcript arrives, and says so while it is on its way', async () => {
+    mockFiles.add('file:///documents/recordings/b.m4a');
+    const { screen, data } = await open('/browse/recordings', [berlin, newYork]);
+    expect(screen.getByText('Transcribing…')).toBeTruthy();
+
+    await transcribe(data, 'b', 'Call Ana on Friday.');
+    await transcribe(data, 'n', 'Buy grout.');
+
+    expect(screen.queryByText('Transcribing…')).toBeNull();
+    expect(screen.getByText('Call Ana on Friday.')).toBeTruthy();
+    expect(screen.getByText('Buy grout.')).toBeTruthy();
+    expect(screen.getByLabelText('Play recording from Tue 20 Oct, 20:30: Call Ana on Friday.')).toBeTruthy();
+  });
+
+  it('says No speech for a silent voice note', async () => {
+    mockFiles.add('file:///documents/recordings/b.m4a');
+    const { screen, data } = await open('/browse/recordings', [berlin]);
+    await transcribe(data, 'b', '');
+    expect(screen.getByText('No speech')).toBeTruthy();
+  });
+
+  it('shows the whole transcript when a voice note is held', async () => {
+    const long = 'First thought. '.repeat(40).trim();
+    const { screen, data } = await open('/browse/recordings', [newYork]);
+    await transcribe(data, 'n', long);
+    await fireEvent(screen.getByLabelText(`Recording from Tue 20 Oct, 21:00, on Pixel 9: ${long}`), 'longPress');
+    expect(screen.getAllByText(long)).toHaveLength(2);
+  });
 
   it('lists the newest first, each at its own local time', async () => {
     const { screen } = await open('/browse/recordings', [berlin, newYork]);

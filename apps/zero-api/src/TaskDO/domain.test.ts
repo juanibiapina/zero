@@ -122,4 +122,20 @@ describe("TaskDomain catalog operations", () => {
     expect(await domain.run("tasks_create", { text: "Late" }, "2026-09-26")).toEqual({ ok: false, error: "Account erased" });
     expect(saves()).toBe(0);
   });
+
+  it("adds a Recording's transcript once, saves it, and refuses it after erasure", async () => {
+    const { domain, store, saves, erase } = setup();
+    store.setRow("recordings", "r1", { startedAt: NOW, timeZone: "Europe/Berlin", durationMs: 1000, source: "app", device: "Pixel 7" });
+    const transcript = { text: "Hi.", verbatim: "Uh, hi.", model: "m", transcribedAt: NOW };
+
+    expect(await domain.setRecordingTranscript("r1", transcript)).toBe("set");
+    expect(await domain.setRecordingTranscript("r1", transcript)).toBe("exists");
+    expect(await domain.setRecordingTranscript("missing", transcript)).toBe("missing");
+    expect(saves()).toBe(1);
+    expect((await domain.recording("r1"))?.transcript).toEqual(transcript);
+
+    erase();
+    expect(await domain.recording("r1")).toBeNull();
+    expect(await domain.setRecordingTranscript("r1", transcript)).toBe("missing");
+  });
 });

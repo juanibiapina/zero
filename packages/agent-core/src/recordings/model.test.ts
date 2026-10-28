@@ -1,9 +1,9 @@
 import { createMergeableStore, type MergeableContent } from "tinybase";
 import { describe, expect, it } from "vitest";
 
-import { RecordingModel, type Recording } from "./model";
+import { RecordingModel, type NewRecording, type Recording, type Transcript } from "./model";
 
-const recording = (overrides: Partial<Recording> = {}): Recording => ({
+const recording = (overrides: Partial<NewRecording> = {}): NewRecording => ({
   id: "r1",
   startedAt: "2026-10-20T18:30:00.000Z",
   timeZone: "Europe/Berlin",
@@ -13,11 +13,78 @@ const recording = (overrides: Partial<Recording> = {}): Recording => ({
   ...overrides,
 });
 
+const listed = (overrides: Partial<Recording> = {}): Recording => ({ ...recording(), transcript: null, ...overrides });
+
+const transcript: Transcript = {
+  text: "Call Ana on Friday.",
+  verbatim: "Um, call Ana on Thursday, no, Friday.",
+  model: "gpt-transcribe+gpt-6-luna",
+  transcribedAt: "2026-10-20T18:31:00.000Z",
+};
+
+describe("Transcripts", () => {
+  it("adds a transcript to a saved recording once", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    expect(model.setTranscript("r1", transcript)).toBe("set");
+    expect(model.setTranscript("r1", { ...transcript, text: "Something else." })).toBe("exists");
+    expect(model.list()).toEqual([listed({ transcript })]);
+  });
+
+  it("does not create a recording for a transcript of one that is missing or deleted", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    model.remove("r1");
+    expect(model.setTranscript("r1", transcript)).toBe("missing");
+    expect(model.setTranscript("other", transcript)).toBe("missing");
+    expect(model.list()).toEqual([]);
+    expect(model.deleted()).toEqual(["r1"]);
+  });
+
+  it("refuses an invalid transcript", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    expect(() => model.setTranscript("r1", { ...transcript, model: "" })).toThrow("Invalid transcript");
+    expect(model.get("r1")).toEqual(listed());
+  });
+
+  it("reads a malformed transcript cell as no transcript", () => {
+    const store = createMergeableStore();
+    const model = new RecordingModel(store);
+    model.add(recording());
+    store.setCell("recordings", "r1", "transcript", "{not json");
+    expect(model.get("r1")).toEqual(listed());
+    expect(model.setTranscript("r1", transcript)).toBe("set");
+  });
+
+  it("brings the transcript to the phone that recorded it", () => {
+    const phone = createMergeableStore();
+    const server = createMergeableStore();
+    new RecordingModel(phone).add(recording());
+    server.merge(phone);
+    new RecordingModel(server).setTranscript("r1", transcript);
+    phone.merge(server);
+    expect(new RecordingModel(phone).list()).toEqual([listed({ transcript })]);
+  });
+
+  it("removes the transcript with its recording on every device", () => {
+    const phone = createMergeableStore();
+    const tablet = createMergeableStore();
+    new RecordingModel(phone).add(recording());
+    new RecordingModel(phone).setTranscript("r1", transcript);
+    tablet.merge(phone);
+    new RecordingModel(tablet).remove("r1");
+    phone.merge(tablet);
+    expect(new RecordingModel(phone).list()).toEqual([]);
+    expect(new RecordingModel(phone).deleted()).toEqual(["r1"]);
+  });
+});
+
 describe("Recordings", () => {
   it("lists an added recording with every captured fact", () => {
     const model = new RecordingModel(createMergeableStore());
     model.add(recording());
-    expect(model.list()).toEqual([recording()]);
+    expect(model.list()).toEqual([listed()]);
   });
 
   it("lists the newest recording first", () => {
@@ -31,7 +98,7 @@ describe("Recordings", () => {
     const model = new RecordingModel(createMergeableStore());
     model.add(recording());
     expect(() => model.add(recording({ durationMs: 1 }))).toThrow("Recording id already exists");
-    expect(model.list()).toEqual([recording()]);
+    expect(model.list()).toEqual([listed()]);
   });
 
   it("refuses a recording with missing facts", () => {
@@ -79,7 +146,7 @@ describe("Recordings", () => {
     const model = new RecordingModel(createMergeableStore());
     model.add(recording());
     model.remove("missing");
-    expect(model.list()).toEqual([recording()]);
+    expect(model.list()).toEqual([listed()]);
     expect(model.deleted()).toEqual([]);
   });
 

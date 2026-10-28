@@ -96,6 +96,14 @@ suggests a Project while a user types a new Task and suggests Project icons.
 The public emoji app has its own key in the `zeroapps-emoji` ZeroVault project
 (`development` and `production`), so it can be revoked without touching Zero.
 
+## OpenAI
+
+`OPENAI_API_KEY` belongs in the `zero-api` development and production
+environments. It authenticates the Worker's calls to OpenAI, which transcribe
+Recordings and clean up their transcripts.
+
+## Adding a Worker secret
+
 Before deploying code that lists a new secret in `secrets.required`:
 
 1. Store the secret in both `zero-api` environments.

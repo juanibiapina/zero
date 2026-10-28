@@ -60,7 +60,8 @@ writes a `signup` point to the `ANALYTICS` Analytics Engine dataset.
 Stored in ZeroVault (`zero-api`); see [`secrets.md`](secrets.md) for how each
 value is sourced and served. The Worker needs the Clerk keys and webhook signing
 secret, `DISCORD_SIGNUP_WEBHOOK_URL`, `TYPESAFE_API_KEY` (Project and icon
-suggestions) and `ZERO_API_KEY` (error reporting). `wrangler.jsonc` lists them
+suggestions), `OPENAI_API_KEY` (Recording transcripts) and `ZERO_API_KEY` (error
+reporting). `wrangler.jsonc` lists them
 under `secrets.required`.
 
 ### Logging
