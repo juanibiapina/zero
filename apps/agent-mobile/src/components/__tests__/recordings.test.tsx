@@ -175,7 +175,8 @@ describe('Voice capture', () => {
 
     await fireEvent.press(screen.getByText('View'));
     await waitFor(() => expect(result.getPathname()).toBe('/browse/recordings'));
-    expect(screen.getByLabelText('Play recording from Tue 20 Oct, 20:30')).toBeTruthy();
+    // The row shows the time in the device time zone, so match the only saved note without pinning the hour.
+    expect(screen.getByLabelText(/^Play recording from \w{3} \d{1,2} Oct, \d{2}:30$/)).toBeTruthy();
   });
 
   it('marks a recording started from the widget', async () => {
