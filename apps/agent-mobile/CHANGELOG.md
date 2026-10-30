@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-28: Add a View button to the Saved toast after you record a voice note. Tap it to open Recordings, with the new note at the top.
+
 - 2026-10-28: Change Going to bed in the Night routine to close the page and lock your phone. The first time, Zero opens Accessibility settings: turn on Zero Agent there (if Android says it is a restricted setting, first open Zero Agent's App info, tap ⋮, and allow restricted settings). After that, Going to bed locks the phone, and fingerprint unlock still works.
 
 - 2026-10-28: Give each voice note a short title written from what you said. Recordings lists the title with the date below it; hold a voice note to read its whole transcript. Agents connected to Zero see the title too.

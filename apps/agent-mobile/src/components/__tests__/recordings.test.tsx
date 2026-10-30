@@ -172,6 +172,10 @@ describe('Voice capture', () => {
     }]);
     expect([...mockFiles]).toEqual(['file:///documents/recordings/rec-1.m4a']);
     await waitFor(() => screen.getByText('Saved · 0:42'));
+
+    await fireEvent.press(screen.getByText('View'));
+    await waitFor(() => expect(result.getPathname()).toBe('/browse/recordings'));
+    expect(screen.getByLabelText('Play recording from Tue 20 Oct, 20:30')).toBeTruthy();
   });
 
   it('marks a recording started from the widget', async () => {

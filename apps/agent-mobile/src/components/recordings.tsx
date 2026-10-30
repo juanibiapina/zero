@@ -74,7 +74,9 @@ export function RecordScreen() {
     if (!replica) throw new Error('Your workspace is not open');
     await replica.recordings.add(recording);
     backToHome();
-    InteractionManager.runAfterInteractions(() => toast(`Saved · ${formatDuration(recording.durationMs)}`));
+    InteractionManager.runAfterInteractions(() => toast(`Saved · ${formatDuration(recording.durationMs)}`, {
+      action: { label: 'View', onPress: () => router.navigate('/browse/recordings', { withAnchor: true }) },
+    }));
   }, [replica]);
   const { status, mic, elapsedMs, stop } = useVoiceCapture({ source: source === 'widget' ? 'widget' : 'app', save });
 
