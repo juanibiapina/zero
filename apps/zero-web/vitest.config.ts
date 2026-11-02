@@ -17,6 +17,9 @@ export default defineConfig({
     env: { VITE_CLERK_PUBLISHABLE_KEY: "pk_test_placeholder" },
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    // Node 25+ ships a global localStorage that is undefined without
+    // --localstorage-file and shadows jsdom's. Turn it off in the workers.
+    execArgv: ["--no-experimental-webstorage"],
     include: ["src/**/*.test.{ts,tsx}"],
   },
 });
