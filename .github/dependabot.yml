@@ -5,7 +5,36 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      # The Expo SDK pins these as one set; upgrade them together with
+      # `npx expo install --fix` in apps/agent-mobile. React moves with the SDK,
+      # and the web apps follow it in lockstep.
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
+      - dependency-name: "@expo/*"
+      - dependency-name: "jest-expo"
+      - dependency-name: "eslint-config-expo"
+      - dependency-name: "babel-preset-expo"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+      - dependency-name: "@react-native/*"
+      - dependency-name: "@react-native-async-storage/*"
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "@types/react"
+      - dependency-name: "@types/react-dom"
+      # The mobile app stays on ESLint 9 until eslint-plugin-react (through
+      # eslint-config-expo) supports ESLint 10.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
     groups:
+      # wrangler is pinned and patched (patches/), and @cloudflare/vite-plugin
+      # requires a matching wrangler, so these move together by hand.
+      cloudflare:
+        patterns: ["wrangler", "@cloudflare/*"]
+      # The TaskDO replica depends on TanStack DB behavior; review these alone.
+      tanstack:
+        patterns: ["@tanstack/*"]
       minor-and-patch:
         update-types: [minor, patch]
     open-pull-requests-limit: 10
