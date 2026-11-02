@@ -20,8 +20,8 @@
   },
   "devDependencies": {
     "@zeroapps/cli": "0.7.0",
-    "tsx": "^4.23.1",
-    "turbo": "^2.10.8",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.10",
     "wrangler": "4.118.0"
   },
   "pnpm": {
