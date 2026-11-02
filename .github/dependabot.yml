@@ -35,8 +35,12 @@ updates:
       # The TaskDO replica depends on TanStack DB behavior; review these alone.
       tanstack:
         patterns: ["@tanstack/*"]
+      # Dependabot puts a package in the most specific matching group, and
+      # update-types counts as more specific than patterns alone, so the two
+      # groups above must be excluded here explicitly.
       minor-and-patch:
         update-types: [minor, patch]
+        exclude-patterns: ["wrangler", "@cloudflare/*", "@tanstack/*"]
     open-pull-requests-limit: 10
 
   - package-ecosystem: github-actions
