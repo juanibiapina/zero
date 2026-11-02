@@ -52,7 +52,7 @@ run_launcher_phase() {
   STAGE="launch launcher $checkpoint"
   if [[ "$action" == "ready" ]]; then
     adb_device shell am start -W -a android.intent.action.VIEW \
-      -d "$METRO_DEEP_LINK" \
+      -d "'$METRO_DEEP_LINK'" \
       "$PACKAGE" >> "$ARTIFACT_DIR/launch.txt"
   else
     adb_device shell am start -W -a android.intent.action.MAIN \

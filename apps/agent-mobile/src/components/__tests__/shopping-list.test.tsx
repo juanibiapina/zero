@@ -28,7 +28,7 @@ async function open(initialUrl: string, items: string[] = ['Milk', 'Eggs', 'Brea
   const data = createInMemoryTodoData();
   for (const item of items) await data.replica!.shopping.add(item);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const result = renderRouter({
+  const result = await renderRouter({
     _layout: () => <QueryClientProvider client={client}><InMemoryTodoDataProvider data={data}><Stack screenOptions={{ headerShown: false }} /></InMemoryTodoDataProvider></QueryClientProvider>,
     'browse/_layout': BrowseLayout,
     'browse/index': BrowseScreen,

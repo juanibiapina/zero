@@ -443,3 +443,10 @@ jest.mock('@clerk/expo', () => ({
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
+
+// React Native defines requestIdleCallback in its timer setup, which jest's
+// environment does not run. Back it with setTimeout so fake timers drive it.
+if (typeof globalThis.requestIdleCallback !== 'function') {
+  globalThis.requestIdleCallback = (callback) => setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 50 }), 0);
+  globalThis.cancelIdleCallback = (handle) => clearTimeout(handle);
+}

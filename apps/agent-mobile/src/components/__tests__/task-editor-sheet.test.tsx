@@ -25,7 +25,7 @@ describe('TaskEditorSheet', () => {
     );
 
     await act(async () => {
-      (global as typeof globalThis & {
+      (globalThis as typeof globalThis & {
         __emitKeyboardEvent: (name: string) => void;
       }).__emitKeyboardEvent('keyboardWillHide');
     });
@@ -40,7 +40,7 @@ describe('TaskEditorSheet', () => {
       />,
     );
     await act(async () => {
-      (global as typeof globalThis & {
+      (globalThis as typeof globalThis & {
         __emitKeyboardEvent: (name: string) => void;
       }).__emitKeyboardEvent('keyboardWillHide');
     });

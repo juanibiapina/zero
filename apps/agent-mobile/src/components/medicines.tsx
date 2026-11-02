@@ -127,7 +127,7 @@ function MedicineListContent({ snapshot, today }: {
           <Text variant="section">{`Archived (${archived.length})`}</Text><MedicineGlyph name={archiveOpen ? 'collapse' : 'expand'} />
         </Pressable>
         {archiveOpen ? archived.map((medicine) => <MedicineRow key={medicine.id} medicine={medicine} status={null} />) : null}
-      </View> : null}
+      </View> : undefined}
     />
     <Sheet open={!!holding} onClose={() => setHolding(null)} contextBridge={null}>
       <View className="pb-4">

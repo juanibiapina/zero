@@ -4,7 +4,7 @@
 // not permitted by network security policy"). This is applied only when the
 // fake-auth flag is set (see app.config.js), so production/preview manifests keep
 // cleartext disabled.
-const { withAndroidManifest, AndroidConfig } = require('@expo/config-plugins');
+const { withAndroidManifest, AndroidConfig } = require('expo/config-plugins');
 
 module.exports = function withCleartext(config) {
   return withAndroidManifest(config, (cfg) => {

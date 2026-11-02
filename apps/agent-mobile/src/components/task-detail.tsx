@@ -123,7 +123,7 @@ function ProjectPicker({
             <Text className="px-screen-x py-4 text-foreground-secondary">
               {needle ? 'No matching projects' : emptyCopy}
             </Text>
-          ) : null
+          ) : undefined
         }
         renderSectionHeader={({ section }) => (
           <Pressable

@@ -24,12 +24,12 @@ function memoryStorage(
 ) {
   let value = initial;
   return {
-    getItem: jest.fn(async () => value),
+    getItem: jest.fn(async (_key: string) => value),
     setItem: jest.fn(async (_key: string, next: string) => {
       onSet(next);
       value = next;
     }),
-    removeItem: jest.fn(async () => {
+    removeItem: jest.fn(async (_key: string) => {
       onRemove();
       value = null;
     }),
@@ -424,7 +424,7 @@ describe('mobile todo workspace owner', () => {
       databaseName: 'taskdo-fixture-account-A.sqlite',
       binding: { kind: 'bound', accountId: 'account-A' },
     }));
-    const deleteDatabase = jest.fn(async () => {
+    const deleteDatabase = jest.fn(async (_name: string) => {
       if (deleteDatabase.mock.calls.length === 1) throw new Error('database busy');
     });
     const owner = createTodoWorkspaceOwner({

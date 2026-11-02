@@ -154,19 +154,29 @@ back only where the native component does not fit.
   values directly inside `useAnimatedStyle`: a value read only through a
   nested worklet function does not subscribe the style, which leaves the drawer
   behind the keyboard.
-- **Two native libraries run ahead of the SDK pin.** `expo.install.exclude` in
-  `package.json` keeps `expo install --fix` from downgrading them. Drop an
-  exclude once the SDK bundles that version or later.
-  - `react-native-keyboard-controller` 1.22.6: SDK 57 bundles 1.21.9, which on
-    Android can lose track of the keyboard after a system window or
-    backgrounding closed it (upstream #1006, #1525; fixed in 1.21.12 and
-    1.21.14).
-  - `react-native-reanimated` 4.5.5: SDK 57 bundles 4.5.1, which loses an
-    animation's final values when the app is paused before they reach React;
-    the next render then restores older values (upstream #9965, fixed by
-    #9527). Closing quick-add and switching apps within a second made the +
-    float one keyboard height up over a gray block, or left the drawer drawn
-    open and empty.
+- **Keep `react-native-keyboard-controller` at 1.22.6 or later and
+  `react-native-reanimated` at 4.5.5 or later.** Older keyboard-controller
+  releases can lose track of the keyboard on Android after a system window or
+  backgrounding closed it (upstream #1006, #1525). Older Reanimated releases
+  lose an animation's final values when the app is paused before they reach
+  React (upstream #9965, fixed by #9527): closing quick-add and switching apps
+  within a second made the + float one keyboard height up over a gray block, or
+  left the drawer drawn open and empty. SDK 58 bundles 1.22.7 and 4.7.1. If a
+  later SDK pins an older version, add the package to `expo.install.exclude` in
+  `package.json` so `expo install --fix` cannot downgrade it.
+- **`rn-emoji-keyboard` is patched** (`patches/rn-emoji-keyboard@1.7.0.patch`).
+  React Native 0.88 removed `InteractionManager`, and the unmaintained library
+  called it on every emoji category render, which crashes the icon picker. The
+  patch uses `requestIdleCallback` instead.
+- **`react-native-gesture-handler` is patched**
+  (`patches/react-native-gesture-handler@3.3.0.patch`). Its legacy
+  `GestureDetector` attaches to a child scroll view's `getNativeScrollRef()`.
+  On Android a list with a `refreshControl` sits inside a `SwipeRefreshLayout`,
+  and gestures attached to the inner scroll view never receive touches, so
+  long-press drag stopped reordering tasks and shopping items. The patch attaches
+  to the child itself, as 2.x did. pnpm fails the install when the patched
+  version is gone, so re-test drag-to-reorder on the Pixel before dropping or
+  moving the patch.
 - **Verify a bundle without a device**: `pnpm exec expo export --platform android
   --output-dir /tmp/x` compiles through Metro + Babel + Uniwind and surfaces
   styling/bundle wiring errors that typecheck alone misses.
@@ -641,8 +651,8 @@ Native builds run **locally on `mini`** by default (next section). Use the cloud
 
 Build the **dev client** APK **locally on `mini`** and install it on the Pixel
 (this device is dev-client-only — see the callout above). Use a Nix dev shell that
-ships the Android toolchain for Expo SDK 57 / React Native 0.86 (SDK platform 36,
-build-tools 36.0.0, React Native NDK 27.1.12297006, Android Gradle Plugin default
+ships the Android toolchain for Expo SDK 58 / React Native 0.88 (SDK platform 37.0,
+build-tools 37.0.0, React Native NDK 27.1.12297006, Android Gradle Plugin default
 NDK 27.0.12077973, cmake 3.22.1, JDK 17). The shell lives in
 `juanibiapina/dotfiles` (`nix/shells/android.nix`, exposed as the flake output
 `devShells.x86_64-linux.android`) — it is a dev shell, so it needs **no**

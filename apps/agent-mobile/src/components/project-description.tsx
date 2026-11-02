@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Pressable, View, type TextInput } from 'react-native';
+import { Keyboard, Pressable, View, type TextInputInstance } from 'react-native';
 
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
@@ -18,7 +18,7 @@ export function ProjectDescription({
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [lines, setLines] = useState(0);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   useEffect(() => {
     if (!editing) return;

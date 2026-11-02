@@ -43,7 +43,7 @@ async function open(at: string, initialUrl: string, steps: string[] = ['Shower',
   const data = createInMemoryTodoData();
   for (const step of steps) await data.replica!.nightRoutine.addStep(step);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const result = renderRouter({
+  const result = await renderRouter({
     _layout: () => <QueryClientProvider client={client}><InMemoryTodoDataProvider data={data}><Stack screenOptions={{ headerShown: false }} /></InMemoryTodoDataProvider></QueryClientProvider>,
     index: HomeScreen,
     'browse/_layout': BrowseLayout,

@@ -7,7 +7,7 @@ CRITICAL_FLOW_DIR="${MOBILE_DIR}/.maestro/critical"
 PROOF_FLOW_DIR="${MOBILE_DIR}/.maestro/proofs"
 PACKAGE="dev.juanibiapina.zeroagent"
 METRO_PORT=8082
-METRO_DEEP_LINK="zeroagent://expo-development-client/?url=http%3A%2F%2Flocalhost%3A${METRO_PORT}"
+METRO_DEEP_LINK="zeroagent://expo-development-client/?url=http%3A%2F%2Flocalhost%3A${METRO_PORT}&__expo_disable_onboarding=1&__expo_disable_fab=1&__expo_disable_auto_launch=1"
 WORKER_PORT=8787
 ACCOUNT_A="e2e-account-a"
 ACCOUNT_B="e2e-account-b"
@@ -111,7 +111,7 @@ reset_e2e_phone_state() {
   deadline=$((SECONDS + timeout))
   if ! adb_device shell pidof "$PACKAGE" >/dev/null 2>&1; then
     adb_device shell am start -W -a android.intent.action.VIEW \
-      -d "$METRO_DEEP_LINK" "$PACKAGE" >/dev/null
+      -d "'$METRO_DEEP_LINK'" "$PACKAGE" >/dev/null
   fi
   while (( SECONDS < deadline )); do
     if (( SECONDS >= resend_at )); then
@@ -419,7 +419,7 @@ adb_device reverse "tcp:$METRO_PORT" "tcp:$METRO_PORT" >/dev/null
 adb_device reverse "tcp:$WORKER_PORT" "tcp:$WORKER_PORT" >/dev/null
 adb_device shell am start -W \
   -a android.intent.action.VIEW \
-  -d "$METRO_DEEP_LINK" \
+  -d "'$METRO_DEEP_LINK'" \
   "$PACKAGE" > "$ARTIFACT_DIR/launch.txt"
 
 STAGE="launch readiness"
