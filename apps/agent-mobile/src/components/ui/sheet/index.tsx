@@ -26,6 +26,7 @@ import {
   SectionList,
   TextInput,
   useWindowDimensions,
+  type ScrollViewInstance,
   type ScrollViewProps,
   type SectionListProps,
   type TextInputProps,
@@ -207,7 +208,7 @@ export function useSheetInputFocus(onFocus?: TextInputProps['onFocus'], onBlur?:
 const ScrollViewInSheet = BottomSheetScrollView as unknown as typeof ScrollView;
 const SectionListInSheet = BottomSheetSectionList as unknown as typeof SectionList;
 
-export const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetScrollView(props, ref) {
+export const SheetScrollView = forwardRef<ScrollViewInstance, ScrollViewProps>(function SheetScrollView(props, ref) {
   const Scroll = useBottomSheetInternal(true) ? ScrollViewInSheet : ScrollView;
   return <Scroll ref={ref} {...props} />;
 });

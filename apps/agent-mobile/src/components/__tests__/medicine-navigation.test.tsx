@@ -19,7 +19,7 @@ async function openRoutes(initialUrl: (id: string, slot: string) => string = () 
   const data = createInMemoryTodoData();
   const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const result = renderRouter({
+  const result = await renderRouter({
     _layout: () => <QueryClientProvider client={client}><InMemoryTodoDataProvider data={data}><Stack screenOptions={{ headerShown: false }} /></InMemoryTodoDataProvider></QueryClientProvider>,
     'browse/_layout': BrowseLayout,
     'browse/index': BrowseScreen,

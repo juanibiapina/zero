@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { Platform, Pressable, RefreshControl, View } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
@@ -12,6 +12,17 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { CheckCircle } from '@/components/ui/list-row';
 import { useColor } from '@/lib/theme';
+
+// The long press that starts a drag in a ReorderableList. The list types
+// `panGesture` with gesture-handler 3's hook gesture, but at runtime it calls
+// the legacy builder API on it (`activateAfterLongPress`, `Gesture.Simultaneous`),
+// so it must receive a legacy builder gesture.
+export function useReorderPanGesture() {
+  return useMemo(
+    () => Gesture.Pan().activateAfterLongPress(520) as unknown as NonNullable<ComponentProps<typeof ReorderableList>['panGesture']>,
+    [],
+  );
+}
 
 // The pressable body of a manually ordered checklist row: the check circle and
 // the content. Tap opens the item, and a long press starts a drag in the
@@ -88,10 +99,7 @@ export function ReorderableChecklist<T extends { id: string }>({
   keyboardShouldPersistTaps?: 'always' | 'never' | 'handled';
 }) {
   const accent = useColor('--color-accent');
-  const reorderPanGesture = useMemo(
-    () => Gesture.Pan().activateAfterLongPress(520),
-    [],
-  );
+  const reorderPanGesture = useReorderPanGesture();
   const [refreshEnabled, setRefreshEnabled] = useState(true);
 
   const onDragStart = useCallback(() => {
@@ -138,9 +146,9 @@ export function ReorderableChecklist<T extends { id: string }>({
       keyExtractor={(item) => item.id}
       panGesture={reorderPanGesture}
       renderItem={render}
-      ListHeaderComponent={header}
-      ListFooterComponent={footer}
-      ListEmptyComponent={empty}
+      ListHeaderComponent={header ?? undefined}
+      ListFooterComponent={footer ?? undefined}
+      ListEmptyComponent={empty ?? undefined}
       itemLayoutAnimation={LinearTransition.duration(200)}
       onReorder={onReorder}
       onDragStart={onDragStart}

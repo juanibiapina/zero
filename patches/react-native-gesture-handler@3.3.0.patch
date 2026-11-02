@@ -1,0 +1,52 @@
+diff --git a/lib/module/handlers/gestures/GestureDetector/Wrap.js b/lib/module/handlers/gestures/GestureDetector/Wrap.js
+index f71ff62..3278387 100644
+--- a/lib/module/handlers/gestures/GestureDetector/Wrap.js
++++ b/lib/module/handlers/gestures/GestureDetector/Wrap.js
+@@ -1,7 +1,7 @@
+ "use strict";
+ 
+ import React from 'react';
+-import { assignRef, isHostInstance, preferHostInstance } from '../../../hostInstance';
++import { assignRef, isHostInstance } from '../../../hostInstance';
+ import { tagMessage } from '../../../utils';
+ import { Reanimated } from '../reanimatedWrapper';
+ export class Wrap extends React.Component {
+@@ -30,7 +30,7 @@ export class Wrap extends React.Component {
+   }
+   handleChildRef = instance => {
+     this.childInstance = instance;
+-    const resolved = preferHostInstance(instance);
++    const resolved = instance;
+     this.hostInstance = isHostInstance(resolved) ? resolved : null;
+     this.detachChildRef();
+     if (instance !== null && instance !== undefined) {
+diff --git a/src/handlers/gestures/GestureDetector/Wrap.tsx b/src/handlers/gestures/GestureDetector/Wrap.tsx
+index f602c3f..e6370fb 100644
+--- a/src/handlers/gestures/GestureDetector/Wrap.tsx
++++ b/src/handlers/gestures/GestureDetector/Wrap.tsx
+@@ -1,11 +1,7 @@
+ import React from 'react';
+ 
+ import type { WrapRef } from '../../../hostInstance';
+-import {
+-  assignRef,
+-  isHostInstance,
+-  preferHostInstance,
+-} from '../../../hostInstance';
++import { assignRef, isHostInstance } from '../../../hostInstance';
+ import { tagMessage } from '../../../utils';
+ import { Reanimated } from '../reanimatedWrapper';
+ 
+@@ -45,7 +41,11 @@ export class Wrap extends React.Component<{
+   private handleChildRef = (instance: unknown) => {
+     this.childInstance = instance;
+ 
+-    const resolved = preferHostInstance(instance);
++    // Patched: attach to the child itself, as 2.x did. Resolving the child's
++    // getNativeScrollRef() picks the inner scroll view, and on Android a
++    // scroll view with a RefreshControl sits inside a SwipeRefreshLayout,
++    // where gestures attached to the inner view never receive touches.
++    const resolved = instance;
+     this.hostInstance = isHostInstance(resolved) ? resolved : null;
+ 
+     this.detachChildRef();

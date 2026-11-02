@@ -5,6 +5,7 @@ import {
   TextInput,
   View,
   type StyleProp,
+  type TextInputInstance,
   type TextInputProps,
   type TextStyle,
 } from 'react-native';
@@ -45,7 +46,7 @@ function textParts(value: string, ranges: TextRange[]): TextPart[] {
 // Borderless text input whose container owns the framing. Body is the default;
 // editor gives task and project creation one typography token. Forwards its ref
 // so callers can restore focus after a dialog.
-export const Input = forwardRef<TextInput, InputProps>(function Input(
+export const Input = forwardRef<TextInputInstance, InputProps>(function Input(
   {
     className,
     variant = 'body',

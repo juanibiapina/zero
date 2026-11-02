@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, type TextInput, View } from 'react-native';
+import { Pressable, type TextInputInstance, View } from 'react-native';
 
 import { Input } from '@/components/ui/input';
 import { Sheet } from '@/components/ui/sheet';
@@ -32,7 +32,7 @@ function PillCountForm({ title, initial, min, saveLabel, onSave, onClose }: {
   onClose: () => void;
 }) {
   const [text, setText] = useState(initial === null ? '' : String(initial));
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputInstance>(null);
   useEffect(() => {
     const focus = setTimeout(() => input.current?.focus(), SHEET_FOCUS_DELAY_MS);
     return () => clearTimeout(focus);

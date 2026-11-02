@@ -10,6 +10,7 @@ import {
   ScrollView,
   useWindowDimensions,
   View,
+  type ViewInstance,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -96,7 +97,7 @@ export function SyncStatusControl() {
   const updates = Updates.useUpdates();
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState({ top: 72, right: 16 });
-  const triggerRef = useRef<View>(null);
+  const triggerRef = useRef<ViewInstance>(null);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const rippleColor = useColor('--color-ripple');

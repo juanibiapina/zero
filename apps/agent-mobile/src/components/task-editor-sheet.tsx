@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
-import { ActivityIndicator, Keyboard, Pressable, type TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Pressable, type TextInputInstance, useWindowDimensions, View, type ViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardController, KeyboardEvents } from 'react-native-keyboard-controller';
 import Animated, {
@@ -210,8 +210,8 @@ export function TaskEditorSheet({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [bottomGap, setBottomGap] = useState(0);
   const [sheetHeight, setSheetHeight] = useState(0);
-  const screen = useRef<View>(null);
-  const field = useRef<TextInput>(null);
+  const screen = useRef<ViewInstance>(null);
+  const field = useRef<TextInputInstance>(null);
   const previouslyFocusedForOpen = useRef(false);
   const keyboardBeforeHold = useRef(false);
   const progress = useSharedValue(0);

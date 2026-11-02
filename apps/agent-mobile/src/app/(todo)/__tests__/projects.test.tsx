@@ -121,7 +121,7 @@ describe('ProjectsScreen', () => {
 
     it('creates the Project with the top suggestion', async () => {
       icons = ['🌟', '🚀'];
-      const fetch = jest.spyOn(global, 'fetch').mockImplementation(respond);
+      const fetch = jest.spyOn(globalThis, 'fetch').mockImplementation(respond);
       const screen = await renderScreen();
       await fireEvent.press(screen.getByLabelText('Add'));
       const input = screen.getByPlaceholderText('Name an outcome');
@@ -138,7 +138,7 @@ describe('ProjectsScreen', () => {
 
     it('keeps a picked icon while suggestions keep updating', async () => {
       icons = ['🌟', '🚀'];
-      const fetch = jest.spyOn(global, 'fetch').mockImplementation(respond);
+      const fetch = jest.spyOn(globalThis, 'fetch').mockImplementation(respond);
       const screen = await renderScreen();
       await fireEvent.press(screen.getByLabelText('Add'));
       const input = screen.getByPlaceholderText('Name an outcome');
@@ -174,7 +174,7 @@ describe('ProjectsScreen', () => {
   });
 
   it('creates a guest project without requesting account-only icon suggestions', async () => {
-    const fetch = jest.spyOn(global, 'fetch');
+    const fetch = jest.spyOn(globalThis, 'fetch');
     const screen = await renderScreen({}, true);
     await fireEvent.press(screen.getByLabelText('Add'));
     const input = screen.getByPlaceholderText('Name an outcome');

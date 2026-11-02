@@ -50,7 +50,7 @@ proof_open() {
   adb shell input keyevent KEYCODE_WAKEUP
   adb shell wm dismiss-keyguard
   adb reverse "tcp:$PROOF_METRO_PORT" "tcp:$PROOF_METRO_PORT" >/dev/null
-  adb shell am start -W -a android.intent.action.VIEW -d "zeroagent://expo-development-client/?url=http%3A%2F%2Flocalhost%3A${PROOF_METRO_PORT}" "$PROOF_PACKAGE" >/dev/null
+  adb shell am start -W -a android.intent.action.VIEW -d "'zeroagent://expo-development-client/?url=http%3A%2F%2Flocalhost%3A${PROOF_METRO_PORT}&__expo_disable_onboarding=1&__expo_disable_fab=1&__expo_disable_auto_launch=1'" "$PROOF_PACKAGE" >/dev/null
   for attempt in $(seq 1 20); do
     if [[ "$attempt" == 2 ]]; then
       adb shell am start -W -a android.intent.action.VIEW -d 'zeroagent:///e2e-medicine-proof' "$PROOF_PACKAGE" >/dev/null

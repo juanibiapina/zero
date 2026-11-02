@@ -183,7 +183,7 @@ describe('HomeScreen', () => {
     expect(screen.getByPlaceholderText('Add a task')).toBeTruthy();
 
     await act(async () => {
-      (global as typeof globalThis & {
+      (globalThis as typeof globalThis & {
         __emitKeyboardEvent: (name: string) => void;
       }).__emitKeyboardEvent('keyboardWillHide');
     });
@@ -203,7 +203,7 @@ describe('HomeScreen', () => {
     );
 
     await act(async () => {
-      (global as typeof globalThis & {
+      (globalThis as typeof globalThis & {
         __emitKeyboardEvent: (name: string) => void;
       }).__emitKeyboardEvent('keyboardWillHide');
     });
@@ -219,7 +219,7 @@ describe('HomeScreen', () => {
     await fireEvent.press(screen.getByLabelText('No date'));
 
     await act(async () => {
-      (global as typeof globalThis & {
+      (globalThis as typeof globalThis & {
         __emitKeyboardEvent: (name: string) => void;
       }).__emitKeyboardEvent('keyboardWillHide');
     });
@@ -238,7 +238,7 @@ describe('HomeScreen', () => {
     await fireEvent.press(screen.getByLabelText('No project'));
 
     await act(async () => {
-      (global as typeof globalThis & {
+      (globalThis as typeof globalThis & {
         __emitKeyboardEvent: (name: string) => void;
       }).__emitKeyboardEvent('keyboardWillHide');
     });
@@ -394,7 +394,7 @@ describe('HomeScreen', () => {
   it('moves a postponed Home task out of the visible list', async () => {
     const screen = await renderScreen({ tasks: [task('t', 'buy milk')] });
     await waitFor(() => expect(screen.getByText('buy milk')).toBeTruthy());
-    const pan = (global as unknown as {
+    const pan = (globalThis as unknown as {
       __lastPanGesture: {
         __onStart: () => void;
         __onUpdate: (event: { translationX: number }) => void;
@@ -424,7 +424,7 @@ describe('HomeScreen project suggestions', () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ projectId: 'bathroom' }), { status: 200 }),
     );
-    global.fetch = fetchMock;
+    globalThis.fetch = fetchMock as typeof fetch;
   });
 
   it('suggests a Project while typing and files the Task there', async () => {

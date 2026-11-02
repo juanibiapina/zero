@@ -34,8 +34,7 @@ describe('Returning to Home after sign-in', () => {
   beforeEach(() => { workspaceMounts.mockReset(); });
 
   it.each(['/sign-in', '/sso-callback'] as const)('returns from %s to the existing todo workspace', async (path) => {
-    const result = renderApp();
-    await result;
+    const result = await renderApp();
     expect(screen.getByText('Home')).toBeTruthy();
     await act(async () => { router.push(path); });
 
@@ -46,8 +45,7 @@ describe('Returning to Home after sign-in', () => {
   });
 
   it('opens Home when the OAuth callback starts the app', async () => {
-    const result = renderApp('/sso-callback');
-    await result;
+    const result = await renderApp('/sso-callback');
 
     expect(result.getPathname()).toBe('/');
     expect(screen.getByText('Home')).toBeTruthy();

@@ -119,10 +119,10 @@ describe('Toaster', () => {
   it('dismisses a toast after a committed horizontal swipe', async () => {
     jest.useFakeTimers();
     defaultToastController.show({ message: 'Completed', durationMs: Infinity });
-    (global as { __lastPanGesture?: unknown }).__lastPanGesture = undefined;
+    (globalThis as { __lastPanGesture?: unknown }).__lastPanGesture = undefined;
     await render(<Toaster />);
 
-    const pan = (global as unknown as {
+    const pan = (globalThis as unknown as {
       __lastPanGesture: {
         __onStart: () => void;
         __onUpdate: (event: { translationX: number }) => void;

@@ -1,9 +1,8 @@
 import { Host, Icon } from '@expo/ui';
 import { messageOf, toast, type NightStep, type NightView, type TaskdoReplica } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BackHandler, Pressable, View } from 'react-native';
-import { Gesture } from 'react-native-gesture-handler';
 import ReorderableList, { useReorderableDrag, type ReorderableListReorderEvent } from 'react-native-reorderable-list';
 import { LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ScreenHeader } from '@/components/screen-header';
 import { Input } from '@/components/ui/input';
+import { useReorderPanGesture } from '@/components/reorderable-checklist';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
@@ -119,7 +119,7 @@ function NightRoutineContent({ replica, view, onSystemBack, onLeave }: {
     routine.moveStep(step.id, to).catch(fail);
   }, [routine, view.open, fail]);
 
-  const panGesture = useMemo(() => Gesture.Pan().activateAfterLongPress(520), []);
+  const panGesture = useReorderPanGesture();
   const renderItem = useCallback(
     ({ item }: { item: NightStep }) => <OpenStepRow step={item} onComplete={complete} onOpen={setEditing} />,
     [complete],

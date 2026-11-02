@@ -5,9 +5,9 @@ import { createTodoWorkspaceRegistry } from '../todo-workspace';
 function memoryStorage(initial: string | null = null) {
   let value = initial;
   return {
-    getItem: jest.fn(async () => value),
+    getItem: jest.fn(async (_key: string) => value),
     setItem: jest.fn(async (_key: string, next: string) => { value = next; }),
-    removeItem: jest.fn(async () => { value = null; }),
+    removeItem: jest.fn(async (_key: string) => { value = null; }),
   };
 }
 

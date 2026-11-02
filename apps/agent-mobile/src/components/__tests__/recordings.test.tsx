@@ -139,7 +139,7 @@ async function open(initialUrl: string, recordings: Recording[] = []) {
   const data = createInMemoryTodoData();
   for (const recording of recordings) await data.replica!.recordings.add(recording);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const result = renderRouter({
+  const result = await renderRouter({
     _layout: () => <QueryClientProvider client={client}><InMemoryTodoDataProvider data={data}><Stack screenOptions={{ headerShown: false }} /><Toaster /></InMemoryTodoDataProvider></QueryClientProvider>,
     index: HomeScreen,
     'browse/_layout': BrowseLayout,

@@ -235,7 +235,7 @@ describe('ProjectDetailScreen', () => {
   });
 
   it('keeps the manual icon picker but hides account-only suggestions for guests', async () => {
-    const fetch = jest.spyOn(global, 'fetch');
+    const fetch = jest.spyOn(globalThis, 'fetch');
     const screen = await renderScreen({}, true);
     await waitFor(() => expect(screen.getByLabelText('Change icon')).toBeTruthy());
 

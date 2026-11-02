@@ -1,0 +1,55 @@
+diff --git a/lib/commonjs/components/EmojiCategory.js b/lib/commonjs/components/EmojiCategory.js
+index 2c01afd..ed5f02d 100644
+--- a/lib/commonjs/components/EmojiCategory.js
++++ b/lib/commonjs/components/EmojiCategory.js
+@@ -117,7 +117,7 @@ const EmojiCategory = /*#__PURE__*/React.memo(_ref2 => {
+ 
+   // with InteractionManager we can show emojis after interaction is finished
+   // It helps with delay during category change animation
+-  _reactNative.InteractionManager.runAfterInteractions(() => {
++  requestIdleCallback(() => {
+     if (maxIndex === 0 && data.length) {
+       setMaxIndex(minimalEmojisAmountToDisplay);
+     }
+diff --git a/lib/module/components/EmojiCategory.js b/lib/module/components/EmojiCategory.js
+index a858fed..331dd8a 100644
+--- a/lib/module/components/EmojiCategory.js
++++ b/lib/module/components/EmojiCategory.js
+@@ -8,7 +8,6 @@ import { useKeyboardStore } from '../store/useKeyboardStore';
+ import { parseEmoji } from '../utils/parseEmoji';
+ import { removeSkinToneModifier } from '../utils/skinToneSelectorUtils';
+ import { useKeyboard } from '../hooks/useKeyboard';
+-import { InteractionManager } from 'react-native';
+ const emptyEmoji = {
+   emoji: '',
+   name: 'blank emoji',
+@@ -110,7 +109,7 @@ export const EmojiCategory = /*#__PURE__*/React.memo(_ref2 => {
+ 
+   // with InteractionManager we can show emojis after interaction is finished
+   // It helps with delay during category change animation
+-  InteractionManager.runAfterInteractions(() => {
++  requestIdleCallback(() => {
+     if (maxIndex === 0 && data.length) {
+       setMaxIndex(minimalEmojisAmountToDisplay);
+     }
+diff --git a/src/components/EmojiCategory.tsx b/src/components/EmojiCategory.tsx
+index 6869a04..ae34108 100644
+--- a/src/components/EmojiCategory.tsx
++++ b/src/components/EmojiCategory.tsx
+@@ -14,7 +14,6 @@ import { useKeyboardStore } from '../store/useKeyboardStore'
+ import { parseEmoji } from '../utils/parseEmoji'
+ import { removeSkinToneModifier } from '../utils/skinToneSelectorUtils'
+ import { useKeyboard } from '../hooks/useKeyboard'
+-import { InteractionManager } from 'react-native'
+ 
+ const emptyEmoji: JsonEmoji = {
+   emoji: '',
+@@ -149,7 +148,7 @@ export const EmojiCategory = React.memo(
+ 
+     // with InteractionManager we can show emojis after interaction is finished
+     // It helps with delay during category change animation
+-    InteractionManager.runAfterInteractions(() => {
++    requestIdleCallback(() => {
+       if (maxIndex === 0 && data.length) {
+         setMaxIndex(minimalEmojisAmountToDisplay)
+       }
