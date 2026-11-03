@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-03: Let agents connected to Zero, such as pi, mark a voice note as handled, so a job that works through your new voice notes skips the ones it already handled. The app does not show the mark.
+
 - 2026-11-03: Add Prompts: questions agents connected to Zero, such as pi, ask you. The new button left of the mic on Home counts the ones you haven't answered and opens the oldest. Answer by tapping a suggestion or typing your own reply; the agent reads it. Browse lists all your Prompts.
 
 - 2026-10-30: Add a View button to the Saved toast after you record a voice note. Tap it to open Recordings, with the new note at the top.

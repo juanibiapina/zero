@@ -169,6 +169,7 @@ describe('Voice capture', () => {
       source: 'app',
       device: 'Pixel 7',
       transcript: null,
+      handledAt: null,
     }]);
     expect([...mockFiles]).toEqual(['file:///documents/recordings/rec-1.m4a']);
     await waitFor(() => screen.getByText('Saved · 0:42'));
@@ -267,8 +268,8 @@ describe('Microphone', () => {
 });
 
 describe('Recordings', () => {
-  const berlin: Recording = { id: 'b', startedAt: '2026-10-20T18:30:00.000Z', timeZone: 'Europe/Berlin', durationMs: 42_000, source: 'widget', device: 'Pixel 7', transcript: null };
-  const newYork: Recording = { id: 'n', startedAt: '2026-10-21T01:00:00.000Z', timeZone: 'America/New_York', durationMs: 75_000, source: 'app', device: 'Pixel 9', transcript: null };
+  const berlin: Recording = { id: 'b', startedAt: '2026-10-20T18:30:00.000Z', timeZone: 'Europe/Berlin', durationMs: 42_000, source: 'widget', device: 'Pixel 7', transcript: null, handledAt: null };
+  const newYork: Recording = { id: 'n', startedAt: '2026-10-21T01:00:00.000Z', timeZone: 'America/New_York', durationMs: 75_000, source: 'app', device: 'Pixel 9', transcript: null, handledAt: null };
   const transcribe = (data: Awaited<ReturnType<typeof open>>['data'], id: string, text: string, title = '') => act(async () => {
     new RecordingModel(data.replica!.store).setTranscript(id, { text, verbatim: text, title, model: 'm', transcribedAt: '2026-10-20T18:31:00.000Z' });
   });

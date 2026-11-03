@@ -119,6 +119,8 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
 - **Project icon suggestion** is a UI helper.
 - **Recording deletion** also deletes the audio on the phone that holds it.
   Agents read Recordings: `recordings_list` gives each transcript's title and text,
-  `recordings_get` adds the verbatim words.
+  `recordings_get` adds the verbatim words. The one Recording write is
+  `recordings_mark_handled`, which sets or clears `handledAt`;
+  `recordings_list` with `handled: false` lists the ones not handled yet.
 - **Transcription** is requested by the phone that holds the audio; a
   Recording without a transcript reads as `pending`.

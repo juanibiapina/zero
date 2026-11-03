@@ -187,11 +187,12 @@ describe("todo operation catalog", () => {
     expect(await run("shopping_buy", { id: "gone" })).toEqual({ ok: false, error: "missing-item" });
   });
 
-  it("only reads Recordings, because deleting one also deletes its audio on the phone", () => {
+  it("never deletes Recordings, because deleting one also deletes its audio on the phone", () => {
     const recordingOperations = todoOperations.filter((operation) => operation.name.startsWith("recordings_"));
     expect(recordingOperations.map((operation) => [operation.name, operation.kind])).toEqual([
       ["recordings_list", "read"],
       ["recordings_get", "read"],
+      ["recordings_mark_handled", "write"],
     ]);
   });
 
@@ -218,11 +219,11 @@ describe("todo operation catalog", () => {
       expect(value(await run("recordings_list"))).toEqual({
         recordings: [
           { id: "late", startedAt: "2026-03-09T23:30:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-10", recordedAt: "00:30",
-            durationMs: 4200, device: "Pixel 7", transcript: { title: "Call the plumber", text: "Call the plumber on Friday" } },
+            durationMs: 4200, device: "Pixel 7", transcript: { title: "Call the plumber", text: "Call the plumber on Friday" }, handledAt: null },
           { id: "silent", startedAt: "2026-03-08T07:05:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-08", recordedAt: "08:05",
-            durationMs: 4200, device: "Pixel 7", transcript: "no-speech" },
+            durationMs: 4200, device: "Pixel 7", transcript: "no-speech", handledAt: null },
           { id: "pending", startedAt: "2026-03-07T12:00:00.000Z", timeZone: "America/New_York", recordedOn: "2026-03-07", recordedAt: "07:00",
-            durationMs: 4200, device: "Pixel 7", transcript: "pending" },
+            durationMs: 4200, device: "Pixel 7", transcript: "pending", handledAt: null },
         ],
       });
     });
@@ -249,6 +250,22 @@ describe("todo operation catalog", () => {
       });
       expect(value(await run("recordings_get", { id: "pending" }))).toMatchObject({ transcript: "pending" });
       expect(await run("recordings_get", { id: "gone" })).toEqual({ ok: false, error: "missing-recording" });
+    });
+
+    it("marks Recordings handled so the next list leaves them out", async () => {
+      const { run, value } = withRecordings();
+      const ids = async (handled?: boolean) =>
+        value<{ recordings: Array<{ id: string }> }>(await run("recordings_list", { handled })).recordings.map((r) => r.id);
+
+      expect(await run("recordings_mark_handled", { id: "late" })).toMatchObject({ ok: true, changed: true, value: { id: "late", handledAt: "2026-03-10T09:00:00.000Z" } });
+      expect(await run("recordings_mark_handled", { id: "late" })).toMatchObject({ ok: true, changed: false });
+      expect(await ids(false)).toEqual(["silent", "pending"]);
+      expect(await ids(true)).toEqual(["late"]);
+      expect(value(await run("recordings_get", { id: "late" }))).toMatchObject({ handledAt: "2026-03-10T09:00:00.000Z" });
+
+      expect(await run("recordings_mark_handled", { id: "late", handled: false })).toMatchObject({ ok: true, changed: true, value: { handledAt: null } });
+      expect(await ids(false)).toEqual(["late", "silent", "pending"]);
+      expect(await run("recordings_mark_handled", { id: "gone" })).toEqual({ ok: false, error: "missing-recording" });
     });
   });
 

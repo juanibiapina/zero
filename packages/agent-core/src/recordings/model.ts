@@ -20,11 +20,14 @@ export type Recording = {
   source: RecordingSource;
   device: string;
   transcript: Transcript | null;
+  handledAt: string | null;
 };
 
-export type NewRecording = Omit<Recording, "transcript">;
+export type NewRecording = Omit<Recording, "transcript" | "handledAt">;
 
 export type SetTranscriptResult = "set" | "missing" | "exists";
+
+export type SetHandledResult = "set" | "unchanged" | "missing";
 
 function isTranscript(value: unknown): value is Transcript {
   if (typeof value !== "object" || value === null) return false;
@@ -56,7 +59,8 @@ function readRecording(id: string, row: Row): Recording | null {
   if (typeof durationMs !== "number" || durationMs < 0) return null;
   if (source !== "widget" && source !== "app") return null;
   if (typeof device !== "string") return null;
-  return { id, startedAt, timeZone, durationMs, source, device, transcript: readTranscript(row.transcript) };
+  const handledAt = typeof row.handledAt === "string" && !Number.isNaN(Date.parse(row.handledAt)) ? row.handledAt : null;
+  return { id, startedAt, timeZone, durationMs, source, device, transcript: readTranscript(row.transcript), handledAt };
 }
 
 export type RecordingView<T> = {
@@ -68,6 +72,7 @@ export type RecordingView<T> = {
   durationMs: number;
   device: string;
   transcript: "pending" | "no-speech" | T;
+  handledAt: string | null;
 };
 
 function localStart({ startedAt, timeZone }: Recording): { recordedOn: string; recordedAt: string } {
@@ -78,10 +83,11 @@ function localStart({ startedAt, timeZone }: Recording): { recordedOn: string; r
 }
 
 function view<T>(recording: Recording, detail: (transcript: Transcript) => T): RecordingView<T> {
-  const { id, startedAt, timeZone, durationMs, device, transcript } = recording;
+  const { id, startedAt, timeZone, durationMs, device, transcript, handledAt } = recording;
   return {
     id, startedAt, timeZone, ...localStart(recording), durationMs, device,
     transcript: !transcript ? "pending" : transcript.text === "" ? "no-speech" : detail(transcript),
+    handledAt,
   };
 }
 
@@ -113,6 +119,17 @@ export class RecordingModel {
     if (recording.transcript) return "exists";
     const { text, verbatim, title, model, transcribedAt } = transcript;
     this.store.setCell(TABLE, id, "transcript", JSON.stringify({ text, verbatim, title, model, transcribedAt }));
+    return "set";
+  }
+
+  /** Marks a Recording handled at `at`, or not handled with null. Marking a handled one again keeps its first time. */
+  setHandled(id: string, at: string | null): SetHandledResult {
+    if (at !== null && Number.isNaN(Date.parse(at))) throw new Error("Invalid handled time");
+    const recording = this.get(id);
+    if (!recording) return "missing";
+    if ((recording.handledAt !== null) === (at !== null)) return "unchanged";
+    if (at === null) this.store.delCell(TABLE, id, "handledAt");
+    else this.store.setCell(TABLE, id, "handledAt", at);
     return "set";
   }
 

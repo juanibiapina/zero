@@ -15,6 +15,7 @@ const recording: Recording = {
   source: "app",
   device: "Pixel 7",
   transcript: null,
+  handledAt: null,
 };
 
 const transcript: Transcript = {
