@@ -172,6 +172,8 @@ A Recording's transcript is one JSON cell on its row, `transcript`: `{ text, ver
 
 The same TinyBase workspace synchronizes `prompts`, one row per Prompt keyed by its id: `{ title, text, suggestions, createdAt, seenAt, answer }`. `PromptModel` in `@zero/agent-core` owns the rows; the MCP tools and the replica go through it. An agent writes `title`, `text` and `suggestions` (a JSON array of up to 6 strings) once, and they never change. The phone writes `seenAt` when the user first opens the Prompt, and `answer` as one JSON cell, `{ text, answeredAt }`, so the text and its time always merge together. Two phones that answer differently while offline converge by last writer wins, and the losing answer is gone; an agent that read it in between sees the answer change.
 
+Only agents write `handled`, over MCP (`prompts_mark_handled`), as one JSON cell `{ at, answer }` that copies the answer the agent handled (`null` before any answer). A Prompt is handled while that copy equals its current `answer`, so an answer that syncs in after the mark, from any device, makes it unhandled without anyone clearing the cell, and the copy reports what changed. Comparing answers instead of times keeps this correct when a phone's clock is off. If two agents race, the later mark wins. No device shows the mark.
+
 Deleting a Prompt removes its row with `delRow`. An answer written offline after the delete recreates only its `answer` cell; that row has no title, does not decode, and stays hidden.
 
 `prompts_wait` runs inside `TaskDO` and listens to the Prompt's row on the same store that client sync merges into, so an answer that syncs in ends the wait at once.

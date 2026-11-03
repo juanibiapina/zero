@@ -1,7 +1,7 @@
 import { createMergeableStore } from "tinybase";
 import { describe, expect, it } from "vitest";
 
-import { PromptModel, promptStatus } from "./model";
+import { PromptModel, isPromptHandled, promptChangedAfterHandling, promptStatus } from "./model";
 
 const NOW = "2026-11-03T09:00:00.000Z";
 const LATER = "2026-11-03T09:05:00.000Z";
@@ -23,7 +23,7 @@ describe("PromptModel", () => {
   it("creates an unread Prompt with trimmed text and suggestions", () => {
     const { model } = workspace();
     const prompt = value(model.create("p1", { title: " Which flight? ", text: question.text, suggestions: [" The 9:40 ", "The 14:05"] }));
-    expect(prompt).toEqual({ id: "p1", ...question, createdAt: NOW, seenAt: null, answer: null });
+    expect(prompt).toEqual({ id: "p1", ...question, createdAt: NOW, seenAt: null, answer: null, handled: null });
     expect(promptStatus(prompt)).toBe("unread");
     expect(model.get("p1")).toEqual(prompt);
   });
@@ -100,6 +100,49 @@ describe("PromptModel", () => {
     tablet.model.answer("p1", "The 14:05");
     phone.store.merge(tablet.store);
     expect(phone.model.get("p1")?.answer).toEqual(tablet.model.get("p1")?.answer);
+  });
+
+  it("is handled until its answer changes, and then remembers the answer that was handled", () => {
+    const { store, model, at } = workspace();
+    model.create("p1", question);
+    model.answer("p1", "The 9:40");
+    at(LATER);
+    const handled = value(model.setHandled("p1", true));
+    expect(isPromptHandled(handled)).toBe(true);
+    expect(handled.handled).toEqual({ at: LATER, answer: { text: "The 9:40", answeredAt: NOW } });
+    at("2026-11-03T09:10:00.000Z");
+    expect(model.setHandled("p1", true)).toMatchObject({ ok: true, changed: false, value: { handled: { at: LATER } } });
+
+    // Another phone's answer syncs in and replaces this one.
+    store.setCell("prompts", "p1", "answer", JSON.stringify({ text: "The 14:05", answeredAt: NOW }));
+    const changed = model.get("p1")!;
+    expect(isPromptHandled(changed)).toBe(false);
+    expect(promptChangedAfterHandling(changed)).toEqual({ at: LATER, answer: { text: "The 9:40", answeredAt: NOW } });
+
+    const again = value(model.setHandled("p1", true));
+    expect(isPromptHandled(again)).toBe(true);
+    expect(promptChangedAfterHandling(again)).toBeNull();
+    expect(again.handled?.at).toBe("2026-11-03T09:10:00.000Z");
+  });
+
+  it("counts an answer to a Prompt handled before it was answered as a change", () => {
+    const { model } = workspace();
+    model.create("p1", question);
+    model.setHandled("p1", true);
+    expect(isPromptHandled(model.get("p1")!)).toBe(true);
+    model.answer("p1", "The 9:40");
+    expect(isPromptHandled(model.get("p1")!)).toBe(false);
+    expect(promptChangedAfterHandling(model.get("p1")!)).toEqual({ at: NOW, answer: null });
+  });
+
+  it("clears the handled mark, also after the answer changed", () => {
+    const { store, model } = workspace();
+    model.create("p1", question);
+    expect(model.setHandled("p1", false)).toMatchObject({ ok: true, changed: false });
+    model.setHandled("p1", true);
+    store.setCell("prompts", "p1", "answer", JSON.stringify({ text: "The 14:05", answeredAt: LATER }));
+    expect(model.setHandled("p1", false)).toMatchObject({ ok: true, changed: true, value: { handled: null } });
+    expect(model.setHandled("gone", true)).toEqual({ ok: false, conflict: "missing-prompt" });
   });
 
   it("lists Prompts newest first, and open ones oldest first", () => {

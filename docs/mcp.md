@@ -92,6 +92,11 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
   pi's default 60-second tool timeout. The agent calls it again to keep
   waiting. Nothing notifies the user of a new Prompt; they see it when they
   open the app.
+- `prompts_mark_handled` sets or clears a Prompt's handled mark, so an agent
+  that works through answers skips the ones it already acted on;
+  `prompts_list` with `handled: false` lists the rest. The mark holds only for
+  the answer it was set on: when the answer changes, the Prompt reads as not
+  handled, with `changedAfterHandling` naming the answer that was handled.
 
 ### Left out on purpose
 

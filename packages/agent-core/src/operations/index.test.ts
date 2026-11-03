@@ -267,6 +267,7 @@ describe("todo operation catalog", () => {
       expect(value(await run("prompts_get", { id: "id-1" }))).toEqual({
         id: "id-1", ...ask, createdAt: "2026-03-10T09:00:00.000Z", status: "answered",
         answer: { text: "Neither, prices will drop", answeredAt: "2026-03-10T09:00:00.000Z" },
+        handledAt: null, changedAfterHandling: null,
       });
       expect(await run("prompts_get", { id: "gone" })).toEqual({ ok: false, error: "missing-prompt" });
     });
@@ -281,6 +282,33 @@ describe("todo operation catalog", () => {
       expect(await ids()).toEqual(["done", "open"]);
       expect(await ids("open")).toEqual(["open"]);
       expect(await ids("answered")).toEqual(["done"]);
+    });
+
+    it("marks a Prompt handled, and reports an answer that changed after that", async () => {
+      const { ctx, run, value } = workspace();
+      await run("prompts_create", { id: "p", ...ask });
+      await run("prompts_create", { id: "other", ...ask });
+      new PromptModel(ctx.store, ctx.now).answer("p", "The 9:40");
+      new PromptModel(ctx.store, ctx.now).answer("other", "The 9:40");
+      const ids = async (handled: boolean) =>
+        value<{ prompts: Array<{ id: string }> }>(await run("prompts_list", { status: "answered", handled })).prompts.map((p) => p.id);
+
+      expect(await run("prompts_mark_handled", { id: "p" })).toMatchObject({
+        ok: true, changed: true, value: { handledAt: "2026-03-10T09:00:00.000Z", changedAfterHandling: null },
+      });
+      expect(await ids(false)).toEqual(["other"]);
+      expect(await ids(true)).toEqual(["p"]);
+
+      ctx.store.setCell("prompts", "p", "answer", JSON.stringify({ text: "The 14:05", answeredAt: "2026-03-10T09:30:00.000Z" }));
+      expect(value(await run("prompts_get", { id: "p" }))).toMatchObject({
+        answer: { text: "The 14:05" },
+        handledAt: null,
+        changedAfterHandling: { handledAt: "2026-03-10T09:00:00.000Z", handledAnswer: "The 9:40" },
+      });
+      expect((await ids(false)).sort()).toEqual(["other", "p"]);
+
+      expect(await run("prompts_mark_handled", { id: "other", handled: false })).toMatchObject({ ok: true, changed: false });
+      expect(await run("prompts_mark_handled", { id: "gone" })).toEqual({ ok: false, error: "missing-prompt" });
     });
 
     it("waits until the user answers", async () => {
@@ -315,6 +343,7 @@ describe("todo operation catalog", () => {
         ["prompts_wait", "read"],
         ["prompts_get", "read"],
         ["prompts_list", "read"],
+        ["prompts_mark_handled", "write"],
         ["prompts_delete", "destructive"],
       ]);
     });
