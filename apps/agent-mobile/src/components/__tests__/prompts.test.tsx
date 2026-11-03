@@ -18,6 +18,27 @@ jest.mock('@clerk/expo', () => ({
   useUser: () => ({ user: null }),
 }));
 jest.mock('expo-router/build/testing-library/mocks', () => ({}));
+// The document renders in a WebView, which Jest cannot run. The stand-in shows
+// the Markdown as text and lets a test pick a passage or remove a comment.
+jest.mock('@/components/prompt-document', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { Pressable, Text, View } = jest.requireActual<typeof import('react-native')>('react-native');
+  type MockProps = {
+    markdown: string;
+    comments: { id: string; text: string }[];
+    onPassage: (quote: string) => Promise<void>;
+    onRemoveComment: (id: string) => Promise<void>;
+  };
+  return {
+    __esModule: true,
+    default: ({ markdown, comments, onPassage, onRemoveComment }: MockProps) => createElement(View, null,
+      createElement(Text, null, markdown),
+      createElement(Pressable, { accessibilityLabel: 'Passage', onPress: () => void onPassage('Two flights fit the trip.') }),
+      ...comments.map((comment) => createElement(Pressable, {
+        key: comment.id, accessibilityLabel: `Remove ${comment.text}`, onPress: () => void onRemoveComment(comment.id),
+      }))),
+  };
+});
 jest.mock('react-native-safe-area-context', () => jest.requireActual<typeof import('react-native-safe-area-context/jest/mock')>('react-native-safe-area-context/jest/mock').default);
 
 const flight = { title: 'Which flight?', text: 'Two flights fit the trip. Which one should I book?', suggestions: ['The 9:40', 'The 14:05'] };
@@ -84,6 +105,36 @@ describe('Prompts', () => {
     await fireEvent.changeText(screen.getByLabelText('Answer'), 'Neither, wait for prices to drop');
     await fireEvent.press(screen.getByLabelText('Send'));
     await waitFor(() => expect(model.get('p1')?.answer?.text).toBe('Neither, wait for prices to drop'));
+  });
+
+  it('keeps comments on passages, which go with the answer', async () => {
+    const { screen, model } = await open('/browse/prompt/p1?from=list');
+    expect(screen.getByText('Tap a passage or select words to comment on them.')).toBeTruthy();
+
+    await fireEvent.press(screen.getByLabelText('Passage'));
+    expect(screen.getByText('Comment on “Two flights fit the trip.”')).toBeTruthy();
+    expect(screen.queryByText('The 9:40')).toBeNull();
+    await fireEvent.changeText(screen.getByLabelText('Comment'), 'Is there a train?');
+    await fireEvent.press(screen.getByLabelText('Add comment'));
+
+    await waitFor(() => expect(model.get('p1')?.comments).toMatchObject([{ quote: 'Two flights fit the trip.', text: 'Is there a train?' }]));
+    expect(screen.getByText('1 comment goes with your answer.')).toBeTruthy();
+    await fireEvent.press(screen.getByText('The 9:40'));
+    await waitFor(() => expect(model.get('p1')?.answer?.text).toBe('The 9:40'));
+    expect(model.get('p1')?.comments).toHaveLength(1);
+  });
+
+  it('removes a comment, and cancels one before it is added', async () => {
+    const { screen, model } = await open('/browse/prompt/p1?from=list', (model) => {
+      model.create('p1', flight);
+      model.comment('p1', 'c1', { quote: '', text: 'Too early' });
+    });
+    await fireEvent.press(screen.getByLabelText('Remove Too early'));
+    await waitFor(() => expect(model.get('p1')?.comments).toEqual([]));
+
+    await fireEvent.press(screen.getByLabelText('Passage'));
+    await fireEvent.press(screen.getByLabelText('Cancel comment'));
+    expect(screen.getByText('The 9:40')).toBeTruthy();
   });
 
   it('shows an answered Prompt with its answer and no way to answer again', async () => {

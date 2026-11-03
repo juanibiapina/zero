@@ -13,6 +13,7 @@ function workspace(today = "2026-03-10") {
     now: () => new Date(`${today}T09:00:00Z`),
     today,
     newId: () => `id-${++next}`,
+    checkDiagram: async (source) => (source.includes("-->") ? null : "Parse error on line 1"),
   };
   const run = (name: string, input: unknown = {}) => runTodoOperation(ctx, name, input);
   const value = <T>(outcome: OperationOutcome): T => {
@@ -313,8 +314,32 @@ describe("todo operation catalog", () => {
         id: "id-1", ...ask, createdAt: "2026-03-10T09:00:00.000Z", status: "answered",
         answer: { text: "Neither, prices will drop", answeredAt: "2026-03-10T09:00:00.000Z" },
         handledAt: null, changedAfterHandling: null,
+        comments: [],
       });
       expect(await run("prompts_get", { id: "gone" })).toEqual({ ok: false, error: "missing-prompt" });
+    });
+
+    it("refuses a Prompt whose Mermaid diagram does not parse, wherever it sits in the Markdown", async () => {
+      const { run, value } = workspace();
+      const text = "Plan:\n\n```mermaid\ngraph TD; A-->B\n```\n\n- Step\n\n  ```mermaid\ngraph TD; A--\n  ```\n\n```ts\nnot a diagram\n```";
+      expect(await run("prompts_create", { ...ask, id: "p", text })).toEqual({
+        ok: false, error: "invalid-diagram: Mermaid diagram 2 of 2 does not parse. Parse error on line 1",
+      });
+      expect(value<{ prompts: unknown[] }>(await run("prompts_list")).prompts).toEqual([]);
+      const valid = "Plan:\n\n```mermaid\ngraph TD; A-->B\n```\n\n```ts\nnot a diagram\n```";
+      expect(await run("prompts_create", { ...ask, id: "p", text: valid })).toMatchObject({ ok: true, changed: true });
+    });
+
+    it("returns the user's comments with the answer", async () => {
+      const { ctx, run, value } = workspace();
+      await run("prompts_create", { id: "p", ...ask });
+      const model = new PromptModel(ctx.store, ctx.now);
+      model.comment("p", "c1", { quote: "Two flights fit.", text: "Check the train too" });
+      model.answer("p", "The 9:40");
+      expect(value(await run("prompts_get", { id: "p" }))).toMatchObject({
+        answer: { text: "The 9:40" },
+        comments: [{ id: "c1", quote: "Two flights fit.", text: "Check the train too", createdAt: "2026-03-10T09:00:00.000Z" }],
+      });
     });
 
     it("lists open and answered Prompts", async () => {

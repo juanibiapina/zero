@@ -24,6 +24,7 @@
     "@zeroapps/typesafe": "workspace:*",
     "do-orm": "github:juanibiapina/do-orm",
     "hono": "^4.12.33",
+    "mermaid": "^12.3.0",
     "tinybase": "10.0.1",
     "zod": "^4.4.3"
   },

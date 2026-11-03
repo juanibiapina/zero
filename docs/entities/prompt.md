@@ -4,6 +4,8 @@
 
 A Prompt is a question an agent asks you through Zero, which you answer later in the app. An agent planning a trip asks "Which flight?", explains that two flights fit, and suggests "The 9:40" and "The 14:05". You open the Prompt, tap one, or type your own answer, such as "Neither, wait for prices to drop". The agent reads your answer when it next checks.
 
+The question can be a whole document: an agent asking you to approve a plan writes it in Markdown, with headings, lists, tables, code, and Mermaid diagrams, and offers "Approve" and "Revise". Before you answer, you can comment on any passage or diagram, the way you would mark up a draft, and the agent reads your comments together with your answer.
+
 ## Why it is its own block
 
 An agent working on its own often needs a decision only you can make, and you are not always there when it asks. A Prompt keeps the question until you answer, and gives the agent your words back as text it can act on.
@@ -11,6 +13,8 @@ An agent working on its own often needs a decision only you can make, and you ar
 ## Rules
 
 - An agent writes the title, the question, and up to 6 suggested answers. A Prompt can have no suggestions.
+- The question is GitHub-flavored Markdown. A code block fenced as `mermaid` shows as a diagram. An agent cannot create a Prompt whose diagram does not parse; it gets the parser's message back and fixes the diagram.
+- Until you answer, you can comment on any passage: tap a paragraph, list item, heading, table cell, code block, or diagram, or select some words. Each comment keeps the passage it is on. You can remove a comment before you answer. Answering locks the comments with the answer.
 - You can always answer in your own words, also when the Prompt has suggestions.
 - A Prompt is new until you open it. Opening it on any device marks it read.
 - A Prompt takes one answer. Answering closes it, and it then shows your answer and cannot be answered again.
@@ -25,14 +29,16 @@ An agent working on its own often needs a decision only you can make, and you ar
 
 A question-bubble button in Home's header, left of the mic, with a badge counting the Prompts you have not answered. Tapping it opens the oldest one; with none left, it opens the list.
 
-A Prompt opens full screen, without the tab bar: its title, the question, one button per suggestion, and a text field with a send button. An answered Prompt shows its answer highlighted.
+A Prompt opens full screen, without the tab bar: its title, the question rendered as a document, one button per suggestion, and a text field with a send button. An answered Prompt shows its answer highlighted.
+
+Picking a passage tints it and swaps the answer controls for a comment field that names the passage. A comment shows under its passage, in a box with an accent edge, and the passage gets an accent mark. A line above the suggestions says how many comments go with your answer.
 
 Browse lists Prompts, newest first. A new one has a dot and a bold title. Below the title is the answer when there is one, otherwise the date and time it arrived.
 
 ## Interactions
 
 - Task, Project, Waiting, After, Medicine, Night routine, Recording, Shopping item: none, on purpose.
-- Agents: ask, wait for the answer, read, list, mark handled, and delete. They cannot answer.
+- Agents: ask, wait for the answer, read the answer and the comments, list, mark handled, and delete. They cannot answer or comment.
 
 ## Left out on purpose
 
@@ -40,6 +46,8 @@ Browse lists Prompts, newest first. A new one has a dot and a bold title. Below 
 - Deleting a Prompt from the app.
 - Prompts on the web.
 - Picking several suggestions, or changing an answer.
+- Commenting after answering, editing a comment, and replying to one.
+- Sending comments without an answer: comments go with an answer, which can be a suggestion such as "Revise".
 
 ## Ideas
 

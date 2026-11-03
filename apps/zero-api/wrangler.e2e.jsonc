@@ -8,6 +8,8 @@
   "rules": [
     { "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }
   ],
+  // Same stand-in the Vite build uses (vite.config.ts): Mermaid only parses here.
+  "alias": { "dompurify": "./src/prompts/dompurify-parse-only.ts" },
   "compatibility_date": "2026-06-01",
   "compatibility_flags": [
     "nodejs_compat"

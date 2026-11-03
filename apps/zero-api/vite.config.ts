@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { defineConfig, type Plugin } from "vite";
 
@@ -12,6 +13,10 @@ export const textImports = (): Plugin => ({
     }
   },
 });
+
+export const parseOnlyMermaid = {
+  dompurify: fileURLToPath(new URL("./src/prompts/dompurify-parse-only.ts", import.meta.url)),
+};
 
 const noSecretsInDist = (): Plugin => ({
   name: "no-secrets-in-dist",
@@ -33,6 +38,7 @@ export default defineConfig(({ mode }) => ({
     ),
     noSecretsInDist(),
   ],
+  resolve: { alias: parseOnlyMermaid },
   build: { sourcemap: true },
   server: { port: 8790, strictPort: true, watch: { ignored: ["**/.dev.vars"] } },
 }));

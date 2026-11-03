@@ -11,7 +11,7 @@ import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
 import { MedicineModel, type MedicineInput, type Medicine, type Dose, type Intake, type MedicineReceipt, type MedicineRestock } from "../medicines/model";
 import { NightRoutineModel, readNights, type Night, type NightStep } from "../night-routine/model";
-import { PromptModel, type Prompt, type PromptResult } from "../prompts/model";
+import { PromptModel, type Prompt, type PromptCommentInput, type PromptResult } from "../prompts/model";
 import { RecordingModel, type NewRecording, type Recording } from "../recordings/model";
 import { ShoppingListModel, type ShoppingItem, type ShoppingResult } from "../shopping/model";
 
@@ -132,6 +132,8 @@ export type TodoShopping = {
 export type TodoPrompts = {
   markSeen: (id: string) => Promise<void>;
   answer: (id: string, text: string) => Promise<void>;
+  comment: (id: string, comment: PromptCommentInput) => Promise<void>;
+  removeComment: (id: string, commentId: string) => Promise<void>;
 };
 
 export type TaskdoReplica = {
@@ -240,6 +242,8 @@ function shoppingValue<T>(result: ShoppingResult<T>): T {
 function promptValue<T>(result: PromptResult<T>): T {
   if (result.ok) return result.value;
   if (result.conflict === "empty-answer") throw new Error("Write an answer");
+  if (result.conflict === "empty-comment") throw new Error("Write a comment");
+  if (result.conflict === "missing-comment") throw new Error("This comment is no longer here");
   if (result.conflict === "already-answered") throw new Error("This prompt already has an answer");
   throw new Error("This prompt is no longer here");
 }
@@ -550,6 +554,8 @@ export function createTaskdoReplica({
     prompts: {
       markSeen: (id) => write(() => { promptValue(promptModel.markSeen(id)); }),
       answer: (id, text) => write(() => { promptValue(promptModel.answer(id, text)); }),
+      comment: (id, comment) => write(() => { promptValue(promptModel.comment(id, randomId(), comment)); }),
+      removeComment: (id, commentId) => write(() => { promptValue(promptModel.removeComment(id, commentId)); }),
     },
     snapshot: () => snapshot,
     subscribe(listener) {
