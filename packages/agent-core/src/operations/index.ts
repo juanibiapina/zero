@@ -103,7 +103,8 @@ const RECORDINGS =
   "A Recording is a voice note the user spoke into their phone; its audio stays on the phone. recordedOn and recordedAt are the day and time " +
   "where it was recorded, in its timeZone. transcript is pending until the server has transcribed it, no-speech for a silent note, or a short title " +
   "(a few words naming the action or topic, in the language spoken) with the text: what the user said, with filler words removed and " +
-  "spoken corrections applied. A transcript stored before titles existed has an empty title. Turn notes into Tasks or Shopping items with the other tools.";
+  "spoken corrections applied. A transcript stored before titles existed has an empty title. Turn notes into Tasks or Shopping items with the other tools. " +
+  "handledAt is when an agent marked the Recording handled with recordings_mark_handled, or null; the user does not see it.";
 const recordings = (ctx: OperationContext) => new RecordingModel(ctx.store);
 const PROMPTS =
   "A Prompt is a question you put to the user in the Zero app (not an MCP prompt template). The user sees it only when they open it " +
@@ -442,10 +443,17 @@ export const todoOperations: readonly TodoOperation[] = [
     title: "List Recordings with their transcripts",
     description: `${RECORDINGS} Lists Recordings newest first.`,
     kind: "read",
-    input: z.object({ since: PlainDate.optional().describe("Earliest recordedOn day; defaults to 7 days ago") }),
+    input: z.object({
+      since: PlainDate.optional().describe("Earliest recordedOn day; defaults to 7 days ago"),
+      handled: z.boolean().optional().describe("true lists only handled Recordings, false only those not handled yet; omit for both"),
+    }),
     run: (ctx, input) => {
       const since = input.since ?? shiftDay(ctx.today, -7);
-      return read({ recordings: recordings(ctx).list().map(recordingSummary).filter((recording) => recording.recordedOn >= since) });
+      return read({
+        recordings: recordings(ctx).list().map(recordingSummary)
+          .filter((recording) => recording.recordedOn >= since)
+          .filter((recording) => input.handled === undefined || (recording.handledAt !== null) === input.handled),
+      });
     },
   }),
   define({
@@ -459,6 +467,24 @@ export const todoOperations: readonly TodoOperation[] = [
     run: (ctx, input) => {
       const recording = recordings(ctx).get(input.id);
       return recording ? read(recordingDetail(recording)) : { ok: false, error: "missing-recording" };
+    },
+  }),
+  define({
+    name: "recordings_mark_handled",
+    title: "Mark a Recording handled",
+    description:
+      `${RECORDINGS} Marks a Recording handled, for an agent that works through new Recordings and must not repeat one; ` +
+      "list the rest with recordings_list handled false. Pass handled false to mark it not handled again. " +
+      "Marking a handled Recording again keeps its first handledAt.",
+    kind: "write",
+    input: z.object({ id: Id, handled: z.boolean().optional().describe("Defaults to true") }),
+    run: (ctx, input) => {
+      const model = recordings(ctx);
+      const result = model.setHandled(input.id, input.handled === false ? null : ctx.now().toISOString());
+      const recording = model.get(input.id);
+      return result === "missing" || !recording
+        ? { ok: false, error: "missing-recording" }
+        : { ok: true, changed: result === "set", value: recordingSummary(recording) };
     },
   }),
   define({

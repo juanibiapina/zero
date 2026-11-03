@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-03: Let agents connected to Zero, such as pi, mark a voice note as handled, so a job that works through your new voice notes skips the ones it already handled. The app does not show the mark.
+
 - 2026-11-03: Let agents connected to Zero, such as pi, mark a Prompt as handled once they acted on your answer, so they don't act on it twice. If your answer changes after that, the agent sees the Prompt as not handled again, along with the answer it had acted on. The app does not show the mark.
 
 - 2026-11-03: Add Prompts: questions agents connected to Zero, such as pi, ask you. The new button left of the mic on Home counts the ones you haven't answered and opens the oldest. Answer by tapping a suggestion or typing your own reply; the agent reads it. Browse lists all your Prompts.

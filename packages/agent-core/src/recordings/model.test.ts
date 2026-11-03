@@ -13,7 +13,7 @@ const recording = (overrides: Partial<NewRecording> = {}): NewRecording => ({
   ...overrides,
 });
 
-const listed = (overrides: Partial<Recording> = {}): Recording => ({ ...recording(), transcript: null, ...overrides });
+const listed = (overrides: Partial<Recording> = {}): Recording => ({ ...recording(), transcript: null, handledAt: null, ...overrides });
 
 const transcript: Transcript = {
   text: "Call Ana on Friday.",
@@ -87,6 +87,40 @@ describe("Transcripts", () => {
     phone.merge(tablet);
     expect(new RecordingModel(phone).list()).toEqual([]);
     expect(new RecordingModel(phone).deleted()).toEqual(["r1"]);
+  });
+});
+
+describe("Handled", () => {
+  const at = "2026-10-21T09:00:00.000Z";
+
+  it("marks a recording handled and back, keeping the first time it was marked", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    expect(model.setHandled("r1", at)).toBe("set");
+    expect(model.setHandled("r1", "2026-10-22T09:00:00.000Z")).toBe("unchanged");
+    expect(model.get("r1")).toEqual(listed({ handledAt: at }));
+    expect(model.setHandled("r1", null)).toBe("set");
+    expect(model.setHandled("r1", null)).toBe("unchanged");
+    expect(model.get("r1")).toEqual(listed());
+  });
+
+  it("does not create a recording that is missing or deleted", () => {
+    const model = new RecordingModel(createMergeableStore());
+    model.add(recording());
+    model.remove("r1");
+    expect(model.setHandled("r1", at)).toBe("missing");
+    expect(model.list()).toEqual([]);
+  });
+
+  it("brings the handled mark to every device without touching the transcript", () => {
+    const phone = createMergeableStore();
+    const server = createMergeableStore();
+    new RecordingModel(phone).add(recording());
+    server.merge(phone);
+    new RecordingModel(server).setTranscript("r1", transcript);
+    new RecordingModel(server).setHandled("r1", at);
+    phone.merge(server);
+    expect(new RecordingModel(phone).list()).toEqual([listed({ transcript, handledAt: at })]);
   });
 });
 
