@@ -30,6 +30,7 @@ function snapshot(recoveryId?: string): TodoSnapshot {
     nights: [],
     recordings: [],
     shopping: [],
+    prompts: [],
     recoveries: recoveryId
       ? [{ table: "tasks", id: recoveryId, text: recoveryId, reason: "Invalid Task" }]
       : [],

@@ -1,10 +1,11 @@
 import { useAuth } from '@clerk/expo';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, View } from 'react-native';
 import { HomeAppIconSync } from '../../components/home-app-icon-sync';
 import { useColor } from '../../lib/theme';
 import { RUNTIME_PROFILE } from '../../lib/runtime-profile';
+import { TabBarContext } from '../../lib/tab-bar';
 import { TodoDataProvider } from '../../lib/todo-data-context';
 import { createMobileTimezoneSync } from '../../lib/timezone-sync';
 
@@ -34,6 +35,7 @@ export default function TodoLayout() {
   const accent = useColor('--color-accent');
   const surface = useColor('--color-surface');
   const iconColor = useColor('--color-foreground-secondary');
+  const [tabBarHidden, setTabBarHidden] = useState(false);
 
   useTimezoneSync(isLoaded && isSignedIn);
 
@@ -50,6 +52,7 @@ export default function TodoLayout() {
   // route name; Browse owns its own index and pushed screens.
   const tabs = (
       <NativeTabs
+        hidden={tabBarHidden}
         tintColor={accent}
         backgroundColor={surface}
         iconColor={iconColor}
@@ -71,7 +74,7 @@ export default function TodoLayout() {
   return (
     <TodoDataProvider>
       {RUNTIME_PROFILE.launcherCountSyncEnabled ? <HomeAppIconSync /> : null}
-      {tabs}
+      <TabBarContext value={setTabBarHidden}>{tabs}</TabBarContext>
     </TodoDataProvider>
   );
 }

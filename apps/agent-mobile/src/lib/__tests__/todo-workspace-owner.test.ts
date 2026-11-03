@@ -14,6 +14,7 @@ const EMPTY_SNAPSHOT: TodoSnapshot = {
   nights: [],
   recordings: [],
   shopping: [],
+  prompts: [],
   recoveries: [],
 };
 

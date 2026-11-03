@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-03: Add Prompts: questions agents connected to Zero, such as pi, ask you. The new button left of the mic on Home counts the ones you haven't answered and opens the oldest. Answer by tapping a suggestion or typing your own reply; the agent reads it. Browse lists all your Prompts.
+
 - 2026-10-30: Add a View button to the Saved toast after you record a voice note. Tap it to open Recordings, with the new note at the top.
 
 - 2026-10-28: Change Going to bed in the Night routine to close the page and lock your phone. The first time, Zero opens Accessibility settings: turn on Zero Agent there (if Android says it is a restricted setting, first open Zero Agent's App info, tap ⋮, and allow restricted settings). After that, Going to bed locks the phone, and fingerprint unlock still works.
