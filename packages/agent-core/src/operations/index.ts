@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { MedicineModel } from "../medicines/model";
 import { projectDisplayStatus } from "../projects/derive";
+import { PromptModel, promptStatus, type Prompt, type PromptResult } from "../prompts/model";
 import { RecordingModel, recordingDetail, recordingSummary } from "../recordings/model";
 import { ShoppingListModel, type ShoppingResult } from "../shopping/model";
 import { TodoModel, type TodoModelResult } from "../taskdo/model";
@@ -28,7 +29,7 @@ export type TodoOperation<Input extends z.ZodObject = z.ZodObject> = {
   description: string;
   kind: OperationKind;
   input: Input;
-  run(ctx: OperationContext, input: z.infer<Input>): OperationOutcome;
+  run(ctx: OperationContext, input: z.infer<Input>): OperationOutcome | Promise<OperationOutcome>;
 };
 
 const PlainDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
@@ -102,6 +103,41 @@ const RECORDINGS =
   "(a few words naming the action or topic, in the language spoken) with the text: what the user said, with filler words removed and " +
   "spoken corrections applied. A transcript stored before titles existed has an empty title. Turn notes into Tasks or Shopping items with the other tools.";
 const recordings = (ctx: OperationContext) => new RecordingModel(ctx.store);
+const PROMPTS =
+  "A Prompt is a question you put to the user in the Zero app (not an MCP prompt template). The user sees it only when they open it " +
+  "in the app; nothing notifies them. They answer with text: one of your suggestions, or their own words, which are always allowed. " +
+  "A Prompt without an answer means no decision was made, never consent.";
+const prompts = (ctx: OperationContext) => new PromptModel(ctx.store, ctx.now);
+const promptView = (prompt: Prompt) => {
+  const { id, title, text, suggestions, createdAt, answer } = prompt;
+  return { id, title, text, suggestions, createdAt, status: promptStatus(prompt), answer };
+};
+const fromPrompt = (result: PromptResult<Prompt>): OperationOutcome => result.ok
+  ? { ok: true, changed: result.changed, value: promptView(result.value) }
+  : { ok: false, error: result.conflict };
+const MAX_WAIT_SECONDS = 50;
+
+function waitForAnswer(ctx: OperationContext, id: string, timeoutSeconds: number): Promise<OperationOutcome> {
+  const model = prompts(ctx);
+  const current = (): OperationOutcome => {
+    const prompt = model.get(id);
+    return prompt ? read(promptView(prompt)) : { ok: false, error: "missing-prompt" };
+  };
+  const settled = () => {
+    const prompt = model.get(id);
+    return !prompt || prompt.answer !== null;
+  };
+  if (settled()) return Promise.resolve(current());
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      stop();
+      resolve(current());
+    };
+    const stop = model.onChange(id, () => { if (settled()) finish(); });
+    const timer = setTimeout(finish, timeoutSeconds * 1000);
+  });
+}
 const todo = (ctx: OperationContext) => new TodoModel({ store: ctx.store, now: ctx.now });
 const medicines = (ctx: OperationContext) => new MedicineModel(ctx.store, ctx.now);
 
@@ -414,6 +450,73 @@ export const todoOperations: readonly TodoOperation[] = [
     },
   }),
   define({
+    name: "prompts_create",
+    title: "Ask the user a question",
+    description:
+      `${PROMPTS} Creates a Prompt and returns at once with status unread; read the answer later with prompts_wait or prompts_get. ` +
+      "suggestions are up to 6 answers the user can tap; omit them for an open question. " +
+      "Omit id to have one generated; pass your own UUID to make retries safe.",
+    kind: "write",
+    input: z.object({
+      id: Id.optional(),
+      title: z.string().trim().min(1).describe("One line naming the question"),
+      text: z.string().trim().min(1).describe("The question, with the context the user needs to answer it"),
+      suggestions: z.array(z.string().trim().min(1)).max(6).optional(),
+    }),
+    run: (ctx, input) => fromPrompt(prompts(ctx).create(input.id ?? ctx.newId(), {
+      title: input.title,
+      text: input.text,
+      suggestions: input.suggestions ?? [],
+    })),
+  }),
+  define({
+    name: "prompts_wait",
+    title: "Wait for the user's answer to a Prompt",
+    description:
+      `${PROMPTS} Waits until the user answers, then returns the Prompt with its answer. After timeoutSeconds it returns the Prompt ` +
+      "still unanswered; call it again to keep waiting. Fails with missing-prompt if the Prompt was deleted.",
+    kind: "read",
+    input: z.object({
+      id: Id,
+      timeoutSeconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).optional().describe("Defaults to 45"),
+    }),
+    run: (ctx, input) => waitForAnswer(ctx, input.id, input.timeoutSeconds ?? 45),
+  }),
+  define({
+    name: "prompts_get",
+    title: "Read a Prompt and its answer",
+    description: `${PROMPTS} status is unread, read (opened, not answered), or answered; answer is null until the user answers.`,
+    kind: "read",
+    input: z.object({ id: Id }),
+    run: (ctx, input) => {
+      const prompt = prompts(ctx).get(input.id);
+      return prompt ? read(promptView(prompt)) : { ok: false, error: "missing-prompt" };
+    },
+  }),
+  define({
+    name: "prompts_list",
+    title: "List Prompts",
+    description: `${PROMPTS} Lists Prompts newest first. status open means not answered yet.`,
+    kind: "read",
+    input: z.object({ status: z.enum(["open", "answered"]).optional() }),
+    run: (ctx, input) => {
+      const all = prompts(ctx).list();
+      const listed = input.status ? all.filter((prompt) => (prompt.answer !== null) === (input.status === "answered")) : all;
+      return read({ prompts: listed.map(promptView) });
+    },
+  }),
+  define({
+    name: "prompts_delete",
+    title: "Delete a Prompt",
+    description: `${PROMPTS} Deletes a Prompt from every device, answered or not: to withdraw a question, or to clean up after reading the answer.`,
+    kind: "destructive",
+    input: z.object({ id: Id }),
+    run: (ctx, input) => {
+      const result = prompts(ctx).delete(input.id);
+      return result.ok ? { ok: true, changed: result.changed, value: null } : { ok: false, error: result.conflict };
+    },
+  }),
+  define({
     name: "recoveries_list",
     title: "List rows that need repair",
     description:
@@ -440,7 +543,7 @@ export function findTodoOperation(name: string): TodoOperation | undefined {
   return byName.get(name);
 }
 
-export function runTodoOperation(ctx: OperationContext, name: string, input: unknown): OperationOutcome {
+export async function runTodoOperation(ctx: OperationContext, name: string, input: unknown): Promise<OperationOutcome> {
   const operation = byName.get(name);
   if (!operation) return { ok: false, error: `unknown operation: ${name}` };
   const parsed = operation.input.safeParse(input ?? {});

@@ -44,6 +44,7 @@ describe("todo MCP server", () => {
     const deleteProject = tools.find((tool) => tool.name === "projects_delete");
     expect(deleteProject?.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(tools.find((tool) => tool.name === "tasks_list")?.annotations).toMatchObject({ readOnlyHint: true });
+    expect(tools.find((tool) => tool.name === "prompts_delete")?.annotations).toMatchObject({ destructiveHint: true });
   });
 
   it("runs a tool in the caller's TaskDO with the user's today", async () => {

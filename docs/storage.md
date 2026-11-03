@@ -168,6 +168,14 @@ The same TinyBase workspace synchronizes `recordings`, one row per voice note ke
 
 A Recording's transcript is one JSON cell on its row, `transcript`: `{ text, verbatim, title, model, transcribedAt }`, written once by `TaskDO` and never by a client, so it never conflicts. A transcript with text always has a non-empty one-line `title`; a silent note's is `""`, and a transcript stored before titles existed reads as `""`. The phone that holds the audio posts it to `POST /api/recordings/{id}/transcript` (multipart field `audio`, at most 25 MB). The route answers 404 until the row has synced to the server, returns a stored transcript without transcribing again, and answers 502 when transcription or titling fails, storing nothing; the phone retries 404 after 2, 5 and 15 seconds, and anything else when the app returns to the foreground or the sync reconnects. The audio is not stored on the server. Transcription sits behind three ports in `apps/zero-api/src/transcription`: `SpeechToText` (OpenAI `gpt-transcribe`, with the workspace's Project titles as keywords), `Cleanup` (OpenAI `gpt-6-luna`) and `Titler` (OpenAI `gpt-6-luna`, run on the stored text after cleanup), so any of them can be swapped for another provider by writing one adapter.
 
+## Prompt storage
+
+The same TinyBase workspace synchronizes `prompts`, one row per Prompt keyed by its id: `{ title, text, suggestions, createdAt, seenAt, answer }`. `PromptModel` in `@zero/agent-core` owns the rows; the MCP tools and the replica go through it. An agent writes `title`, `text` and `suggestions` (a JSON array of up to 6 strings) once, and they never change. The phone writes `seenAt` when the user first opens the Prompt, and `answer` as one JSON cell, `{ text, answeredAt }`, so the text and its time always merge together. Two phones that answer differently while offline converge by last writer wins, and the losing answer is gone; an agent that read it in between sees the answer change.
+
+Deleting a Prompt removes its row with `delRow`. An answer written offline after the delete recreates only its `answer` cell; that row has no title, does not decode, and stays hidden.
+
+`prompts_wait` runs inside `TaskDO` and listens to the Prompt's row on the same store that client sync merges into, so an answer that syncs in ends the wait at once.
+
 ## Shopping item storage
 
 The same TinyBase workspace synchronizes `shoppingItems`, one row per item keyed by a random id: `{ text, createdAt, sortKey, boughtAt }`. Each field is its own cell, so buying an item on one device and editing or moving it on another both survive the merge. `ShoppingListModel` in `@zero/agent-core` owns the rows; the replica, both clients and the MCP tools go through it.

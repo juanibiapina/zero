@@ -2,8 +2,9 @@
 
 `zero-api` serves a remote MCP server at `https://zero.juanibiapina.dev/mcp`. An
 MCP client such as pi signs in as a Zero user, reads and changes that user's
-Tasks, Projects, Waiting conditions, Afters, and Shopping list items, and reads their
-Medicines with their Doses and Intakes and their Recordings with transcripts.
+Tasks, Projects, Waiting conditions, Afters, and Shopping list items, reads their
+Medicines with their Doses and Intakes and their Recordings with transcripts,
+and asks them questions as Prompts, which they answer in the mobile app.
 Writes land in the user's `TaskDO`, so they reach mobile and web through the
 normal sync.
 
@@ -17,7 +18,7 @@ Add the server to `~/.pi/agent/mcp.json`:
     "zero": {
       "url": "https://zero.juanibiapina.dev/mcp",
       "oauth": { "clientRegistration": "cimd" },
-      "description": "Zero todo workspace: Tasks, Projects, Waiting conditions, Afters, Shopping list, Medicines, Recordings"
+      "description": "Zero todo workspace: Tasks, Projects, Waiting conditions, Afters, Shopping list, Medicines, Recordings, Prompts"
     }
   }
 }
@@ -86,6 +87,11 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
   `destructiveHint`.
 - The route resolves the user's today from the `UserDO` timezone (UTC when
   unset). `tasks_complete` defaults `completedOn` to it.
+- An operation's `run` may be async. `prompts_wait` is: it holds the call open
+  until the user answers or deletes the Prompt, for at most 50 seconds, under
+  pi's default 60-second tool timeout. The agent calls it again to keep
+  waiting. Nothing notifies the user of a new Prompt; they see it when they
+  open the app.
 
 ### Left out on purpose
 

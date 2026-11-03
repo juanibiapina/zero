@@ -67,7 +67,7 @@ export class TaskDomain {
     if (findTodoOperation(name)?.kind !== "read" && await this.isErased()) {
       return { ok: false, error: "Account erased" };
     }
-    const outcome = runTodoOperation({ store: this.store, now: this.now, today, newId: () => crypto.randomUUID() }, name, input);
+    const outcome = await runTodoOperation({ store: this.store, now: this.now, today, newId: () => crypto.randomUUID() }, name, input);
     if (outcome.ok && outcome.changed) await this.save();
     return outcome;
   }

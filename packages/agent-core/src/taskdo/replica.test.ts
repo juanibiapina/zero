@@ -153,6 +153,21 @@ describe("TaskDO replica adapter", () => {
     await replica.close();
   });
 
+  it("publishes Prompts that arrive by sync and saves the user's answer", async () => {
+    const { replica, store, saves } = setup();
+    const seen: number[] = [];
+    replica.subscribe((snapshot) => seen.push(snapshot.prompts.length));
+    store.setRow("prompts", "p", { title: "Which flight?", text: "Which one?", suggestions: "[\"The 9:40\"]", createdAt: NOW });
+    expect(seen.at(-1)).toBe(1);
+
+    await replica.prompts.answer("p", "The 9:40");
+
+    expect(replica.snapshot().prompts[0]).toMatchObject({ seenAt: NOW, answer: { text: "The 9:40" } });
+    expect(saves()).toBe(1);
+    await expect(replica.prompts.answer("p", "Neither")).rejects.toThrow("This prompt already has an answer");
+    await replica.close();
+  });
+
   it("maps canonical conflicts to the established client-facing messages", async () => {
     const { replica } = setup();
     const transaction = replica.tasks.add("Task", null, "missing");

@@ -40,6 +40,8 @@ the connection returns.
 - Upcoming: Tasks with a future date.
 - Projects: Projects grouped by attention, each with its own workspace.
 - Shopping list: things to buy, kept off Home. Under Browse on mobile.
+- Prompts: questions agents ask, answered on mobile. Under Browse, and a
+  button on Home that counts unanswered ones.
 - Medicines: medicine routines and their doses.
 - Night routine: the checklist before bed, on Home from its opening time and
   always under Browse. Going to bed ends the night, closes the page, and locks

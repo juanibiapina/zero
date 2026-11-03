@@ -11,6 +11,7 @@ import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
 import { MedicineModel, type MedicineInput, type Medicine, type Dose, type Intake, type MedicineReceipt, type MedicineRestock } from "../medicines/model";
 import { NightRoutineModel, readNights, type Night, type NightStep } from "../night-routine/model";
+import { PromptModel, type Prompt, type PromptResult } from "../prompts/model";
 import { RecordingModel, type NewRecording, type Recording } from "../recordings/model";
 import { ShoppingListModel, type ShoppingItem, type ShoppingResult } from "../shopping/model";
 
@@ -38,6 +39,7 @@ export type TodoSnapshot = {
   nights: Night[];
   recordings: Recording[];
   shopping: ShoppingItem[];
+  prompts: Prompt[];
 };
 
 export type ProjectEditFields = {
@@ -127,6 +129,11 @@ export type TodoShopping = {
   unbuy: (id: string) => Promise<void>;
 };
 
+export type TodoPrompts = {
+  markSeen: (id: string) => Promise<void>;
+  answer: (id: string, text: string) => Promise<void>;
+};
+
 export type TaskdoReplica = {
   store: MergeableStore;
   tasks: TodoTasks;
@@ -136,6 +143,7 @@ export type TaskdoReplica = {
   nightRoutine: TodoNightRoutine;
   recordings: TodoRecordings;
   shopping: TodoShopping;
+  prompts: TodoPrompts;
   snapshot: () => TodoSnapshot;
   subscribe: (listener: (snapshot: TodoSnapshot) => void) => () => void;
   refresh: () => Promise<void>;
@@ -201,6 +209,7 @@ export function projectTodoData(store: MergeableStore): TodoSnapshot {
     nights: readNights(store),
     recordings: new RecordingModel(store).list(),
     shopping: new ShoppingListModel(store).open(),
+    prompts: new PromptModel(store).list(),
   };
 }
 
@@ -226,6 +235,13 @@ function shoppingValue<T>(result: ShoppingResult<T>): T {
   if (result.conflict === "empty-text") throw new Error("Write something to buy");
   if (result.conflict === "missing-item") throw new Error("Shopping item not found");
   throw new Error("Shopping item id already exists");
+}
+
+function promptValue<T>(result: PromptResult<T>): T {
+  if (result.ok) return result.value;
+  if (result.conflict === "empty-answer") throw new Error("Write an answer");
+  if (result.conflict === "already-answered") throw new Error("This prompt already has an answer");
+  throw new Error("This prompt is no longer here");
 }
 
 function projectError(conflict: string): never {
@@ -263,6 +279,7 @@ export function createTaskdoReplica({
   const nightModel = new NightRoutineModel(store, now, randomId);
   const recordingModel = new RecordingModel(store);
   const shoppingModel = new ShoppingListModel(store, now);
+  const promptModel = new PromptModel(store, now);
   const keys = {
     tasks: ["taskdo", ...queryKeyScope, "tasks"],
     projects: ["taskdo", ...queryKeyScope, "projects"],
@@ -284,7 +301,7 @@ export function createTaskdoReplica({
     for (const listener of listeners) listener(snapshot);
   };
   publish();
-  const storeListeners = ["tasks", "projects", "conditions", "medicines", "doses", "intakes", "nights", "recordings", "shoppingItems"].map((table) => store.addTableListener(table, publish));
+  const storeListeners = ["tasks", "projects", "conditions", "medicines", "doses", "intakes", "nights", "recordings", "shoppingItems", "prompts"].map((table) => store.addTableListener(table, publish));
   const write = async (mutate: () => void) => {
     if (closed) throw new Error("Local account is closed");
     store.transaction(mutate);
@@ -529,6 +546,10 @@ export function createTaskdoReplica({
       move: (id, toIndex) => write(() => { shoppingValue(shoppingModel.move(id, toIndex)); }),
       buy: (id) => write(() => { shoppingValue(shoppingModel.buy(id)); }),
       unbuy: (id) => write(() => { shoppingValue(shoppingModel.unbuy(id)); }),
+    },
+    prompts: {
+      markSeen: (id) => write(() => { promptValue(promptModel.markSeen(id)); }),
+      answer: (id, text) => write(() => { promptValue(promptModel.answer(id, text)); }),
     },
     snapshot: () => snapshot,
     subscribe(listener) {
