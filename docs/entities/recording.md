@@ -26,7 +26,7 @@ transcription and other blocks can build on it afterwards.
 - Stop, Back and the Stop button in the recording notification all save the
   Recording. It keeps recording with the screen off or in another app.
 - A saved Recording never changes, except that its transcript and its title
-  are added once, together.
+  are added once, together, and an agent can mark it handled.
 - The phone that holds the audio sends it to the server for its transcript
   right after saving, and again when the app returns or reconnects if that
   failed. The server passes the audio to the transcription provider and keeps
@@ -67,7 +67,9 @@ transcript, and Delete recording; for a Recording from another phone the menu ad
 
 - Task, Project, Waiting, After, Medicine, Night routine: none, on purpose.
 - Agents: read Recordings with their titles and transcripts over MCP, with the date and
-  time where each was recorded. They cannot delete one.
+  time where each was recorded. They cannot delete one. An agent can mark a
+  Recording handled, and unmark it, so a job that works through new voice notes
+  skips the ones it already handled. The app does not show this mark.
 
 ## Left out on purpose
 
