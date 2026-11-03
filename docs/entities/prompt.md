@@ -14,6 +14,7 @@ An agent working on its own often needs a decision only you can make, and you ar
 - You can always answer in your own words, also when the Prompt has suggestions.
 - A Prompt is new until you open it. Opening it on any device marks it read.
 - A Prompt takes one answer. Answering closes it, and it then shows your answer and cannot be answered again.
+- An agent can mark a Prompt handled once it has acted on the answer, and unmark it. The mark covers the answer it was set on: if the answer changes afterwards, the Prompt is not handled again, and the agent sees the answer it had handled. The app does not show the mark.
 - Only agents delete Prompts. A deleted Prompt leaves every device, answered or not.
 - Nothing notifies you. A Prompt waits in the app until you open it.
 
@@ -28,7 +29,7 @@ Browse lists Prompts, newest first. A new one has a dot and a bold title. Below 
 ## Interactions
 
 - Task, Project, Waiting, After, Medicine, Night routine, Recording, Shopping item: none, on purpose.
-- Agents: ask, wait for the answer, read, list, and delete. They cannot answer.
+- Agents: ask, wait for the answer, read, list, mark handled, and delete. They cannot answer.
 
 ## Left out on purpose
 

@@ -4,7 +4,9 @@ import { z } from "zod";
 
 import { MedicineModel } from "../medicines/model";
 import { projectDisplayStatus } from "../projects/derive";
-import { PromptModel, promptStatus, type Prompt, type PromptResult } from "../prompts/model";
+import {
+  PromptModel, isPromptHandled, promptChangedAfterHandling, promptStatus, type Prompt, type PromptResult,
+} from "../prompts/model";
 import { RecordingModel, recordingDetail, recordingSummary } from "../recordings/model";
 import { ShoppingListModel, type ShoppingResult } from "../shopping/model";
 import { TodoModel, type TodoModelResult } from "../taskdo/model";
@@ -107,10 +109,20 @@ const PROMPTS =
   "A Prompt is a question you put to the user in the Zero app (not an MCP prompt template). The user sees it only when they open it " +
   "in the app; nothing notifies them. They answer with text: one of your suggestions, or their own words, which are always allowed. " +
   "A Prompt without an answer means no decision was made, never consent.";
+const HANDLED =
+  "handledAt is when an agent marked the Prompt handled with prompts_mark_handled, or null; the user does not see it. " +
+  "The mark holds for the answer it was set on: if the answer changes after that, handledAt is null again and changedAfterHandling " +
+  "gives the earlier handledAt and handledAnswer, the answer that was handled (null if it was marked before any answer). " +
+  "changedAfterHandling is null otherwise.";
 const prompts = (ctx: OperationContext) => new PromptModel(ctx.store, ctx.now);
 const promptView = (prompt: Prompt) => {
   const { id, title, text, suggestions, createdAt, answer } = prompt;
-  return { id, title, text, suggestions, createdAt, status: promptStatus(prompt), answer };
+  const changed = promptChangedAfterHandling(prompt);
+  return {
+    id, title, text, suggestions, createdAt, status: promptStatus(prompt), answer,
+    handledAt: isPromptHandled(prompt) ? prompt.handled!.at : null,
+    changedAfterHandling: changed ? { handledAt: changed.at, handledAnswer: changed.answer?.text ?? null } : null,
+  };
 };
 const fromPrompt = (result: PromptResult<Prompt>): OperationOutcome => result.ok
   ? { ok: true, changed: result.changed, value: promptView(result.value) }
@@ -485,7 +497,7 @@ export const todoOperations: readonly TodoOperation[] = [
   define({
     name: "prompts_get",
     title: "Read a Prompt and its answer",
-    description: `${PROMPTS} status is unread, read (opened, not answered), or answered; answer is null until the user answers.`,
+    description: `${PROMPTS} status is unread, read (opened, not answered), or answered; answer is null until the user answers. ${HANDLED}`,
     kind: "read",
     input: z.object({ id: Id }),
     run: (ctx, input) => {
@@ -496,14 +508,29 @@ export const todoOperations: readonly TodoOperation[] = [
   define({
     name: "prompts_list",
     title: "List Prompts",
-    description: `${PROMPTS} Lists Prompts newest first. status open means not answered yet.`,
+    description: `${PROMPTS} Lists Prompts newest first. status open means not answered yet. ${HANDLED}`,
     kind: "read",
-    input: z.object({ status: z.enum(["open", "answered"]).optional() }),
+    input: z.object({
+      status: z.enum(["open", "answered"]).optional(),
+      handled: z.boolean().optional().describe("true lists only handled Prompts, false only those not handled; omit for both"),
+    }),
     run: (ctx, input) => {
-      const all = prompts(ctx).list();
-      const listed = input.status ? all.filter((prompt) => (prompt.answer !== null) === (input.status === "answered")) : all;
+      const listed = prompts(ctx).list()
+        .filter((prompt) => !input.status || (prompt.answer !== null) === (input.status === "answered"))
+        .filter((prompt) => input.handled === undefined || isPromptHandled(prompt) === input.handled);
       return read({ prompts: listed.map(promptView) });
     },
+  }),
+  define({
+    name: "prompts_mark_handled",
+    title: "Mark a Prompt handled",
+    description:
+      `${PROMPTS} Marks a Prompt handled, for an agent that works through answered Prompts and must not act on one twice; ` +
+      "list the rest with prompts_list status answered, handled false. Pass handled false to mark it not handled again. " +
+      `Marking a handled Prompt again keeps its first handledAt. ${HANDLED}`,
+    kind: "write",
+    input: z.object({ id: Id, handled: z.boolean().optional().describe("Defaults to true") }),
+    run: (ctx, input) => fromPrompt(prompts(ctx).setHandled(input.id, input.handled !== false)),
   }),
   define({
     name: "prompts_delete",

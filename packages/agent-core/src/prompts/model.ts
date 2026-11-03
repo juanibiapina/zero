@@ -5,6 +5,10 @@ const MAX_SUGGESTIONS = 6;
 
 export type PromptAnswer = { text: string; answeredAt: string };
 
+// An agent's mark that it handled the Prompt, with the answer it handled
+// (null when it handled the Prompt before any answer).
+export type PromptHandled = { at: string; answer: PromptAnswer | null };
+
 export type Prompt = {
   id: string;
   title: string;
@@ -13,6 +17,7 @@ export type Prompt = {
   createdAt: string;
   seenAt: string | null;
   answer: PromptAnswer | null;
+  handled: PromptHandled | null;
 };
 
 export type PromptInput = { title: string; text: string; suggestions: string[] };
@@ -44,12 +49,26 @@ function validSuggestions(value: unknown): value is string[] {
     && new Set(value).size === value.length;
 }
 
-function readAnswer(cell: unknown): PromptAnswer | null {
-  const value = parse(cell);
+function toAnswer(value: unknown): PromptAnswer | null {
   if (typeof value !== "object" || value === null) return null;
   const { text, answeredAt } = value as Record<string, unknown>;
   return isText(text) && isTime(answeredAt) ? { text, answeredAt } : null;
 }
+
+const readAnswer = (cell: unknown) => toAnswer(parse(cell));
+
+function readHandled(cell: unknown): PromptHandled | null {
+  const value = parse(cell);
+  if (typeof value !== "object" || value === null) return null;
+  const { at, answer } = value as Record<string, unknown>;
+  if (!isTime(at)) return null;
+  if (answer === null) return { at, answer: null };
+  const handledAnswer = toAnswer(answer);
+  return handledAnswer ? { at, answer: handledAnswer } : null;
+}
+
+const sameAnswer = (a: PromptAnswer | null, b: PromptAnswer | null) =>
+  a === null || b === null ? a === b : a.text === b.text && a.answeredAt === b.answeredAt;
 
 function readPrompt(id: string, row: Row): Prompt | null {
   const { title, text, createdAt, seenAt } = row;
@@ -63,11 +82,21 @@ function readPrompt(id: string, row: Row): Prompt | null {
     createdAt,
     seenAt: isTime(seenAt) ? seenAt : null,
     answer: readAnswer(row.answer),
+    handled: readHandled(row.handled),
   };
 }
 
 export const promptStatus = (prompt: Prompt): PromptStatus =>
   prompt.answer ? "answered" : prompt.seenAt ? "read" : "unread";
+
+// A Prompt is handled while its answer is the one the agent handled. An answer
+// that differs, also one that syncs in from another phone, makes it unhandled.
+export const isPromptHandled = (prompt: Prompt): boolean =>
+  prompt.handled !== null && sameAnswer(prompt.handled.answer, prompt.answer);
+
+// The mark an answer change undid, or null.
+export const promptChangedAfterHandling = (prompt: Prompt): PromptHandled | null =>
+  prompt.handled !== null && !isPromptHandled(prompt) ? prompt.handled : null;
 
 const sameContent = (prompt: Prompt, input: PromptInput) =>
   prompt.title === input.title
@@ -123,6 +152,20 @@ export class PromptModel {
       if (!prompt.seenAt) this.store.setCell(TABLE, id, "seenAt", at);
       this.store.setCell(TABLE, id, "answer", JSON.stringify({ text: answer, answeredAt: at }));
     });
+    return { ok: true, changed: true, value: this.get(id)! };
+  }
+
+  // Marking a handled Prompt again keeps its first time. Marking one whose
+  // answer changed after handling pins the mark to the current answer.
+  setHandled(id: string, handled: boolean): PromptResult<Prompt> {
+    const prompt = this.get(id);
+    if (!prompt) return { ok: false, conflict: "missing-prompt" };
+    if (handled ? isPromptHandled(prompt) : prompt.handled === null) return { ok: true, changed: false, value: prompt };
+    if (handled) {
+      this.store.setCell(TABLE, id, "handled", JSON.stringify({ at: this.now().toISOString(), answer: prompt.answer }));
+    } else {
+      this.store.delCell(TABLE, id, "handled");
+    }
     return { ok: true, changed: true, value: this.get(id)! };
   }
 
