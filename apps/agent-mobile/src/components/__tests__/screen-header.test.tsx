@@ -5,6 +5,7 @@ import { TodoDataContextProvider, type TodoData } from '@/lib/todo-data-context'
 import { ScreenHeader } from '../screen-header';
 
 const mockPush = jest.fn();
+const mockReload = jest.fn(async () => {});
 const mockUpdateState = { current: {
   currentlyRunning: { isEmbeddedLaunch: true, isEmergencyLaunch: false, emergencyLaunchReason: null },
   isStartupProcedureRunning: false,
@@ -29,6 +30,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('expo-updates', () => ({
   useUpdates: () => mockUpdateState.current,
+  reloadAsync: () => mockReload(),
 }));
 
 function data(overrides: Partial<TodoData> = {}): TodoData {
@@ -95,32 +97,54 @@ describe('ScreenHeader', () => {
   );
 
   it.each(['connecting', 'syncing', 'synced', 'offline'] as const)(
-    'shows a static pending update while task sync is %s', async (phase) => {
+    'shows a ready update with a tick while task sync is %s', async (phase) => {
       mockUpdateState.current.isUpdatePending = true;
-      const { getByLabelText, queryByTestId } = await renderHeader(data({
+      const { getByLabelText, getByTestId, queryByTestId } = await renderHeader(data({
         signedIn: true,
         sync: { phase, lastSyncedAt: null },
       }), true);
-      expect(getByLabelText('Update ready for next launch')).toBeTruthy();
+      expect(getByLabelText('Update ready')).toBeTruthy();
+      expect(getByTestId('update-ready-tick')).toBeTruthy();
       expect(queryByTestId('sync-status-busy')).toBeNull();
     },
   );
 
-  it('opens update and sync details and keeps them open when the indicator disappears', async () => {
+  it('restarts into a ready update with one tap', async () => {
+    mockReload.mockClear();
     mockUpdateState.current.isUpdatePending = true;
+    const { getByLabelText, queryByLabelText } = await renderHeader(data({ signedIn: true }), true);
+
+    fireEvent.press(getByLabelText('Update ready'));
+
+    await waitFor(() => expect(mockReload).toHaveBeenCalledTimes(1));
+    expect(queryByLabelText('Sync status details')).toBeNull();
+  });
+
+  it('shows details with the reason when the restart fails', async () => {
+    mockReload.mockRejectedValueOnce(new Error('Update could not load'));
+    mockUpdateState.current.isUpdatePending = true;
+    const { getByLabelText, getByText } = await renderHeader(data({ signedIn: true }), true);
+
+    fireEvent.press(getByLabelText('Update ready'));
+
+    await waitFor(() => expect(getByLabelText('Sync status details')).toBeTruthy());
+    expect(getByText('Update could not load')).toBeTruthy();
+    expect(getByText('Restart to update')).toBeTruthy();
+  });
+
+  it('opens sync details and keeps them open when the indicator disappears', async () => {
     const lastSyncedAt = '2026-09-27T11:45:00.000Z';
-    const value = data({ signedIn: true, sync: { phase: 'synced', lastSyncedAt } });
+    const value = data({ durable: false, signedIn: true, sync: { phase: 'synced', lastSyncedAt } });
     const { getByLabelText, getByText, queryByLabelText, rerender } = await renderHeader(value, true);
 
-    fireEvent.press(getByLabelText('Update ready for next launch'));
+    fireEvent.press(getByLabelText('Offline saving unavailable'));
     await waitFor(() => expect(getByLabelText('Sync status details')).toBeTruthy());
     expect(getByText('Last synced')).toBeTruthy();
     expect(getByText(new Date(lastSyncedAt).toLocaleString())).toBeTruthy();
     expect(getByText('Version')).toBeTruthy();
 
-    mockUpdateState.current.isUpdatePending = false;
     await rerender(
-      <TodoDataContextProvider value={value}>
+      <TodoDataContextProvider value={{ ...value, durable: true }}>
         <ScreenHeader title="Home" showSyncStatus />
       </TodoDataContextProvider>,
     );
@@ -137,11 +161,15 @@ describe('ScreenHeader', () => {
       durabilityError: 'Device storage is full',
     }), true);
 
-    expect(queryByLabelText('Update ready for next launch')).toBeNull();
+    expect(queryByLabelText('Update ready')).toBeNull();
     expect(queryByTestId('sync-status-busy')).toBeNull();
     fireEvent.press(getByLabelText('Offline saving unavailable'));
     await waitFor(() => expect(getByText('Device storage is full')).toBeTruthy());
-    expect(getByText('Update ready for next launch')).toBeTruthy();
+    expect(getByText('Update ready')).toBeTruthy();
+
+    mockReload.mockClear();
+    fireEvent.press(getByText('Restart to update'));
+    await waitFor(() => expect(mockReload).toHaveBeenCalledTimes(1));
   });
 
   it('hides a pending update during restart', async () => {

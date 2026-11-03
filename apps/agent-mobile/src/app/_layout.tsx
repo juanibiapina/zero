@@ -18,6 +18,7 @@ import { defaultToastController } from '@zero/agent-core';
 
 import { Toaster } from '@/components/toaster';
 
+import { useUpdateChecksOnForeground } from '@/lib/app-updates';
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/env';
 import { createQueryClient, setupAppStateFocus } from '@/lib/query-client';
 import { useColor } from '@/lib/theme';
@@ -39,6 +40,7 @@ export default function RootLayout() {
   // One client for the app's lifetime; refetch queries on foreground.
   const [queryClient] = useState(createQueryClient);
   useEffect(() => setupAppStateFocus(), []);
+  useUpdateChecksOnForeground();
   return (
     <GestureHandlerRootView
       style={{ flex: 1, backgroundColor }}

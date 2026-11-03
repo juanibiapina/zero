@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
+import { restartIntoUpdate } from '@/lib/app-updates';
 import { useTodoDataContext } from '@/lib/todo-data-context';
 import { useColor } from '@/lib/theme';
 
@@ -24,7 +25,12 @@ const ICONS = {
   warning: Icon.select({ ios: 'exclamationmark.triangle', android: import('@expo/material-symbols/warning.xml') }),
   local: Icon.select({ ios: 'internaldrive', android: import('@expo/material-symbols/download_for_offline.xml') }),
   update: Icon.select({ ios: 'arrow.down.circle', android: import('@expo/material-symbols/download_done.xml') }),
+  ready: Icon.select({ ios: 'checkmark.circle.fill', android: import('@expo/material-symbols/check_circle.xml') }),
 } as const;
+
+function messageOf(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function formatRelative(value: string | Date, now = new Date()): string {
   const date = new Date(value);
@@ -54,17 +60,17 @@ function updateLabel(state: ReturnType<typeof Updates.useUpdates>): string {
       : `Downloading update · ${Math.round(state.downloadProgress * 100)}%`;
   }
   if (state.isChecking || state.isStartupProcedureRunning) return 'Checking for updates';
-  if (state.isUpdatePending) return 'Update ready for next launch';
+  if (state.isUpdatePending) return 'Update ready';
   if (state.checkError || state.downloadError) return 'Could not check for updates';
   return 'Automatic updates on';
 }
 
 function StatusIcon({ kind, updateReady }: { kind: TodoSyncDisplayKind; updateReady: boolean }) {
   const color = useColor(kind === 'warning' ? '--color-danger' : '--color-foreground-secondary');
+  const accent = useColor('--color-accent');
   const iconKind = kind === 'busy' ? 'synced' : kind;
-  const icon = updateReady && iconKind !== 'offline' && iconKind !== 'warning'
-    ? ICONS.update
-    : ICONS[iconKind];
+  const showUpdate = updateReady && iconKind !== 'offline' && iconKind !== 'warning';
+  const icon = showUpdate ? ICONS.update : ICONS[iconKind];
   return (
     <View
       testID="sync-status-icon-frame"
@@ -88,6 +94,18 @@ function StatusIcon({ kind, updateReady }: { kind: TodoSyncDisplayKind; updateRe
       {kind === 'busy' ? (
         <ActivityIndicator testID="sync-status-busy" color={color} />
       ) : null}
+      {showUpdate && kind !== 'busy' ? (
+        <View
+          testID="update-ready-tick"
+          pointerEvents="none"
+          className="absolute items-center justify-center rounded-full bg-background"
+          style={{ right: -3, bottom: -3, width: 13, height: 13 }}
+        >
+          <Host matchContents>
+            <Icon name={ICONS.ready} size={11} color={accent} />
+          </Host>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -96,6 +114,7 @@ export function SyncStatusControl() {
   const data = useTodoDataContext();
   const updates = Updates.useUpdates();
   const [open, setOpen] = useState(false);
+  const [restartError, setRestartError] = useState<string | null>(null);
   const [anchor, setAnchor] = useState({ top: 72, right: 16 });
   const triggerRef = useRef<ViewInstance>(null);
   const { width, height } = useWindowDimensions();
@@ -117,7 +136,8 @@ export function SyncStatusControl() {
     : updating ? 'busy' : sync.kind;
   const showTrigger = sync.kind === 'warning' || (updates.isUpdatePending && !updates.isRestarting);
   const attentionKind = sync.kind === 'warning' ? 'warning' : 'synced';
-  const attentionLabel = sync.kind === 'warning' ? sync.label : 'Update ready for next launch';
+  const attentionLabel = sync.kind === 'warning' ? sync.label : 'Update ready';
+  const canRestart = updates.isUpdatePending && !updates.isRestarting;
   const lastSync = data.sync.lastSyncedAt ? new Date(data.sync.lastSyncedAt) : null;
   const runningUpdate = updates.currentlyRunning.createdAt;
   const updateError = updates.checkError ?? updates.downloadError;
@@ -133,6 +153,18 @@ export function SyncStatusControl() {
     });
   };
 
+  // One tap moves to the downloaded update. If the restart fails, the details
+  // explain why instead of leaving the tap without effect.
+  const restart = async () => {
+    setRestartError(null);
+    try {
+      await restartIntoUpdate();
+    } catch (error) {
+      setRestartError(messageOf(error));
+      showPopover();
+    }
+  };
+
   const popoverWidth = Math.min(340, width - 32);
   const popoverMaxHeight = Math.max(240, height - anchor.top - insets.bottom - 16);
 
@@ -142,9 +174,11 @@ export function SyncStatusControl() {
         ref={triggerRef}
         accessibilityRole="button"
         accessibilityLabel={attentionLabel}
-        accessibilityHint="Shows sync and app update details"
+        accessibilityHint={sync.kind === 'warning'
+          ? 'Shows sync and app update details'
+          : 'Restarts Zero into the new version'}
         android_ripple={{ color: rippleColor, borderless: true, radius: 24 }}
-        onPress={showPopover}
+        onPress={sync.kind === 'warning' ? showPopover : () => void restart()}
         className="h-12 w-12 items-center justify-center overflow-hidden rounded-full"
       >
         <View pointerEvents="none">
@@ -237,6 +271,19 @@ export function SyncStatusControl() {
                 ) : null}
               </View>
 
+              {canRestart ? (
+                <View className="items-end">
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void restart()}
+                    className="h-12 justify-center px-1"
+                  >
+                    <Text className="font-semibold text-accent">Restart to update</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {restartError ? <Text variant="error" selectable>{restartError}</Text> : null}
               {updateError ? <Text variant="error" selectable>{updateError.message}</Text> : null}
             </ScrollView>
           </View>
