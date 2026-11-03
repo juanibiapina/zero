@@ -17,6 +17,9 @@ An agent working on its own often needs a decision only you can make, and you ar
 - An agent can mark a Prompt handled once it has acted on the answer, and unmark it. The mark covers the answer it was set on: if the answer changes afterwards, the Prompt is not handled again, and the agent sees the answer it had handled. The app does not show the mark.
 - Only agents delete Prompts. A deleted Prompt leaves every device, answered or not.
 - Nothing notifies you. A Prompt waits in the app until you open it.
+- Hands-free reads your unanswered Prompts aloud, oldest first, also with the screen off. Volume up takes the first suggestion; on a Prompt with no suggestions it skips the Prompt until the next hands-free session. Volume down records a spoken answer as a Recording, and the transcript of that Recording becomes the answer. A silent recording leaves the Prompt open. Reading a Prompt aloud marks it read.
+- While hands-free runs, the volume keys do not change the volume. A headset's play/pause, next, and previous buttons accept, speak, and repeat the Prompt.
+- Hands-free is a row in Browse. Its screen shows the Prompt being read, what each key does, and an End hands-free button, and a notification with a Stop button stays while it runs. When no Prompts are left, volume down records a plain voice note and volume up ends hands-free.
 
 ## How it looks
 

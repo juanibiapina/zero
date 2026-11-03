@@ -1,5 +1,7 @@
 import type { MergeableStore, Row } from "tinybase";
 
+import { PromptModel } from "../prompts/model";
+
 const TABLE = "recordings";
 
 export type RecordingSource = "widget" | "app";
@@ -19,6 +21,7 @@ export type Recording = {
   durationMs: number;
   source: RecordingSource;
   device: string;
+  promptId?: string;
   transcript: Transcript | null;
   handledAt: string | null;
 };
@@ -60,7 +63,8 @@ function readRecording(id: string, row: Row): Recording | null {
   if (source !== "widget" && source !== "app") return null;
   if (typeof device !== "string") return null;
   const handledAt = typeof row.handledAt === "string" && !Number.isNaN(Date.parse(row.handledAt)) ? row.handledAt : null;
-  return { id, startedAt, timeZone, durationMs, source, device, transcript: readTranscript(row.transcript), handledAt };
+  const promptId = typeof row.promptId === "string" && row.promptId !== "" ? { promptId: row.promptId } : {};
+  return { id, startedAt, timeZone, durationMs, source, device, ...promptId, transcript: readTranscript(row.transcript), handledAt };
 }
 
 export type RecordingView<T> = {
@@ -103,8 +107,8 @@ export class RecordingModel {
   add(recording: NewRecording): void {
     if (this.store.hasRow(TABLE, recording.id)) throw new Error("Recording id already exists");
     if (!readRecording(recording.id, recording)) throw new Error("Invalid recording");
-    const { id, startedAt, timeZone, durationMs, source, device } = recording;
-    this.store.setRow(TABLE, id, { startedAt, timeZone, durationMs, source, device });
+    const { id, startedAt, timeZone, durationMs, source, device, promptId } = recording;
+    this.store.setRow(TABLE, id, { startedAt, timeZone, durationMs, source, device, ...(promptId ? { promptId } : {}) });
   }
 
   get(id: string): Recording | null {
@@ -118,7 +122,10 @@ export class RecordingModel {
     if (!recording) return "missing";
     if (recording.transcript) return "exists";
     const { text, verbatim, title, model, transcribedAt } = transcript;
-    this.store.setCell(TABLE, id, "transcript", JSON.stringify({ text, verbatim, title, model, transcribedAt }));
+    this.store.transaction(() => {
+      this.store.setCell(TABLE, id, "transcript", JSON.stringify({ text, verbatim, title, model, transcribedAt }));
+      if (recording.promptId && text.trim()) new PromptModel(this.store).answer(recording.promptId, text);
+    });
     return "set";
   }
 

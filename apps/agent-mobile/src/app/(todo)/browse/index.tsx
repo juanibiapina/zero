@@ -34,6 +34,11 @@ const DESTINATIONS = [
     icon: Icon.select({ ios: 'questionmark.bubble', android: import('@expo/material-symbols/live_help.xml') }),
   },
   {
+    label: 'Hands-free',
+    href: '/browse/hands-free',
+    icon: Icon.select({ ios: 'headphones', android: import('@expo/material-symbols/headphones.xml') }),
+  },
+  {
     label: 'Medicines',
     href: '/browse/medicines',
     icon: Icon.select({ ios: 'pills', android: import('@expo/material-symbols/medication.xml') }),

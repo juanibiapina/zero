@@ -70,6 +70,9 @@ phone." Tapping one of those Tasks opens it in the Task editor.
   lists its open Tasks, and the Task editor opens the Recording. Deleting the
   Recording keeps its Tasks without the link.
 - Project, Waiting, After, Medicine, Night routine: none, on purpose.
+- Prompt: a Recording made as a hands-free answer belongs to that Prompt. When
+  its transcript is stored, the transcript text answers the Prompt, unless the
+  note is silent or the Prompt already has an answer.
 - Agents: read Recordings with their titles and transcripts over MCP, with the date and
   time where each was recorded, and the Tasks that refer to each one, open and
   completed. They link a Task to a Recording when they create or update it.

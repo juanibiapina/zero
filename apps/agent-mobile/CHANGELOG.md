@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-03: Add hands-free Prompts under Browse. Zero reads your unanswered Prompts aloud, even with the screen off. Press volume up to take the first suggestion, or volume down to speak your answer, which Zero sends once it is transcribed. When none are left, volume down records a voice note. Headset buttons work too: tap to accept, double tap to speak, triple tap to hear the Prompt again.
+
 - 2026-11-03: Add links between Tasks and the voice notes they came from. A Task that an agent made from a voice note shows the note's title in its editor; tap it to open the note in Recordings. Hold a voice note to see its Tasks, and tap one to open it.
 
 - 2026-11-03: Fix updates needing two app restarts. Zero now also looks for updates when you return to it, and when one is ready the update icon on Home shows a small tick: tap it to restart into the new version.
@@ -7,7 +9,6 @@
 - 2026-11-03: Let agents connected to Zero, such as pi, mark a voice note as handled, so a job that works through your new voice notes skips the ones it already handled. The app does not show the mark.
 
 - 2026-11-03: Let agents connected to Zero, such as pi, mark a Prompt as handled once they acted on your answer, so they don't act on it twice. If your answer changes after that, the agent sees the Prompt as not handled again, along with the answer it had acted on. The app does not show the mark.
-
 - 2026-11-03: Add Prompts: questions agents connected to Zero, such as pi, ask you. The new button left of the mic on Home counts the ones you haven't answered and opens the oldest. Answer by tapping a suggestion or typing your own reply; the agent reads it. Browse lists all your Prompts.
 
 - 2026-10-30: Add a View button to the Saved toast after you record a voice note. Tap it to open Recordings, with the new note at the top.

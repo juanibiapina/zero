@@ -183,7 +183,7 @@ back only where the native component does not fit.
 
 ## Native modules
 
-The app has five local Expo modules under `modules/`, all Android-only. Each
+The app has six local Expo modules under `modules/`, all Android-only. Each
 `modules/<name>/index.ts` is that module's only TypeScript binding, and one app
 module owns each binding:
 
@@ -193,6 +193,7 @@ module owns each binding:
 | `home-app-icon` | `src/components/home-app-icon-sync.tsx` | Switches the launcher icon to match the Home task count |
 | `headset-mic` | `src/lib/voice-capture.ts` | Makes a connected Bluetooth headset the communication device so a voice note records from its mic, and reports the input Android actually records from |
 | `screen-lock` | `src/components/night-routine.tsx` | Locks the phone after Going to bed through an accessibility service; opens Accessibility settings when the service is off |
+| `hands-free` | `src/components/hands-free.tsx` | Runs a foreground service with a media session that turns volume keys and headset buttons into hands-free keys, and records spoken answers inside that service |
 | `record-widget` | none (no binding) | Home screen widget that opens `zeroagent:///browse/record?source=widget` |
 
 Android sends a plain `MIC` recording to a classic Bluetooth headset only while
@@ -201,6 +202,14 @@ points the communication device at the speaker. So `useVoiceCapture` calls
 `routeToHeadset()` after `setAudioModeAsync`, and reports Recording only after
 Android's first report of the capturing input. Where the binding cannot report
 (no native module), `record()` returning counts as ready.
+
+Hands-free must keep working with the screen off. Its service starts from the
+open screen with the `mediaPlayback|microphone` types, so recording later from
+the background is allowed; expo-audio's own recording service would have to
+start from the background, which Android can refuse. React Native's Android
+timers pause while the activity is in the background, so `src/lib/hands-free.ts`
+moves only on native events (keys, speech done, recording done) and replica
+changes, never on `setTimeout`.
 
 The medicine proof route, `src/app/e2e-medicine-proof.tsx`, also calls the
 notification binding, because it tests the native code. Tests replace a binding with
