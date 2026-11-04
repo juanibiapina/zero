@@ -174,7 +174,7 @@ export function TaskEditorSheet({
   open, onClose, dismissLabel, draft, onChangeDraft, onSubmit,
   placeholder = 'Task', autoFocus = false, inline = false, inputRef, inputAccessibilityLabel,
   leading, modeSelector, context, editorContent, secondaryContent, trailing, inputEditable = true,
-  scheduleAction, projectAction, overlay, highlights = [], onDismissHighlight,
+  scheduleAction, projectAction, recordingAction, overlay, highlights = [], onDismissHighlight,
   onOpen, onKeyboardWillHide, collapsedFabLabel, holdPosition = false,
 }: {
   open: boolean;
@@ -197,6 +197,7 @@ export function TaskEditorSheet({
   trailing?: ReactNode;
   scheduleAction?: EditorAction;
   projectAction?: EditorAction;
+  recordingAction?: EditorAction;
   overlay?: ReactNode;
   highlights?: TextRange[];
   onDismissHighlight?: (range: TextRange) => void;
@@ -344,7 +345,7 @@ export function TaskEditorSheet({
         </View>
       )}
       {secondaryContent}
-      {scheduleAction || projectAction ? (
+      {scheduleAction || projectAction || recordingAction ? (
         <View className="border-t border-divider">
           {scheduleAction ? (
             <EditorActionRow {...scheduleAction}
@@ -360,6 +361,10 @@ export function TaskEditorSheet({
             <View className="h-px bg-divider" />
           ) : null}
           {projectAction ? <EditorActionRow {...projectAction} /> : null}
+          {recordingAction && (scheduleAction || projectAction) ? (
+            <View className="h-px bg-divider" />
+          ) : null}
+          {recordingAction ? <EditorActionRow {...recordingAction} /> : null}
         </View>
       ) : null}
       </SheetScrollView>

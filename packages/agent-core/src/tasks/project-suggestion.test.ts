@@ -207,7 +207,7 @@ describe("projectSuggestionCandidates", () => {
     id, title: id, icon: "📁", description: null, state: "in-play", createdAt: "2026-01-01T00:00:00.000Z", ...over,
   });
   const task = (text: string, projectId: string | null, createdAt: string, completedAt: string | null = null): Task => ({
-    id: text, text, showUpDate: null, recurrence: null, recurrenceDate: null, createdAt, completedAt, parent: projectParent(projectId), sortKey: null,
+    id: text, text, showUpDate: null, recurrence: null, recurrenceDate: null, createdAt, completedAt, parent: projectParent(projectId), recordingId: null, sortKey: null,
   });
 
   it("offers open Projects, newest first, with up to five newest open Task titles", () => {

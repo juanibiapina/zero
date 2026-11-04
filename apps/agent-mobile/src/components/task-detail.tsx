@@ -27,7 +27,10 @@ import { Sheet, SheetSectionList } from '@/components/ui/sheet';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
+import { recordingLabel } from '@/lib/recording-label';
 import { useColor } from '@/lib/theme';
+
+const RECORDING_ICON = '🎙️';
 
 const OPEN_PROJECT_ICON = Icon.select({
   ios: 'arrow.up.right',
@@ -414,6 +417,7 @@ export function useTaskDetail({
   currentProjectId,
   onAddWaiting,
   onError,
+  onOpenRecording,
   waitForPersist = false,
 }: {
   replica: TaskdoReplica;
@@ -428,6 +432,9 @@ export function useTaskDetail({
   onAddWaiting: (project: Project) => void;
   // Each screen passes its own write-error setter (clears on null).
   onError: (message: string | null) => void;
+  // Shows a Recording without leaving the screen. Without it, the editor opens
+  // the Recordings screen on that Recording.
+  onOpenRecording?: (recordingId: string) => void;
   waitForPersist?: boolean;
 }): TaskDetail {
   const api = replica.tasks;
@@ -452,6 +459,9 @@ export function useTaskDetail({
   const selectedMedicineId = selected ? taskMedicineId(selected) : null;
   const selectedMedicine = selectedMedicineId
     ? (replica.snapshot().medicines.find((m) => m.id === selectedMedicineId) ?? null)
+    : null;
+  const selectedRecording = selected?.recordingId
+    ? (replica.snapshot().recordings.find((r) => r.id === selected.recordingId) ?? null)
     : null;
   const restockMedicine = restocking
     ? (replica.snapshot().medicines.find((m) => m.id === restocking.medicineId) ?? null)
@@ -525,6 +535,14 @@ export function useTaskDetail({
     setSelectedId(null);
     router.navigate(`/browse/medicines/${selectedMedicine.id}`, { withAnchor: true });
   }, [commitDraft, selectedMedicine]);
+
+  const openSelectedRecording = useCallback(() => {
+    if (!selectedRecording || !commitDraft()) return;
+    closingDetailRef.current = true;
+    setSelectedId(null);
+    if (onOpenRecording) onOpenRecording(selectedRecording.id);
+    else router.navigate({ pathname: '/browse/recordings', params: { recording: selectedRecording.id } }, { withAnchor: true });
+  }, [commitDraft, onOpenRecording, selectedRecording]);
 
   const complete = useCallback(
     (item: Task) => {
@@ -678,6 +696,18 @@ export function useTaskDetail({
                         testID: 'task-project-open',
                       }
                     : undefined,
+              }
+            : undefined
+        }
+        recordingAction={
+          selectedRecording
+            ? {
+                label: recordingLabel(selectedRecording),
+                icon: RECORDING_ICON,
+                accessibilityLabel: `Open recording ${recordingLabel(selectedRecording)}`,
+                active: true,
+                onPress: openSelectedRecording,
+                testID: 'task-recording',
               }
             : undefined
         }

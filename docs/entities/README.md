@@ -55,13 +55,13 @@ Read a row as "this block, when it meets that one".
 
 | | Task | Project | Waiting | After | Medicine | Night routine | Recording | Shopping item | Prompt |
 |---|---|---|---|---|---|---|---|---|---|
-| **Task** | Shares one manual order | Belongs to at most one. An arrived date makes it Active, a future date makes it Waiting until that day, no date keeps the Task off Home | Completing a Project Task offers to add what the Project now waits for | None. After never hides dated work | A restock Task belongs to it, shows 💊, and asks how many pills you got when completed | None | None | None | None |
+| **Task** | Shares one manual order | Belongs to at most one. An arrived date makes it Active, a future date makes it Waiting until that day, no date keeps the Task off Home | Completing a Project Task offers to add what the Project now waits for | None. After never hides dated work | A restock Task belongs to it, shows 💊, and asks how many pills you got when completed | None | Refers to at most one, and opens it from the editor | None | None |
 | **Project** | Deleting it deletes its Tasks | After another Project, through After | Owns any number. One open condition makes it Waiting | Completing it releases the Projects that wait for it. Undo restores them | None | None | None | None | None |
 | **Waiting** | None | Belongs to one Project and goes when it goes | Each resolves on its own | Outranks After | None | None | None | None | None |
 | **After** | None | Points from one Project to another. No cycles | Ranks below Waiting | Several on one Project must all resolve | None | None | None | None | None |
 | **Medicine** | A low supply adds one restock Task. Deleting it leaves its Tasks loose | None | None | None | Each Medicine has its own Doses, or its own Intakes when taken as needed | None | None | None | None |
 | **Night routine** | None | None | None | None | None | One per user. Each night is a copy of the one before | None | None | None |
-| **Recording** | None | None | None | None | None | None | Each stands alone. Only its transcript is added after saving | None | None |
+| **Recording** | Lists the open Tasks that refer to it. Deleting it keeps them without the link | None | None | None | None | None | Each stands alone. Only its transcript is added after saving | None | None |
 | **Shopping item** | None | None | None | None | None | None | None | Shares one manual order | None |
 | **Prompt** | None | None | None | None | None | None | None | None | Each stands alone. Only opening and answering it change it |
 
@@ -74,13 +74,13 @@ Places and agents:
 
 | | Home | Upcoming | Projects | Medicines | Agents |
 |---|---|---|---|---|---|
-| **Task** | Loose Tasks without a date or with an arrived date, and Project Tasks with an arrived date | Tasks with a future date | Inside its Project | | List, add, edit, complete, reopen, set repeats |
+| **Task** | Loose Tasks without a date or with an arrived date, and Project Tasks with an arrived date | Tasks with a future date | Inside its Project | | List, add, edit, complete, reopen, set repeats, link to a Recording |
 | **Project** | Next and Waiting Projects, when Home has no Tasks | | Grouped by attention, each with its own workspace | | List, add, edit, change state, delete |
 | **Waiting** | | | In its Project | | List, add, resolve, delete |
 | **After** | | | In its Project, and as its own Projects section | | List, add, delete |
 | **Medicine** | Its restock Tasks, as loose Tasks | | | Its own list and detail | List only |
 | **Night routine** | A 🌙 button from its opening time | | | | None |
-| **Recording** | A mic button that starts one | | | | List and read transcripts |
+| **Recording** | A mic button that starts one | | | | List and read transcripts with their Tasks |
 | **Shopping item** | The Shopping option in the add drawer | | | | List, add, edit, move, buy, put back |
 | **Prompt** | A button that counts unanswered Prompts | | | | Ask, wait, read, list, delete |
 

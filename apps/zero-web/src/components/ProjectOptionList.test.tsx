@@ -15,7 +15,7 @@ const projects = [
 const tasks: Task[] = [{
   id: "work", text: "Work", parent: projectParent("active"), showUpDate: "2000-01-01",
   recurrence: null, recurrenceDate: null,
-  completedAt: null, createdAt: "2026-01-01", sortKey: null,
+  completedAt: null, createdAt: "2026-01-01", recordingId: null, sortKey: null,
 }];
 const conditions: WaitingCondition[] = [
   { id: "wait", projectId: "waiting", kind: "free-text", text: "Reply", refId: null,

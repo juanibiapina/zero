@@ -27,6 +27,7 @@ const task = (over: Partial<Task> = {}): Task => ({
   createdAt: "2026-09-26T10:00:00.000Z",
   completedAt: null,
   parent: null,
+  recordingId: null,
   sortKey: "a0",
   ...over,
 });

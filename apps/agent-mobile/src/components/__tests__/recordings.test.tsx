@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { defaultToastController, RecordingModel, type Recording } from '@zero/agent-core';
+import { defaultToastController, RecordingModel, TodoModel, type Recording } from '@zero/agent-core';
 import { Stack } from 'expo-router';
 import { createMergeableStore } from 'tinybase';
 import { act, fireEvent, renderRouter, waitFor } from 'expo-router/testing-library';
@@ -391,6 +391,24 @@ describe('Recordings', () => {
     await fireEvent.press(screen.getByLabelText('Delete'));
     await waitFor(() => expect(saved(data)).toEqual([]));
     expect(mockAudio.player!.playing).toBe(false);
+  });
+
+  it('jumps from a Task to the voice note it came from and back', async () => {
+    const { screen, result, data } = await open('/', [newYork]);
+    await transcribe(data, 'n', 'Buy grout for the bathroom tiles.', 'Buy grout');
+    await act(async () => {
+      new TodoModel({ store: data.replica!.store }).createTask({ id: 't1', text: 'Buy grout', recordingId: 'n' });
+    });
+
+    await fireEvent.press(screen.getByLabelText('Edit "Buy grout"'));
+    await fireEvent.press(screen.getByLabelText('Open recording Buy grout'));
+    await waitFor(() => expect(result.getPathname()).toBe('/browse/recordings'));
+    expect(screen.getByText('Buy grout for the bathroom tiles.')).toBeTruthy();
+
+    await fireEvent.press(screen.getByLabelText('Open task Buy grout'));
+    await waitFor(() => expect(screen.queryByText('Buy grout for the bathroom tiles.')).toBeNull());
+    expect(screen.getAllByLabelText('Open recording Buy grout').length).toBeGreaterThan(0);
+    expect(result.getPathname()).toBe('/browse/recordings');
   });
 
   it('opens from Browse', async () => {

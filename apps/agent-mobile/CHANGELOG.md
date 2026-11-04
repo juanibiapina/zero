@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-03: Add links between Tasks and the voice notes they came from. A Task that an agent made from a voice note shows the note's title in its editor; tap it to open the note in Recordings. Hold a voice note to see its Tasks, and tap one to open it.
+
 - 2026-11-03: Fix updates needing two app restarts. Zero now also looks for updates when you return to it, and when one is ready the update icon on Home shows a small tick: tap it to restart into the new version.
 
 - 2026-11-03: Let agents connected to Zero, such as pi, mark a voice note as handled, so a job that works through your new voice notes skips the ones it already handled. The app does not show the mark.

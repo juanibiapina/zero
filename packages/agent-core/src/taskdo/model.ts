@@ -2,6 +2,7 @@ import { advance, validateRecurrence, type Recurrence } from "@zeroapps/recurren
 import { generateKeyBetween } from "fractional-indexing";
 import type { MergeableStore, Row } from "tinybase";
 
+import { RecordingModel } from "../recordings/model";
 import { unreachableParent } from "../tasks/parent";
 import { parentCellValue, readParentCell } from "./task-parent-cell";
 import type {
@@ -38,6 +39,7 @@ export type TaskInput = {
   text: string;
   showUpDate?: string | null;
   parent?: TaskParent | null;
+  recordingId?: string | null;
   recurrence?: Recurrence | null;
   recurrenceDate?: string | null;
   completedAt?: string | null;
@@ -127,8 +129,26 @@ export class TodoModel {
       recurrence: parseRecurrence(row.recurrence),
       recurrenceDate: typeof row.recurrenceDate === "string" ? row.recurrenceDate : null,
       parent: this.readParent(row),
+      recordingId: typeof row.recordingId === "string" && this.recordingExists(row.recordingId) ? row.recordingId : null,
       sortKey: typeof row.sortKey === "string" ? row.sortKey : null,
     };
+  }
+
+  // Every Task that refers to a Recording, open and completed, oldest first.
+  tasksForRecording(recordingId: string): Task[] {
+    return Object.entries(this.store.getTable("tasks"))
+      .filter(([, row]) => row.recordingId === recordingId)
+      .flatMap(([id]) => this.getTask(id) ?? [])
+      .filter((task) => task.recordingId === recordingId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  private recordingExists(id: string): boolean {
+    return new RecordingModel(this.store).get(id) !== null;
+  }
+
+  private recordingMissing(id: string | null | undefined): boolean {
+    return id != null && !this.recordingExists(id);
   }
 
   private medicineExists(id: string): boolean {
@@ -392,12 +412,13 @@ export class TodoModel {
     return success(undefined, true);
   }
 
-  createTask(input: TaskInput): TodoModelResult<Task, "id-conflict" | "missing-project"> {
+  createTask(input: TaskInput): TodoModelResult<Task, "id-conflict" | "missing-project" | "missing-recording"> {
     if (this.store.hasRow("tasks", input.id)) {
       const existing = this.getTask(input.id);
       return existing ? success(existing, false) : conflict("id-conflict");
     }
     if (this.parentMissing(input.parent)) return conflict("missing-project");
+    if (this.recordingMissing(input.recordingId)) return conflict("missing-recording");
     const keys = Object.values(this.store.getTable("tasks"))
       .flatMap((row) => typeof row.sortKey === "string" ? [row.sortKey] : []).sort().reverse();
     let sortKey = TodoModel.orderKeyBetween(null, null);
@@ -412,6 +433,7 @@ export class TodoModel {
       sortKey: input.sortKey ?? sortKey,
       ...(showUpDate ? { showUpDate } : {}),
       ...(input.parent ? { parent: parentCellValue(input.parent)! } : {}),
+      ...(input.recordingId ? { recordingId: input.recordingId } : {}),
       ...(input.recurrence ? { recurrence: JSON.stringify(input.recurrence) } : {}),
       ...(recurrenceDate ? { recurrenceDate } : {}),
       ...(input.completedAt ? { completedAt: input.completedAt } : {}),
@@ -419,9 +441,11 @@ export class TodoModel {
     return success(this.getTask(input.id)!, true);
   }
 
-  restoreTask(task: Task): TodoModelResult<Task, "id-conflict" | "missing-project"> {
+  restoreTask(task: Task): TodoModelResult<Task, "id-conflict" | "missing-project" | "missing-recording"> {
     if (this.parentMissing(task.parent)) return conflict("missing-project");
-    if (!this.store.hasRow("tasks", task.id)) return this.createTask({ ...task, completedAt: null });
+    if (!this.store.hasRow("tasks", task.id)) {
+      return this.createTask({ ...task, recordingId: this.recordingMissing(task.recordingId) ? null : task.recordingId, completedAt: null });
+    }
     const existing = this.getTask(task.id);
     if (!existing || !existing.completedAt) return conflict("id-conflict");
     this.store.transaction(() => {
@@ -432,9 +456,10 @@ export class TodoModel {
     return success(this.getTask(task.id)!, true);
   }
 
-  patchTask(id: string, fields: { text?: string; showUpDate?: string | null; sortKey?: string; parent?: TaskParent | null }): TodoModelResult<Task, "missing-task" | "missing-project"> {
+  patchTask(id: string, fields: { text?: string; showUpDate?: string | null; sortKey?: string; parent?: TaskParent | null; recordingId?: string | null }): TodoModelResult<Task, "missing-task" | "missing-project" | "missing-recording"> {
     if (!this.getTask(id)) return conflict("missing-task");
     if (this.parentMissing(fields.parent)) return conflict("missing-project");
+    if (this.recordingMissing(fields.recordingId)) return conflict("missing-recording");
     this.store.transaction(() => {
       for (const [key, value] of Object.entries(fields)) {
         if (key === "parent") this.writeParent(id, value as TaskParent | null);

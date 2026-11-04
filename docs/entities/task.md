@@ -50,12 +50,16 @@ turns it into the schedule. Tapping the phrase keeps the words as plain text.
   picker and opens the Medicine. Completing it first asks how many pills you
   got; saving adds them and completes the Task, and Undo takes both back.
   Deleting the Medicine leaves the Task loose.
+- Recording: a Task can refer to the Recording it came from, usually because
+  an agent made it from a voice note. The editor shows the Recording's title
+  under the Project, and tapping it opens the Recording. A Task refers to at
+  most one Recording, and the link goes away when the Recording is deleted.
 - Home: shows the Tasks that are open and available today.
 - Upcoming: shows open Tasks with a future date, grouped by day.
 - Quick add: while you type a new Task, Zero suggests the Project it most likely
   belongs to. Choosing a Project or "No project" by hand ends the suggestion.
-- Agents: list, add, edit, complete, reopen, and set repeats. Completing a
-  restock Task over MCP does not add pills.
+- Agents: list, add, edit, complete, reopen, set repeats, and link a Task to
+  its Recording. Completing a restock Task over MCP does not add pills.
 
 ## Left out on purpose
 

@@ -33,6 +33,7 @@ import { useTodoDataContext } from '@/lib/todo-data-context';
 export type QuickAddSurface =
   | { kind: 'home' }
   | { kind: 'upcoming' }
+  | { kind: 'recordings' }
   | { kind: 'projects' }
   | { kind: 'project'; project: Project | null }
   | { kind: 'night-routine' }
@@ -104,7 +105,8 @@ export function useQuickAdd({
     : surfaceProject;
   const contextProjectId = contextProject?.id ?? null;
   const modes = modesFor(surface.kind, contextProject);
-  const showFab = surface.kind !== 'upcoming' && (surface.kind !== 'project' || surfaceProject != null);
+  const showFab = surface.kind !== 'upcoming' && surface.kind !== 'recordings'
+    && (surface.kind !== 'project' || surfaceProject != null);
 
   const [taskDraft, setTaskDraft] = useState(() => TaskDraft.create());
   const [drafts, setDrafts] = useState<Record<Exclude<AddMode, 'task'>, string>>({

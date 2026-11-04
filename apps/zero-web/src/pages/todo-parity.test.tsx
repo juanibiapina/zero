@@ -14,7 +14,7 @@ import { ProjectsPage } from "./ProjectsPage";
 import { ProjectDetailPage } from "./ProjectDetailPage";
 
 const project = (id: string, title: string, state: Project["state"] = "in-play"): Project => ({ id, title, state, icon: "🏠", description: null, createdAt: "2026-09-01T12:00:00Z" });
-const task = (id: string, text: string, fields: Partial<Task> = {}): Task => ({ id, text, parent: null, showUpDate: null, recurrence: null, recurrenceDate: null, completedAt: null, sortKey: "a1", createdAt: "2026-09-01T12:00:00Z", ...fields });
+const task = (id: string, text: string, fields: Partial<Task> = {}): Task => ({ id, text, parent: null, showUpDate: null, recurrence: null, recurrenceDate: null, completedAt: null, recordingId: null, sortKey: "a1", createdAt: "2026-09-01T12:00:00Z", ...fields });
 const opened: TaskdoReplica[] = [];
 function open(path: string, seed: InMemoryTodoSeed = {}) {
   const todo = createInMemoryTodoData(seed);

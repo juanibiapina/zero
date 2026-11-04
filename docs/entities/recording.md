@@ -60,16 +60,22 @@ waiting for its transcript on the phone that holds it says "Transcribing…",
 and a silent one says "No speech". Tapping one plays it, and tapping again
 pauses. A Recording made on another phone shows "On Pixel 7" and does not
 play. Holding one opens a menu with its title, its date and time, its whole
-transcript, and Delete recording; for a Recording from another phone the menu adds
-"Recorded on Pixel 7. Its audio isn't on this phone."
+transcript, the open Tasks made from it, and Delete recording; for a Recording
+from another phone the menu adds "Recorded on Pixel 7. Its audio isn't on this
+phone." Tapping one of those Tasks opens it in the Task editor.
 
 ## Interactions
 
-- Task, Project, Waiting, After, Medicine, Night routine: none, on purpose.
+- Task: a Task can refer to the Recording it came from. Holding the Recording
+  lists its open Tasks, and the Task editor opens the Recording. Deleting the
+  Recording keeps its Tasks without the link.
+- Project, Waiting, After, Medicine, Night routine: none, on purpose.
 - Agents: read Recordings with their titles and transcripts over MCP, with the date and
-  time where each was recorded. They cannot delete one. An agent can mark a
-  Recording handled, and unmark it, so a job that works through new voice notes
-  skips the ones it already handled. The app does not show this mark.
+  time where each was recorded, and the Tasks that refer to each one, open and
+  completed. They link a Task to a Recording when they create or update it.
+  They cannot delete a Recording. An agent can mark a Recording handled, and
+  unmark it, so a job that works through new voice notes skips the ones it
+  already handled. The app does not show this mark.
 
 ## Left out on purpose
 
@@ -80,3 +86,4 @@ transcript, and Delete recording; for a Recording from another phone the menu ad
 ## Ideas
 
 - Upload the audio and stream it on other devices.
+- Add a Task from a held Recording, already linked to it.

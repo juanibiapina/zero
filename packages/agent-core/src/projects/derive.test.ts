@@ -69,6 +69,7 @@ function task(over: Partial<Task> & { projectId?: string } = {}): Task {
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
     parent: over.parent !== undefined ? over.parent : projectParent(over.projectId ?? "p"),
+    recordingId: over.recordingId ?? null,
     sortKey: over.sortKey ?? null,
   };
 }
