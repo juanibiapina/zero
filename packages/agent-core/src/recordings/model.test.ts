@@ -1,6 +1,7 @@
 import { createMergeableStore, type MergeableContent } from "tinybase";
 import { describe, expect, it } from "vitest";
 
+import { PromptModel } from "../prompts/model";
 import { RecordingModel, type NewRecording, type Recording, type Transcript } from "./model";
 
 const recording = (overrides: Partial<NewRecording> = {}): NewRecording => ({
@@ -121,6 +122,57 @@ describe("Handled", () => {
     new RecordingModel(server).setHandled("r1", at);
     phone.merge(server);
     expect(new RecordingModel(phone).list()).toEqual([listed({ transcript, handledAt: at })]);
+  });
+});
+
+describe("Spoken answers", () => {
+  const question = { title: "Which flight?", text: "Two flights fit.", suggestions: ["The 9:40"] };
+
+  const setup = () => {
+    const store = createMergeableStore();
+    const prompts = new PromptModel(store);
+    prompts.create("p1", question);
+    return { recordings: new RecordingModel(store), prompts };
+  };
+
+  it("answers the Prompt a Recording was spoken for with its transcript", () => {
+    const { recordings, prompts } = setup();
+    recordings.add(recording({ promptId: "p1" }));
+    expect(recordings.get("r1")).toEqual(listed({ promptId: "p1" }));
+    expect(prompts.get("p1")?.answer).toBeNull();
+    expect(recordings.setTranscript("r1", transcript)).toBe("set");
+    expect(prompts.get("p1")?.answer?.text).toBe("Call Ana on Friday.");
+  });
+
+  it("leaves the Prompt open when the Recording has no speech", () => {
+    const { recordings, prompts } = setup();
+    recordings.add(recording({ promptId: "p1" }));
+    recordings.setTranscript("r1", { ...transcript, text: "", verbatim: "", title: "" });
+    expect(prompts.get("p1")?.answer).toBeNull();
+  });
+
+  it("keeps an answer given before the transcript arrived", () => {
+    const { recordings, prompts } = setup();
+    recordings.add(recording({ promptId: "p1" }));
+    prompts.answer("p1", "The 9:40");
+    expect(recordings.setTranscript("r1", transcript)).toBe("set");
+    expect(prompts.get("p1")?.answer?.text).toBe("The 9:40");
+  });
+
+  it("stores the transcript when the Prompt was deleted", () => {
+    const { recordings, prompts } = setup();
+    recordings.add(recording({ promptId: "p1" }));
+    prompts.delete("p1");
+    expect(recordings.setTranscript("r1", transcript)).toBe("set");
+    expect(recordings.get("r1")?.transcript).toEqual(transcript);
+  });
+
+  it("answers nothing for a Recording spoken for no Prompt", () => {
+    const { recordings, prompts } = setup();
+    recordings.add(recording());
+    recordings.setTranscript("r1", transcript);
+    expect(recordings.get("r1")).toEqual(listed({ transcript }));
+    expect(prompts.get("p1")?.answer).toBeNull();
   });
 });
 
