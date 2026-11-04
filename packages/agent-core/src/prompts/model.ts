@@ -9,6 +9,10 @@ export type PromptAnswer = { text: string; answeredAt: string };
 // (null when it handled the Prompt before any answer).
 export type PromptHandled = { at: string; answer: PromptAnswer | null };
 
+export type PromptComment = { id: string; quote: string; text: string; createdAt: string };
+
+export type PromptCommentInput = { quote: string; text: string };
+
 export type Prompt = {
   id: string;
   title: string;
@@ -18,13 +22,23 @@ export type Prompt = {
   seenAt: string | null;
   answer: PromptAnswer | null;
   handled: PromptHandled | null;
+  comments: PromptComment[];
 };
 
 export type PromptInput = { title: string; text: string; suggestions: string[] };
 
 export type PromptStatus = "unread" | "read" | "answered";
 
-export type PromptConflict = "id-conflict" | "invalid-prompt" | "missing-prompt" | "empty-answer" | "already-answered";
+export type PromptConflict =
+  | "id-conflict"
+  | "invalid-prompt"
+  | "missing-prompt"
+  | "empty-answer"
+  | "already-answered"
+  | "empty-comment"
+  | "missing-comment";
+
+const COMMENT = "comment:";
 
 export type PromptResult<T> =
   | { ok: true; changed: boolean; value: T }
@@ -70,6 +84,20 @@ function readHandled(cell: unknown): PromptHandled | null {
 const sameAnswer = (a: PromptAnswer | null, b: PromptAnswer | null) =>
   a === null || b === null ? a === b : a.text === b.text && a.answeredAt === b.answeredAt;
 
+function readComments(row: Row): PromptComment[] {
+  return Object.keys(row)
+    .filter((cell) => cell.startsWith(COMMENT))
+    .flatMap((cell) => {
+      const value = parse(row[cell]);
+      if (typeof value !== "object" || value === null) return [];
+      const { quote, text, createdAt } = value as Record<string, unknown>;
+      return typeof quote === "string" && isText(text) && isTime(createdAt)
+        ? [{ id: cell.slice(COMMENT.length), quote, text, createdAt }]
+        : [];
+    })
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id));
+}
+
 function readPrompt(id: string, row: Row): Prompt | null {
   const { title, text, createdAt, seenAt } = row;
   const suggestions = parse(row.suggestions);
@@ -83,6 +111,7 @@ function readPrompt(id: string, row: Row): Prompt | null {
     seenAt: isTime(seenAt) ? seenAt : null,
     answer: readAnswer(row.answer),
     handled: readHandled(row.handled),
+    comments: readComments(row),
   };
 }
 
@@ -167,6 +196,30 @@ export class PromptModel {
       this.store.delCell(TABLE, id, "handled");
     }
     return { ok: true, changed: true, value: this.get(id)! };
+  }
+
+  // A comment is one cell on the Prompt's row, so comments from several devices
+  // merge, and deleting the Prompt removes them with it.
+  comment(id: string, commentId: string, input: PromptCommentInput): PromptResult<PromptComment> {
+    const text = input.text.trim();
+    if (!text) return { ok: false, conflict: "empty-comment" };
+    const prompt = this.get(id);
+    if (!prompt) return { ok: false, conflict: "missing-prompt" };
+    if (prompt.answer) return { ok: false, conflict: "already-answered" };
+    const existing = prompt.comments.find((comment) => comment.id === commentId);
+    if (existing) return { ok: true, changed: false, value: existing };
+    const comment = { quote: input.quote.trim(), text, createdAt: this.now().toISOString() };
+    this.store.setCell(TABLE, id, COMMENT + commentId, JSON.stringify(comment));
+    return { ok: true, changed: true, value: { id: commentId, ...comment } };
+  }
+
+  removeComment(id: string, commentId: string): PromptResult<null> {
+    const prompt = this.get(id);
+    if (!prompt) return { ok: false, conflict: "missing-prompt" };
+    if (prompt.answer) return { ok: false, conflict: "already-answered" };
+    if (!this.store.hasCell(TABLE, id, COMMENT + commentId)) return { ok: false, conflict: "missing-comment" };
+    this.store.delCell(TABLE, id, COMMENT + commentId);
+    return { ok: true, changed: true, value: null };
   }
 
   delete(id: string): PromptResult<null> {

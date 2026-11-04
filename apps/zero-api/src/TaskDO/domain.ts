@@ -18,6 +18,8 @@ import { findTodoOperation, runTodoOperation, type OperationOutcome } from "@zer
 import type { Recurrence } from "@zeroapps/recurrence";
 import type { MergeableStore } from "tinybase";
 
+import { checkMermaid } from "../prompts/mermaid";
+
 export type AddProjectAfterResult =
   | { relationship: ProjectAfter }
   | { conflict: ProjectAfterConflict };
@@ -67,7 +69,11 @@ export class TaskDomain {
     if (findTodoOperation(name)?.kind !== "read" && await this.isErased()) {
       return { ok: false, error: "Account erased" };
     }
-    const outcome = await runTodoOperation({ store: this.store, now: this.now, today, newId: () => crypto.randomUUID() }, name, input);
+    const outcome = await runTodoOperation(
+      { store: this.store, now: this.now, today, newId: () => crypto.randomUUID(), checkDiagram: checkMermaid },
+      name,
+      input,
+    );
     if (outcome.ok && outcome.changed) await this.save();
     return outcome;
   }

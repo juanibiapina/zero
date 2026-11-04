@@ -180,6 +180,10 @@ Deleting a Prompt removes its row with `delRow`. An answer written offline after
 
 `prompts_wait` runs inside `TaskDO` and listens to the Prompt's row on the same store that client sync merges into, so an answer that syncs in ends the wait at once.
 
+The user's comments live on the same row, one cell per comment named `comment:<id>`, each a JSON value `{ quote, text, createdAt }`. One cell per comment lets comments written on two devices merge, and `delRow` takes them with the Prompt; a comment written offline after the delete leaves a row with no title, which stays hidden. `quote` is the passage the user picked, as the app showed it: the text of a tapped block or of selected words with whitespace collapsed, or a diagram's Mermaid source, at most 300 characters. The model refuses new comments and removals once the Prompt has an answer.
+
+`text` is Markdown. The phone renders it in a WebView (an Expo DOM component) with `marked`, `DOMPurify`, and Mermaid. `prompts_create` finds every code block fenced as `mermaid`, with the same `marked` lexer, and checks it with Mermaid's own parser inside `TaskDO`, so the phone never receives a diagram it cannot draw. Mermaid needs DOMPurify, which needs a browser window, so the Worker build aliases `dompurify` to a stand-in that only parsing uses (`apps/zero-api/src/prompts/dompurify-parse-only.ts`). Mermaid loads on the first Prompt with a diagram and adds about 2 MB gzipped, in lazy chunks, to the Worker upload.
+
 ## Shopping item storage
 
 The same TinyBase workspace synchronizes `shoppingItems`, one row per item keyed by a random id: `{ text, createdAt, sortKey, boughtAt }`. Each field is its own cell, so buying an item on one device and editing or moving it on another both survive the merge. `ShoppingListModel` in `@zero/agent-core` owns the rows; the replica, both clients and the MCP tools go through it.

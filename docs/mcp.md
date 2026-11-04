@@ -97,6 +97,11 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
   `prompts_list` with `handled: false` lists the rest. The mark holds only for
   the answer it was set on: when the answer changes, the Prompt reads as not
   handled, with `changedAfterHandling` naming the answer that was handled.
+- `prompts_create` is async too: it checks every Mermaid diagram in the
+  Prompt's Markdown through `OperationContext.checkDiagram`, which `TaskDO`
+  backs with Mermaid's parser, and refuses the Prompt with `invalid-diagram`
+  and the parser's message. The Prompt tools return the user's `comments`
+  next to the `answer`.
 
 ### Left out on purpose
 

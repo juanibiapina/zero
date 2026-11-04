@@ -23,7 +23,7 @@ describe("PromptModel", () => {
   it("creates an unread Prompt with trimmed text and suggestions", () => {
     const { model } = workspace();
     const prompt = value(model.create("p1", { title: " Which flight? ", text: question.text, suggestions: [" The 9:40 ", "The 14:05"] }));
-    expect(prompt).toEqual({ id: "p1", ...question, createdAt: NOW, seenAt: null, answer: null, handled: null });
+    expect(prompt).toEqual({ id: "p1", ...question, createdAt: NOW, seenAt: null, answer: null, handled: null, comments: [] });
     expect(promptStatus(prompt)).toBe("unread");
     expect(model.get("p1")).toEqual(prompt);
   });
@@ -143,6 +143,43 @@ describe("PromptModel", () => {
     store.setCell("prompts", "p1", "answer", JSON.stringify({ text: "The 14:05", answeredAt: LATER }));
     expect(model.setHandled("p1", false)).toMatchObject({ ok: true, changed: true, value: { handled: null } });
     expect(model.setHandled("gone", true)).toEqual({ ok: false, conflict: "missing-prompt" });
+  });
+
+  it("keeps comments from two phones on the passage they quote, oldest first", () => {
+    const phone = workspace();
+    phone.model.create("p1", question);
+    const tablet = workspace(createMergeableStore().merge(phone.store));
+    expect(value(phone.model.comment("p1", "c1", { quote: " Two flights ", text: " Only two? " })))
+      .toEqual({ id: "c1", quote: "Two flights", text: "Only two?", createdAt: NOW });
+    tablet.at(LATER);
+    tablet.model.comment("p1", "c2", { quote: "", text: "Window seat" });
+    phone.store.merge(tablet.store);
+    expect(phone.model.get("p1")?.comments.map((comment) => comment.id)).toEqual(["c1", "c2"]);
+    expect(phone.model.comment("p1", "c1", { quote: "x", text: "retry" })).toMatchObject({ ok: true, changed: false });
+  });
+
+  it("removes a comment, and takes none once the Prompt is answered", () => {
+    const { model } = workspace();
+    model.create("p1", question);
+    model.comment("p1", "c1", { quote: "", text: "Hmm" });
+    expect(model.comment("p1", "c2", { quote: "", text: " " })).toEqual({ ok: false, conflict: "empty-comment" });
+    expect(model.comment("gone", "c2", { quote: "", text: "Hi" })).toEqual({ ok: false, conflict: "missing-prompt" });
+    expect(model.removeComment("p1", "c1")).toEqual({ ok: true, changed: true, value: null });
+    expect(model.removeComment("p1", "c1")).toEqual({ ok: false, conflict: "missing-comment" });
+    model.comment("p1", "c3", { quote: "", text: "Kept" });
+    model.answer("p1", "The 9:40");
+    expect(model.comment("p1", "c4", { quote: "", text: "Late" })).toEqual({ ok: false, conflict: "already-answered" });
+    expect(model.removeComment("p1", "c3")).toEqual({ ok: false, conflict: "already-answered" });
+    expect(model.get("p1")?.comments.map((comment) => comment.text)).toEqual(["Kept"]);
+  });
+
+  it("deletes comments with their Prompt", () => {
+    const { store, model } = workspace();
+    model.create("p1", question);
+    model.comment("p1", "c1", { quote: "", text: "Hmm" });
+    model.delete("p1");
+    store.setCell("prompts", "p1", "comment:c2", JSON.stringify({ quote: "", text: "Late", createdAt: LATER }));
+    expect(model.get("p1")).toBeNull();
   });
 
   it("lists Prompts newest first, and open ones oldest first", () => {

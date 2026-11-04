@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { MedicineModel } from "../medicines/model";
 import { projectDisplayStatus } from "../projects/derive";
+import { mermaidDiagrams } from "../prompts/diagrams";
 import {
   PromptModel, isPromptHandled, promptChangedAfterHandling, promptStatus, type Prompt, type PromptResult,
 } from "../prompts/model";
@@ -19,6 +20,8 @@ export type OperationContext = {
   now: () => Date;
   today: string;
   newId: () => string;
+  // Returns why a Mermaid diagram does not parse, or null when it does.
+  checkDiagram: (source: string) => Promise<string | null>;
 };
 
 export type OperationOutcome =
@@ -114,7 +117,9 @@ const linkedTasks = (ctx: OperationContext, recordingId: string) =>
 const PROMPTS =
   "A Prompt is a question you put to the user in the Zero app (not an MCP prompt template). The user sees it only when they open it " +
   "in the app; nothing notifies them. They answer with text: one of your suggestions, or their own words, which are always allowed. " +
-  "A Prompt without an answer means no decision was made, never consent.";
+  "A Prompt without an answer means no decision was made, never consent. Before answering, the user can comment on any passage; " +
+  "comments lists them oldest first, each with quote (the passage or diagram source they commented on, as the app shows it) and text. " +
+  "Read the comments together with the answer: the answer may refer to them.";
 const HANDLED =
   "handledAt is when an agent marked the Prompt handled with prompts_mark_handled, or null; the user does not see it. " +
   "The mark holds for the answer it was set on: if the answer changes after that, handledAt is null again and changedAfterHandling " +
@@ -122,18 +127,28 @@ const HANDLED =
   "changedAfterHandling is null otherwise.";
 const prompts = (ctx: OperationContext) => new PromptModel(ctx.store, ctx.now);
 const promptView = (prompt: Prompt) => {
-  const { id, title, text, suggestions, createdAt, answer } = prompt;
+  const { id, title, text, suggestions, createdAt, answer, comments } = prompt;
   const changed = promptChangedAfterHandling(prompt);
   return {
     id, title, text, suggestions, createdAt, status: promptStatus(prompt), answer,
     handledAt: isPromptHandled(prompt) ? prompt.handled!.at : null,
     changedAfterHandling: changed ? { handledAt: changed.at, handledAnswer: changed.answer?.text ?? null } : null,
+    comments,
   };
 };
 const fromPrompt = (result: PromptResult<Prompt>): OperationOutcome => result.ok
   ? { ok: true, changed: result.changed, value: promptView(result.value) }
   : { ok: false, error: result.conflict };
 const MAX_WAIT_SECONDS = 50;
+
+async function diagramProblem(ctx: OperationContext, markdown: string): Promise<string | null> {
+  const diagrams = mermaidDiagrams(markdown);
+  for (const [index, source] of diagrams.entries()) {
+    const problem = await ctx.checkDiagram(source);
+    if (problem) return `invalid-diagram: Mermaid diagram ${index + 1} of ${diagrams.length} does not parse. ${problem}`;
+  }
+  return null;
+}
 
 function waitForAnswer(ctx: OperationContext, id: string, timeoutSeconds: number): Promise<OperationOutcome> {
   const model = prompts(ctx);
@@ -513,14 +528,21 @@ export const todoOperations: readonly TodoOperation[] = [
     input: z.object({
       id: Id.optional(),
       title: z.string().trim().min(1).describe("One line naming the question"),
-      text: z.string().trim().min(1).describe("The question, with the context the user needs to answer it"),
+      text: z.string().trim().min(1).describe(
+        "The question, with the context the user needs to answer it, in GitHub-flavored Markdown. The app renders it, and a code block " +
+        "fenced as mermaid renders as a Mermaid diagram. A diagram that does not parse fails the call with invalid-diagram and the parser's message.",
+      ),
       suggestions: z.array(z.string().trim().min(1)).max(6).optional(),
     }),
-    run: (ctx, input) => fromPrompt(prompts(ctx).create(input.id ?? ctx.newId(), {
-      title: input.title,
-      text: input.text,
-      suggestions: input.suggestions ?? [],
-    })),
+    run: async (ctx, input) => {
+      const problem = await diagramProblem(ctx, input.text);
+      if (problem) return { ok: false, error: problem };
+      return fromPrompt(prompts(ctx).create(input.id ?? ctx.newId(), {
+        title: input.title,
+        text: input.text,
+        suggestions: input.suggestions ?? [],
+      }));
+    },
   }),
   define({
     name: "prompts_wait",

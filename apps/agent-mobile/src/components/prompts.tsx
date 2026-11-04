@@ -2,10 +2,11 @@ import { Host, Icon } from '@expo/ui';
 import { messageOf, type Prompt } from '@zero/agent-core';
 import { router, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { BackHandler, FlatList, Pressable, ScrollView, View } from 'react-native';
+import { BackHandler, FlatList, Linking, Pressable, useColorScheme, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import PromptDocument from '@/components/prompt-document';
 import { ScreenHeader } from '@/components/screen-header';
 import { Input } from '@/components/ui/input';
 import { ListRow } from '@/components/ui/list-row';
@@ -16,6 +17,7 @@ import { useColor } from '@/lib/theme';
 
 const PROMPT_ICON = Icon.select({ ios: 'questionmark.bubble', android: import('@expo/material-symbols/live_help.xml') });
 const SEND_ICON = Icon.select({ ios: 'paperplane.fill', android: import('@expo/material-symbols/send.xml') });
+const CLOSE_ICON = Icon.select({ ios: 'xmark', android: import('@expo/material-symbols/close.xml') });
 
 type Origin = 'home' | 'list';
 
@@ -101,7 +103,20 @@ export function PromptScreen() {
   const insets = useSafeAreaInsets();
   const accent = useColor('--color-accent');
   const muted = useColor('--color-foreground-muted');
+  const colors = {
+    background: useColor('--color-background'),
+    foreground: useColor('--color-foreground'),
+    secondary: useColor('--color-foreground-secondary'),
+    muted,
+    surface: useColor('--color-surface-muted'),
+    divider: useColor('--color-divider'),
+    accent,
+    onAccent: useColor('--color-on-accent'),
+  };
+  const dark = useColorScheme() === 'dark';
   const [draft, setDraft] = useState('');
+  const [passage, setPassage] = useState<string | null>(null);
+  const [comment, setComment] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   useHiddenTabBar();
@@ -135,8 +150,33 @@ export function PromptScreen() {
     }
   }, [replica, sending, id, close]);
 
+  const addComment = useCallback(async () => {
+    if (!replica || passage === null || sending || !comment.trim()) return;
+    setSending(true);
+    setError(null);
+    try {
+      await replica.prompts.comment(id, { quote: passage, text: comment });
+      setPassage(null);
+      setComment('');
+    } catch (cause) {
+      setError(messageOf(cause));
+    }
+    setSending(false);
+  }, [replica, passage, sending, comment, id]);
+
+  const removeComment = useCallback(async (commentId: string) => {
+    if (!replica) return;
+    setError(null);
+    try {
+      await replica.prompts.removeComment(id, commentId);
+    } catch (cause) {
+      setError(messageOf(cause));
+    }
+  }, [replica, id]);
+
   if (!prompt) return <View className="flex-1 bg-background" />;
   const answered = prompt.answer?.text ?? null;
+  const commentCount = prompt.comments.length;
 
   return (
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
@@ -147,10 +187,65 @@ export function PromptScreen() {
             ? { label: 'Home', accessibilityLabel: 'Back to Home', onPress: close }
             : { label: 'Prompts', accessibilityLabel: 'Back to Prompts', onPress: close }}
         />
-        <ScrollView className="flex-1" contentContainerClassName="px-screen-x pb-6">
-          <Text selectable>{prompt.text}</Text>
-        </ScrollView>
-        <View className="gap-2 px-screen-x">
+        <View className="flex-1">
+          <PromptDocument
+            markdown={prompt.text}
+            comments={prompt.comments.map(({ id: commentId, quote, text }) => ({ id: commentId, quote, text }))}
+            pendingQuote={passage}
+            canComment={answered === null}
+            dark={dark}
+            colors={colors}
+            onPassage={async (quote) => { setPassage(quote); }}
+            onRemoveComment={removeComment}
+            onOpenLink={async (url) => { await Linking.openURL(url); }}
+            dom={{ style: { flex: 1, backgroundColor: colors.background } }}
+          />
+        </View>
+        {passage !== null ? (
+          <View className="gap-2 px-screen-x pt-2">
+            <View className="flex-row items-center gap-2">
+              <Text variant="caption" numberOfLines={2} className="flex-1">Comment on “{passage}”</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel comment"
+                onPress={() => { setPassage(null); setComment(''); }}
+                className="h-10 w-10 items-center justify-center"
+              >
+                <Host matchContents><Icon name={CLOSE_ICON} size={20} color={muted} /></Host>
+              </Pressable>
+            </View>
+            <View className="min-h-14 flex-row items-center gap-2 rounded-dialog bg-surface-muted pl-4">
+              <Input
+                accessibilityLabel="Comment"
+                value={comment}
+                onChangeText={setComment}
+                multiline
+                autoFocus
+                editable={!sending}
+                className="max-h-32 flex-1 py-3"
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add comment"
+                accessibilityState={{ disabled: !comment.trim() || sending }}
+                disabled={!comment.trim() || sending}
+                onPress={() => void addComment()}
+                className="h-12 w-12 items-center justify-center"
+              >
+                <Host matchContents><Icon name={SEND_ICON} size={22} color={comment.trim() ? accent : muted} /></Host>
+              </Pressable>
+            </View>
+            {error ? <Text variant="error">{error}</Text> : null}
+          </View>
+        ) : (
+        <View className="gap-2 px-screen-x pt-2">
+          {answered === null ? (
+            <Text variant="caption">
+              {commentCount === 0
+                ? 'Tap a passage or select words to comment on them.'
+                : `${commentCount} ${commentCount === 1 ? 'comment goes' : 'comments go'} with your answer.`}
+            </Text>
+          ) : null}
           {prompt.suggestions.map((suggestion) => (
             <Pressable
               key={suggestion}
@@ -194,6 +289,7 @@ export function PromptScreen() {
           ) : null}
           {error ? <Text variant="error">{error}</Text> : null}
         </View>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
