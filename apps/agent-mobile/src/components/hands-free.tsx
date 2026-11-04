@@ -1,7 +1,7 @@
 import type { TaskdoReplica } from '@zero/agent-core';
 import { randomUUID } from 'expo-crypto';
 import * as Device from 'expo-device';
-import { requestNotificationPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
+import { createAudioPlayer, requestNotificationPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import { router } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
@@ -21,6 +21,25 @@ const READY_VIBRATION_MS = 60;
 
 const backToBrowse = () => router.dismissTo('/browse');
 
+const START_SOUND = require('../../assets/sounds/hands-free-start.wav');
+
+const chime: HandsFreePorts['chime'] = () => new Promise((resolve) => {
+  const player = createAudioPlayer(START_SOUND);
+  const done = () => {
+    subscription.remove();
+    player.remove();
+    resolve();
+  };
+  const subscription = player.addListener('playbackStatusUpdate', (status) => {
+    if (status.didJustFinish) done();
+  });
+  try {
+    player.play();
+  } catch {
+    done();
+  }
+});
+
 const speech: HandsFreePorts['speech'] = {
   say: (text) => new Promise((resolve) => {
     Speech.speak(text.slice(0, Speech.maxSpeechInputLength), {
@@ -37,6 +56,7 @@ function ports(replica: TaskdoReplica, controls: HandsFreeControls, onEnd: () =>
   return {
     keys: controls,
     speech,
+    chime,
     recorder: {
       start: async () => {
         route = await routeToHeadset().catch(() => null);
