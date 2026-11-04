@@ -39,9 +39,10 @@ The `preview` environment contains the public
 `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`. The app uses
 `https://zero.juanibiapina.dev` when `EXPO_PUBLIC_API_URL` is not present.
 
-The update check does not block startup. On a cold launch, the app starts its
-cached code and downloads a compatible update. The app uses that update on a
-later cold launch.
+The update check does not block startup. On a cold launch, and each time the
+app returns to the foreground, it downloads a compatible update in the
+background. The update icon on Home then shows a tick; one tap restarts into
+the update. Otherwise the app uses it on the next cold launch.
 
 No APK build, Drive download, or reinstall is necessary for this path.
 
