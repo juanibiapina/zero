@@ -29,8 +29,10 @@ transcription and other blocks can build on it afterwards.
   are added once, together, and an agent can mark it handled.
 - The phone that holds the audio sends it to the server for its transcript
   right after saving, and again when the app returns or reconnects if that
-  failed. The server passes the audio to the transcription provider and keeps
-  only the text.
+  failed. While it uploads, a "Sending voice note" notification keeps the app
+  running, so the transcript arrives even if you leave the app at once. The
+  server keeps the audio until the transcript is stored, passes it to the
+  transcription provider, and then deletes it.
 - The transcript is cleaned up from the verbatim words, which are kept with
   it. A cleanup that drops most of a long note, or adds words, is discarded,
   and the verbatim words are shown instead. A silent note gets no text and no

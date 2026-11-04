@@ -12,6 +12,9 @@ export type TranscriptionOutboxOptions = {
   localAudio: (id: string) => string | null;
   upload: (id: string, uri: string) => Promise<TranscriptionUpload>;
   onResume: (listener: () => void) => () => void;
+  // True while uploads are in flight, so the app can keep itself running in
+  // the background until they finish.
+  onBusy?: (busy: boolean) => void;
   retryDelaysMs?: number[];
 };
 
@@ -22,6 +25,7 @@ export function startTranscriptionOutbox({
   localAudio,
   upload,
   onResume,
+  onBusy = () => {},
   retryDelaysMs = NOT_SYNCED_RETRY_DELAYS_MS,
 }: TranscriptionOutboxOptions): () => void {
   const sent = new Set<string>();
@@ -57,8 +61,10 @@ export function startTranscriptionOutbox({
   const drain = async () => {
     if (running || stopped) return;
     running = true;
+    let busy = false;
     try {
       for (let item = next(); item && !stopped; item = next()) {
+        if (!busy) onBusy(busy = true);
         const { id } = item.recording;
         const outcome = await upload(id, item.uri).catch((): TranscriptionUpload => 'later');
         if (outcome === 'done') sent.add(id);
@@ -67,6 +73,7 @@ export function startTranscriptionOutbox({
       }
     } finally {
       running = false;
+      if (busy) onBusy(false);
     }
   };
 

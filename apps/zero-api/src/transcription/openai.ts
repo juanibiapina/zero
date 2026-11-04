@@ -1,4 +1,4 @@
-import type { Cleanup, SpeechToText, Titler, TranscriptionHints } from "./transcriber";
+import { createTranscriber, type Cleanup, type SpeechToText, type Titler, type Transcriber, type TranscriptionHints } from "./transcriber";
 
 const API = "https://api.openai.com/v1";
 
@@ -125,3 +125,10 @@ export function openaiTitler({ apiKey, model = "gpt-6-luna", fetch: send = fetch
     },
   };
 }
+
+// Speech to text, cleanup and titling all on OpenAI.
+export const openaiTranscriber = (apiKey: string): Transcriber => createTranscriber({
+  speechToText: openaiSpeechToText({ apiKey }),
+  cleanup: openaiCleanup({ apiKey }),
+  titler: openaiTitler({ apiKey }),
+});

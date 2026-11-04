@@ -26,6 +26,7 @@ content or request bodies are ever sent.
 | `site` | Level | Meaning |
 |---|---|---|
 | `http` | error | An HTTP route threw. |
+| `transcription` | error | A voice note's transcription failed on every retry; its queued audio was dropped. |
 
 An issue's **level is stamped when the issue is created** and never changes. A
 message that first arrives as a `warning` stays a warning even if a later report

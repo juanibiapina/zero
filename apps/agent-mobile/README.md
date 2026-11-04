@@ -183,7 +183,7 @@ back only where the native component does not fit.
 
 ## Native modules
 
-The app has six local Expo modules under `modules/`, all Android-only. Each
+The app has seven local Expo modules under `modules/`, all Android-only. Each
 `modules/<name>/index.ts` is that module's only TypeScript binding, and one app
 module owns each binding:
 
@@ -194,6 +194,7 @@ module owns each binding:
 | `headset-mic` | `src/lib/voice-capture.ts` | Makes a connected Bluetooth headset the communication device so a voice note records from its mic, and reports the input Android actually records from |
 | `screen-lock` | `src/components/night-routine.tsx` | Locks the phone after Going to bed through an accessibility service; opens Accessibility settings when the service is off |
 | `hands-free` | `src/components/hands-free.tsx` | Runs a foreground service with a media session that turns volume keys and headset buttons into hands-free keys, and records spoken answers inside that service |
+| `background-upload` | `src/lib/taskdo-replica.ts` | Runs a `dataSync` foreground service with a "Sending voice note" notification while voice notes upload, so Android does not freeze the app before the upload finishes |
 | `record-widget` | none (no binding) | Home screen widget that opens `zeroagent:///browse/record?source=widget` |
 
 Android sends a plain `MIC` recording to a classic Bluetooth headset only while

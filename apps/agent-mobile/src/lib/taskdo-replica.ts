@@ -14,6 +14,7 @@ import {
 } from '@zero/agent-core';
 
 import { uploadRecordingForTranscript, type TokenGetter } from './api';
+import { keepRunningWhileUploading } from '../../modules/background-upload';
 import { API_BASE_URL } from './env';
 import { cleanUpDeletedAudio, localAudio } from './recording-audio';
 import { loadLastSync, saveLastSync } from './sync-metadata';
@@ -63,6 +64,7 @@ type CreateTaskdoReplicaOpenerOptions = {
   transcribe?: {
     localAudio: (id: string) => string | null;
     upload: (getToken: TokenGetter, id: string, uri: string) => Promise<TranscriptionUpload>;
+    onBusy?: (busy: boolean) => void;
   };
 };
 
@@ -236,6 +238,7 @@ export function createTaskdoReplicaOpener({
             replica: session,
             localAudio: transcribe.localAudio,
             upload: (id, uri) => transcribe.upload(getToken, id, uri),
+            onBusy: transcribe.onBusy,
             onResume: (resume) => {
               resumeTranscription.add(resume);
               const stopForeground = subscribeToForeground(resume);
@@ -345,7 +348,7 @@ const openAuthenticatedSocket = async (_accountId: string, getToken: TokenGetter
 export const openTaskDOReplica = createTaskdoReplicaOpener({
   openPersistence: openTaskdoPersistence,
   openSocket: openAuthenticatedSocket,
-  transcribe: { localAudio, upload: uploadRecordingForTranscript },
+  transcribe: { localAudio, upload: uploadRecordingForTranscript, onBusy: keepRunningWhileUploading },
   subscribeToForeground: (onActive) => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') onActive();
