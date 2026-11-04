@@ -123,12 +123,12 @@ const PHASE_TEXT: Record<HandsFreeState['phase'], string> = {
 };
 
 function keys({ phase, prompt }: HandsFreeState): [string, string][] {
+  if (phase === 'cue') return [['Any key', 'Cancel']];
   if (phase === 'recording') return [['Any key', 'Stop and save']];
   if (!prompt) return [['Volume up', 'End hands-free'], ['Volume down', 'Record a note']];
   return [
     ['Volume up', prompt.suggestions[0] ?? 'Skip'],
     ['Volume down', 'Speak your answer'],
-    ['Headset', 'Tap accepts, double tap speaks, triple tap repeats'],
   ];
 }
 

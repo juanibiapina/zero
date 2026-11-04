@@ -14,7 +14,6 @@ import android.media.session.PlaybackState
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
-import android.view.KeyEvent
 
 class HandsFreeService : Service() {
   private var session: MediaSession? = null
@@ -55,57 +54,30 @@ class HandsFreeService : Service() {
 
   private fun emit(key: String) {
     val now = SystemClock.elapsedRealtime()
-    if (key == lastKey && now - lastKeyAt < REPEAT_GUARD_MS) return
+    val held = key == lastKey && now - lastKeyAt < REPEAT_GUARD_MS
     lastKey = key
     lastKeyAt = now
-    onKey?.invoke(key)
+    if (!held) onKey?.invoke(key)
   }
 
   private fun createSession() = MediaSession(this, "ZeroHandsFree").apply {
     setPlaybackToRemote(object : VolumeProvider(VOLUME_CONTROL_RELATIVE, VOLUME_STEPS, VOLUME_STEPS / 2) {
       override fun onAdjustVolume(direction: Int) {
         when {
-          direction > 0 -> emit(KEY_ACCEPT)
-          direction < 0 -> emit(KEY_SPEAK)
+          direction > 0 -> emit(KEY_UP)
+          direction < 0 -> emit(KEY_DOWN)
         }
-      }
-    })
-    setCallback(object : MediaSession.Callback() {
-      override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
-        val event = keyEvent(mediaButtonIntent) ?: return false
-        if (event.action != KeyEvent.ACTION_DOWN || event.repeatCount > 0) return true
-        when (event.keyCode) {
-          KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-          KeyEvent.KEYCODE_MEDIA_PLAY,
-          KeyEvent.KEYCODE_MEDIA_PAUSE,
-          KeyEvent.KEYCODE_HEADSETHOOK -> emit(KEY_ACCEPT)
-          KeyEvent.KEYCODE_MEDIA_NEXT -> emit(KEY_SPEAK)
-          KeyEvent.KEYCODE_MEDIA_PREVIOUS -> emit(KEY_REPEAT)
-          else -> return false
-        }
-        return true
       }
     })
     setPlaybackState(
       PlaybackState.Builder()
-        .setActions(
-          PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
-            PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS,
-        )
+        .setActions(0)
         .setState(PlaybackState.STATE_PLAYING, 0, 1f)
         .build(),
     )
     setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, TITLE).build())
     isActive = true
   }
-
-  @Suppress("DEPRECATION")
-  private fun keyEvent(intent: Intent): KeyEvent? =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
-    } else {
-      intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
-    }
 
   private fun notification(): Notification {
     val manager = getSystemService(NotificationManager::class.java)
@@ -125,7 +97,7 @@ class HandsFreeService : Service() {
     return builder
       .setSmallIcon(android.R.drawable.ic_btn_speak_now)
       .setContentTitle(TITLE)
-      .setContentText("Volume up accepts. Volume down answers by voice.")
+      .setContentText("Volume up takes the first suggestion. Volume down records.")
       .setContentIntent(open)
       .setOngoing(true)
       .addAction(Notification.Action.Builder(null, "Stop", stop).build())
@@ -133,9 +105,8 @@ class HandsFreeService : Service() {
   }
 
   companion object {
-    const val KEY_ACCEPT = "accept"
-    const val KEY_SPEAK = "speak"
-    const val KEY_REPEAT = "repeat"
+    const val KEY_UP = "up"
+    const val KEY_DOWN = "down"
     const val KEY_STOP = "stop"
     private const val ACTION_STOP = "expo.modules.handsfree.STOP"
     private const val CHANNEL_ID = "hands_free"

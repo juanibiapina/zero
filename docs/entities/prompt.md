@@ -22,7 +22,7 @@ An agent working on its own often needs a decision only you can make, and you ar
 - Only agents delete Prompts. A deleted Prompt leaves every device, answered or not.
 - Nothing notifies you. A Prompt waits in the app until you open it.
 - Hands-free reads your unanswered Prompts aloud, oldest first, also with the screen off. Volume up takes the first suggestion; on a Prompt with no suggestions it skips the Prompt until the next hands-free session. Volume down records a spoken answer as a Recording, and the transcript of that Recording becomes the answer. A silent recording leaves the Prompt open. Reading a Prompt aloud marks it read.
-- While hands-free runs, the volume keys do not change the volume. A headset's play/pause, next, and previous buttons accept, speak, and repeat the Prompt.
+- While hands-free runs, the volume keys do not change the volume, and they are its only keys: one press each, and holding a key counts as one press. Headset buttons do nothing. Either key stops a spoken answer at any point: during the "Speak your answer" cue it cancels the answer, and while recording it stops and saves it.
 - Hands-free is a row in Browse. Its screen shows the Prompt being read, what each key does, and an End hands-free button, and a notification with a Stop button stays while it runs. When no Prompts are left, volume down records a plain voice note and volume up ends hands-free.
 
 ## How it looks

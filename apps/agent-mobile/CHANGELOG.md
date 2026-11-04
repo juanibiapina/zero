@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-04: Change hands-free to use only the volume keys, one press each. Headset buttons no longer do anything, so tapping your earbuds can't trigger it. Press either key while Zero says "Speak your answer" to cancel, or while recording to stop and save.
+
 - 2026-11-04: Make Prompts easier to read. Bold text no longer shows as `**`, headings and code have color, and code blocks are highlighted. The answer buttons now come after the text, with an Answer button that jumps to them, so they no longer cover half the screen. Answered Prompts show your answer at the top, and the Prompts list groups open and answered Prompts.
 
 - 2026-11-03: Fix voice notes waiting for their transcript until you opened Zero again. Once you stop recording, the transcript arrives even if you leave the app right away; a "Sending voice note" notification shows while the audio uploads.

@@ -1,6 +1,6 @@
 import { requireOptionalNativeModule } from 'expo';
 
-export type HandsFreeKey = 'accept' | 'speak' | 'repeat' | 'stop';
+export type HandsFreeKey = 'up' | 'down' | 'stop';
 export type HandsFreeTake = { uri: string; durationMs: number };
 
 type NativeHandsFree = {
