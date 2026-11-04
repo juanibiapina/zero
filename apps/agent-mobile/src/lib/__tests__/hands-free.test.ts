@@ -22,6 +22,7 @@ function harness(seed: Record<string, PromptInput> = {}) {
   const audio: string[] = [];
   let recording = false;
   let ended = false;
+  let chimed: (() => void) | null = null;
 
   const session = startHandsFree({
     keys: { onKey: (listener) => { press = listener; return () => { press = () => {}; }; } },
@@ -29,6 +30,7 @@ function harness(seed: Record<string, PromptInput> = {}) {
       say: (text) => new Promise((resolve) => { spoken.push(text); speaking = resolve; }),
       stop: () => { speaking?.('stopped'); speaking = null; },
     },
+    chime: () => new Promise((resolve) => { chimed = resolve; }),
     recorder: {
       start: async () => { recording = true; },
       finish: async () => {
@@ -67,6 +69,11 @@ function harness(seed: Record<string, PromptInput> = {}) {
     lastSaid: () => spoken[spoken.length - 1],
     get ended() { return ended; },
     get recording() { return recording; },
+    async finishChime() {
+      chimed?.();
+      chimed = null;
+      await flush();
+    },
     async finishSpeaking() {
       speaking?.('done');
       speaking = null;
@@ -79,14 +86,23 @@ function harness(seed: Record<string, PromptInput> = {}) {
   };
 }
 
+async function started(seed: Record<string, PromptInput> = {}) {
+  const h = harness(seed);
+  await h.finishChime();
+  return h;
+}
+
 const flight: PromptInput = { title: 'Which flight?', text: 'Two flights fit.', suggestions: ['The 9:40', 'The 14:05'] };
 const hotel: PromptInput = { title: 'Which hotel?', text: 'Pick one.', suggestions: ['The one by the beach'] };
 const open: PromptInput = { title: 'Anything else?', text: 'Tell me more.', suggestions: [] };
 
 describe('Hands-free', () => {
-  it('reads the oldest unanswered Prompt first, marks it read, and says what the keys do', async () => {
+  it('chimes, then reads the oldest unanswered Prompt first, marks it read, and names the volume up answer', async () => {
     const h = harness({ flight, hotel });
-    expect(h.lastSaid()).toBe('Hands-free on.\nWhich flight?.\nTwo flights fit.\nVolume up: The 9:40. Volume down: speak your answer.');
+    await flush();
+    expect(h.spoken).toEqual([]);
+    await h.finishChime();
+    expect(h.lastSaid()).toBe('Which flight?.\nTwo flights fit.\nVolume up: The 9:40.');
     expect(h.session.state()).toMatchObject({ phase: 'reading', prompt: { id: 'flight' } });
     await flush();
     expect(h.prompts.get('flight')?.seenAt).not.toBeNull();
@@ -95,7 +111,7 @@ describe('Hands-free', () => {
   });
 
   it('answers with the first suggestion on accept, even while still reading, and moves on', async () => {
-    const h = harness({ flight, hotel });
+    const h = await started({ flight, hotel });
     await h.press('up');
     expect(h.prompts.get('flight')?.answer?.text).toBe('The 9:40');
     expect(h.lastSaid()).toMatch(/^Answered: The 9:40\.\nWhich hotel\?/);
@@ -103,15 +119,15 @@ describe('Hands-free', () => {
   });
 
   it('skips a Prompt without suggestions on accept and leaves it unanswered', async () => {
-    const h = harness({ open });
-    expect(h.lastSaid()).toContain('Volume up skips it.');
+    const h = await started({ open });
+    expect(h.lastSaid()).toBe('Anything else?.\nTell me more.');
     await h.press('up');
     expect(h.prompts.get('open')?.answer).toBeNull();
     expect(h.lastSaid()).toBe(`Skipped.\n${NOTHING_LEFT}`);
   });
 
   it('records a spoken answer as a Recording for the Prompt and takes the Prompt out of the queue', async () => {
-    const h = harness({ flight, hotel });
+    const h = await started({ flight, hotel });
     await h.press('down');
     expect(h.lastSaid()).toBe('Speak your answer.');
     expect(h.recording).toBe(false);
@@ -128,8 +144,8 @@ describe('Hands-free', () => {
   });
 
   it('records a plain note when no Prompts are left, and accept ends the session', async () => {
-    const h = harness();
-    expect(h.lastSaid()).toBe(`Hands-free on.\n${NOTHING_LEFT}`);
+    const h = await started();
+    expect(h.lastSaid()).toBe(NOTHING_LEFT);
     await h.press('down');
     expect(h.lastSaid()).toBe('Speak your note.');
     await h.finishSpeaking();
@@ -143,7 +159,7 @@ describe('Hands-free', () => {
   });
 
   it('reads a Prompt that arrives while it waits with none left', async () => {
-    const h = harness();
+    const h = await started();
     await h.finishSpeaking();
     h.prompts.create('flight', flight);
     await flush();
@@ -151,7 +167,7 @@ describe('Hands-free', () => {
   });
 
   it('moves on when the Prompt it waits on is answered on another device', async () => {
-    const h = harness({ flight, hotel });
+    const h = await started({ flight, hotel });
     await h.finishSpeaking();
     h.prompts.answer('flight', 'The 14:05');
     await flush();
@@ -159,7 +175,7 @@ describe('Hands-free', () => {
   });
 
   it('cancels a spoken answer when a key is pressed before the microphone opens', async () => {
-    const h = harness({ flight });
+    const h = await started({ flight });
     await h.finishSpeaking();
     await h.press('down');
     expect(h.session.state().phase).toBe('cue');
@@ -173,7 +189,7 @@ describe('Hands-free', () => {
   });
 
   it('saves a recording in progress when stopped, then ignores keys', async () => {
-    const h = harness({ flight });
+    const h = await started({ flight });
     await h.press('down');
     await h.finishSpeaking();
     await h.session.stop();
@@ -185,8 +201,17 @@ describe('Hands-free', () => {
     expect(h.prompts.get('flight')?.answer).toBeNull();
   });
 
+  it('acts on a key pressed during the chime without reading the Prompt first', async () => {
+    const h = harness({ flight, hotel });
+    await h.press('up');
+    expect(h.prompts.get('flight')?.answer?.text).toBe('The 9:40');
+    await h.finishChime();
+    expect(h.spoken).toHaveLength(1);
+    expect(h.lastSaid()).toMatch(/^Answered: The 9:40\.\nWhich hotel\?/);
+  });
+
   it('ends on the stop key from the notification', async () => {
-    const h = harness({ flight });
+    const h = await started({ flight });
     await h.press('stop');
     expect(h.session.state().phase).toBe('ended');
   });

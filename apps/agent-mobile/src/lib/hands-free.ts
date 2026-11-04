@@ -11,6 +11,7 @@ export type HandsFreeTake = { uri: string; durationMs: number };
 export type HandsFreePorts = {
   keys: { onKey: (listener: (key: HandsFreeKey) => void) => () => void };
   speech: { say: (text: string) => Promise<'done' | 'stopped'>; stop: () => void };
+  chime: () => Promise<void>;
   recorder: { start: () => Promise<void>; finish: () => Promise<HandsFreeTake | null>; ready: () => void };
   data: {
     snapshot: () => { prompts: Prompt[]; recordings: Recording[] };
@@ -51,11 +52,11 @@ export function speakable(markdown: string): string {
 
 export function readAloud(prompt: Prompt): string {
   const [preferred] = prompt.suggestions;
-  const keys = preferred ? `Volume up: ${preferred}.` : 'Volume up skips it.';
-  return `${prompt.title}.\n${speakable(prompt.text)}\n${keys} Volume down: speak your answer.`;
+  const read = `${prompt.title}.\n${speakable(prompt.text)}`;
+  return preferred ? `${read}\nVolume up: ${preferred}.` : read;
 }
 
-export const NOTHING_LEFT = 'No prompts left. Volume down records a note. Volume up ends hands-free.';
+export const NOTHING_LEFT = 'No prompts left.';
 
 const byAge = (a: Prompt, b: Prompt) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id);
 
@@ -215,7 +216,13 @@ export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
     ports.onEnd();
   };
 
-  present('Hands-free on.\n');
+  const [first] = queue();
+  current = { phase: 'reading', prompt: first ?? null };
+  void (async () => {
+    const mine = turn;
+    await ports.chime().catch(() => {});
+    if (mine === turn && current.phase !== 'ended') present();
+  })();
 
   return {
     state: () => current,
