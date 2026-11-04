@@ -107,6 +107,7 @@ const task = (id: string, text: string, projectId: string): Task => ({
   createdAt: "2023-01-01T00:00:00.000Z",
   completedAt: null,
   parent: projectParent(projectId),
+  recordingId: null,
   sortKey: null,
 });
 
@@ -668,6 +669,7 @@ describe("ProjectsPage", () => {
           createdAt: "2023-01-01T00:00:00.000Z",
           completedAt: null,
           parent: projectParent("1"),
+          recordingId: null,
           sortKey: null,
         },
       ],

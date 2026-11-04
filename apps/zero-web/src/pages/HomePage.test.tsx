@@ -45,6 +45,7 @@ const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   createdAt: over.createdAt ?? `2023-01-0${id}T00:00:00.000Z`,
   completedAt: over.completedAt ?? null,
   parent: over.parent ?? null,
+  recordingId: over.recordingId ?? null,
   sortKey: over.sortKey ?? null,
 });
 

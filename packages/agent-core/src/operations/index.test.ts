@@ -219,11 +219,11 @@ describe("todo operation catalog", () => {
       expect(value(await run("recordings_list"))).toEqual({
         recordings: [
           { id: "late", startedAt: "2026-03-09T23:30:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-10", recordedAt: "00:30",
-            durationMs: 4200, device: "Pixel 7", transcript: { title: "Call the plumber", text: "Call the plumber on Friday" }, handledAt: null },
+            durationMs: 4200, device: "Pixel 7", transcript: { title: "Call the plumber", text: "Call the plumber on Friday" }, handledAt: null, tasks: [] },
           { id: "silent", startedAt: "2026-03-08T07:05:00.000Z", timeZone: "Europe/Berlin", recordedOn: "2026-03-08", recordedAt: "08:05",
-            durationMs: 4200, device: "Pixel 7", transcript: "no-speech", handledAt: null },
+            durationMs: 4200, device: "Pixel 7", transcript: "no-speech", handledAt: null, tasks: [] },
           { id: "pending", startedAt: "2026-03-07T12:00:00.000Z", timeZone: "America/New_York", recordedOn: "2026-03-07", recordedAt: "07:00",
-            durationMs: 4200, device: "Pixel 7", transcript: "pending", handledAt: null },
+            durationMs: 4200, device: "Pixel 7", transcript: "pending", handledAt: null, tasks: [] },
         ],
       });
     });
@@ -266,6 +266,34 @@ describe("todo operation catalog", () => {
       expect(await run("recordings_mark_handled", { id: "late", handled: false })).toMatchObject({ ok: true, changed: true, value: { handledAt: null } });
       expect(await ids(false)).toEqual(["late", "silent", "pending"]);
       expect(await run("recordings_mark_handled", { id: "gone" })).toEqual({ ok: false, error: "missing-recording" });
+    });
+
+    it("links Tasks to the Recording they came from, both ways, until the Recording is deleted", async () => {
+      const { ctx, run, value } = withRecordings();
+      value(await run("tasks_create", { id: "t1", text: "Call the plumber", recordingId: "late" }));
+      value(await run("tasks_create", { id: "t2", text: "Book Friday", recordingId: "late" }));
+      value(await run("tasks_complete", { id: "t2" }));
+      value(await run("tasks_create", { id: "t3", text: "Unrelated" }));
+      expect(await run("tasks_create", { text: "Lost", recordingId: "gone" })).toEqual({ ok: false, error: "missing-recording" });
+
+      const listed = value<{ tasks: Array<{ id: string; recordingId: string | null }> }>(await run("tasks_list")).tasks;
+      expect(listed.map(({ id, recordingId }) => [id, recordingId])).toEqual([["t1", "late"], ["t3", null]]);
+      expect(value(await run("recordings_get", { id: "late" }))).toMatchObject({
+        tasks: [
+          { id: "t1", text: "Call the plumber", completedAt: null },
+          { id: "t2", text: "Book Friday", completedAt: "2026-03-10T09:00:00.000Z" },
+        ],
+      });
+
+      value(await run("tasks_update", { id: "t3", recordingId: "silent" }));
+      value(await run("tasks_update", { id: "t1", recordingId: null }));
+      const silent = value<{ recordings: Array<{ id: string; tasks: Array<{ id: string }> }> }>(await run("recordings_list"))
+        .recordings.find((recording) => recording.id === "silent");
+      expect(silent?.tasks.map((task) => task.id)).toEqual(["t3"]);
+
+      new RecordingModel(ctx.store).remove("silent");
+      const after = value<{ tasks: Array<{ id: string; text: string; recordingId: string | null }> }>(await run("tasks_list")).tasks;
+      expect(after.find((task) => task.id === "t3")).toMatchObject({ text: "Unrelated", recordingId: null });
     });
   });
 

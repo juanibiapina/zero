@@ -30,6 +30,7 @@ const task = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   recurrence: null,
   recurrenceDate: null,
   parent: null,
+  recordingId: null,
   sortKey: null,
   ...over,
 });

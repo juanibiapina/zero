@@ -12,7 +12,7 @@ describe("in-memory TaskDO replica", () => {
       tasks: [{
         id: "orphan", text: "Orphan", parent: projectParent("missing"), showUpDate: null,
         recurrence: null, recurrenceDate: null,
-        completedAt: null, createdAt: "2026-09-25T10:00:00.000Z", sortKey: null,
+        completedAt: null, createdAt: "2026-09-25T10:00:00.000Z", recordingId: null, sortKey: null,
       }],
     });
 
@@ -44,7 +44,7 @@ describe("in-memory TaskDO replica", () => {
       tasks: [{
         id: "task", text: "Task", parent: projectParent("project"), showUpDate: null,
         recurrence: null, recurrenceDate: null,
-        completedAt: null, createdAt: "2026-09-25T10:00:00.000Z", sortKey: null,
+        completedAt: null, createdAt: "2026-09-25T10:00:00.000Z", recordingId: null, sortKey: null,
       }],
       waits: [{
         id: "wait", projectId: "project", kind: "free-text", text: "Reply",

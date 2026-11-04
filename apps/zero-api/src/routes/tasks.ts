@@ -33,6 +33,7 @@ const TaskSchema = z.object({
     z.object({ kind: z.literal("project"), projectId: z.string() }),
     z.object({ kind: z.literal("medicine"), medicineId: z.string(), role: z.literal("restock").nullable() }),
   ]).nullable(),
+  recordingId: z.string().nullable(),
   // In practice every stored row is keyed; a null (unkeyed) row sorts last and
   // is tolerated rather than rejected so a stray/legacy null degrades
   // gracefully instead of 500ing the whole list response.

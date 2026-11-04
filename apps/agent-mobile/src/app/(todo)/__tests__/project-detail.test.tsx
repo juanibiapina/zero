@@ -110,6 +110,7 @@ const task = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   createdAt: '2026-09-01T00:00:00.000Z',
   completedAt: null,
   parent: projectParent('1'),
+  recordingId: null,
   sortKey: null,
   ...over,
 });

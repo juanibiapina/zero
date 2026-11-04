@@ -418,7 +418,7 @@ export function createTaskdoReplica({
     collection: tasks,
     add: (text, showUpDate = null, projectId = null, recurrence = null) => tasks.insert({
       id: randomId(), text, createdAt: now().toISOString(), showUpDate: recurrence?.origin ?? showUpDate,
-      parent: projectParent(projectId), recurrence, recurrenceDate: recurrence?.origin ?? null,
+      parent: projectParent(projectId), recordingId: null, recurrence, recurrenceDate: recurrence?.origin ?? null,
       completedAt: null, sortKey: null,
     }),
     edit: (id, text, schedule) => tasks.update(id, (draft) => {

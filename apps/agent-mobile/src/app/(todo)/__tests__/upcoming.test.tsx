@@ -35,6 +35,7 @@ const task = (
   recurrence: null,
   recurrenceDate: null,
   parent: projectParent(projectId),
+  recordingId: null,
   sortKey: null,
 });
 const project = (id: string): Project => ({

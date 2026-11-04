@@ -1,16 +1,21 @@
 import { Host, Icon } from '@expo/ui';
-import { toast, type NewRecording, type Recording, type TaskdoReplica } from '@zero/agent-core';
+import { isNull } from '@tanstack/db';
+import { useLiveQuery } from '@tanstack/react-db';
+import { toast, type NewRecording, type Recording, type Task, type TaskdoReplica } from '@zero/agent-core';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { BackHandler, FlatList, Linking, Pressable, View } from 'react-native';
 
+import { useQuickAdd } from '@/components/quick-add-composer';
 import { ScreenHeader } from '@/components/screen-header';
+import { useTaskDetail } from '@/components/task-detail';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ListRow } from '@/components/ui/list-row';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { localAudio } from '@/lib/recording-audio';
+import { formatStartedAt } from '@/lib/recording-label';
 import { useColor } from '@/lib/theme';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
 import { useVoiceCapture, type CaptureStatus, type Microphone } from '@/lib/voice-capture';
@@ -30,17 +35,6 @@ export function formatDuration(ms: number): string {
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = String(total % 60).padStart(2, '0');
   return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
-}
-
-function formatStartedAt({ startedAt, timeZone }: Recording): string {
-  const options: Intl.DateTimeFormatOptions = {
-    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  };
-  try {
-    return new Intl.DateTimeFormat('en-GB', { ...options, timeZone }).format(new Date(startedAt));
-  } catch {
-    return new Intl.DateTimeFormat('en-GB', options).format(new Date(startedAt));
-  }
 }
 
 const STATUS_TEXT: Record<CaptureStatus, string> = {
@@ -175,17 +169,63 @@ function RecordingRow({ recording, playing, onToggle, onHold }: {
 
 export function RecordingsScreen() {
   const replica = useTodoReplica();
+  return (
+    <View className="flex-1 bg-background">
+      <ScreenHeader title="Recordings" back={{ label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: backToBrowse }} />
+      {replica ? <Recordings replica={replica} /> : <Text variant="subtitle" className="px-screen-x py-6">Opening your recordings…</Text>}
+    </View>
+  );
+}
+
+function Recordings({ replica }: { replica: TaskdoReplica }) {
   const recordings = useRecordings(replica);
+  const { recording: linked } = useLocalSearchParams<{ recording?: string }>();
+  const { data: tasks } = useLiveQuery((q) => q.from({ t: replica.tasks.collection }).where(({ t }) => isNull(t.completedAt)));
+  const { data: projects } = useLiveQuery((q) => q.from({ p: replica.projects.collection }));
+  const { data: conditions } = useLiveQuery((q) => q.from({ w: replica.waits.collection }));
+  const [writeError, setWriteError] = useState<string | null>(null);
   const player = useAudioPlayer(null);
   const playback = useAudioPlayerStatus(player);
   const [current, setCurrent] = useState<string | null>(null);
   const [holding, setHolding] = useState<Recording | null>(null);
   const [deleting, setDeleting] = useState<Recording | null>(null);
   const ripple = useColor('--color-ripple');
+  const add = useQuickAdd({ replica, surface: { kind: 'recordings' }, onError: setWriteError });
+  const detail = useTaskDetail({
+    replica,
+    projects: projects ?? [],
+    openTasks: tasks ?? [],
+    conditions: conditions ?? [],
+    onAddWaiting: (project) => add.open('waiting', project),
+    onError: setWriteError,
+    onOpenRecording: (id) => setHolding(recordings?.find((recording) => recording.id === id) ?? null),
+  });
+  const holdingTasks: Task[] = holding ? (tasks ?? []).filter((task) => task.recordingId === holding.id) : [];
+  const openTask = (task: Task) => {
+    setHolding(null);
+    detail.open(task);
+  };
 
   useEffect(() => {
     void setAudioModeAsync({ playsInSilentMode: true });
   }, []);
+
+  // A Task's editor opens the Recording it came from through the route. The
+  // param is cleared once shown, so the same link opens it again next time.
+  const pendingLink = linked && recordings ? linked : null;
+  const [shownLink, setShownLink] = useState<string | null>(null);
+  if (pendingLink !== shownLink) {
+    setShownLink(pendingLink);
+    if (pendingLink) setHolding(recordings?.find((recording) => recording.id === pendingLink) ?? null);
+  }
+  useEffect(() => {
+    if (pendingLink) router.setParams({ recording: undefined });
+  }, [pendingLink]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', add.handleBack);
+    return () => sub.remove();
+  }, [add.handleBack]);
 
   const toggle = useCallback((recording: Recording) => {
     const uri = localAudio(recording.id);
@@ -221,8 +261,8 @@ export function RecordingsScreen() {
   const deletingHere = deleting ? localAudio(deleting.id) !== null : false;
 
   return (
-    <View className="flex-1 bg-background">
-      <ScreenHeader title="Recordings" back={{ label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: backToBrowse }} />
+    <>
+      {writeError ? <Text variant="error" className="px-screen-x">{writeError}</Text> : null}
       {recordings === null ? (
         <Text variant="subtitle" className="px-screen-x py-6">Opening your recordings…</Text>
       ) : recordings.length === 0 ? (
@@ -248,6 +288,23 @@ export function RecordingsScreen() {
           {holding?.transcript?.text ? (
             <Text selectable className="mt-2 px-screen-x">{holding.transcript.text}</Text>
           ) : null}
+          {holdingTasks.length > 0 ? (
+            <View className="mt-4">
+              <Text variant="section" className="px-screen-x">Tasks</Text>
+              {holdingTasks.map((task) => (
+                <Pressable
+                  key={task.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open task ${task.text}`}
+                  android_ripple={{ color: ripple }}
+                  onPress={() => openTask(task)}
+                  className="min-h-12 justify-center px-screen-x"
+                >
+                  <Text className="text-[16px] text-accent">{task.text}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             android_ripple={{ color: ripple }}
@@ -271,6 +328,8 @@ export function RecordingsScreen() {
           onConfirm={() => { void remove(deleting); }}
         />
       ) : null}
-    </View>
+      {detail.sheets}
+      {add.element}
+    </>
   );
 }

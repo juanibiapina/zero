@@ -65,6 +65,7 @@ const RecurrenceInput = z.object({
     z.object({ unit: z.literal("year"), interval: Interval, on: z.array(YearSelector).min(1) }),
   ]),
 }).refine((value) => validateRecurrence(value).ok, "invalid recurrence");
+const RecordingRef = Id.describe("id of the Recording the Task came from, from recordings_list");
 const ProjectParent = z.object({ kind: z.literal("project"), projectId: Id });
 const ParentInput = z.discriminatedUnion("kind", [ProjectParent])
   .describe("A Task's parent. Agents can set only a Project parent.");
@@ -103,9 +104,13 @@ const RECORDINGS =
   "A Recording is a voice note the user spoke into their phone; its audio stays on the phone. recordedOn and recordedAt are the day and time " +
   "where it was recorded, in its timeZone. transcript is pending until the server has transcribed it, no-speech for a silent note, or a short title " +
   "(a few words naming the action or topic, in the language spoken) with the text: what the user said, with filler words removed and " +
-  "spoken corrections applied. A transcript stored before titles existed has an empty title. Turn notes into Tasks or Shopping items with the other tools. " +
+  "spoken corrections applied. A transcript stored before titles existed has an empty title. Turn notes into Tasks or Shopping items with the other tools; " +
+  "pass recordingId to tasks_create so the user can jump between the Task and its Recording. tasks lists the Tasks that refer to the Recording, " +
+  "open and completed. " +
   "handledAt is when an agent marked the Recording handled with recordings_mark_handled, or null; the user does not see it.";
 const recordings = (ctx: OperationContext) => new RecordingModel(ctx.store);
+const linkedTasks = (ctx: OperationContext, recordingId: string) =>
+  todo(ctx).tasksForRecording(recordingId).map(({ id, text, completedAt }) => ({ id, text, completedAt }));
 const PROMPTS =
   "A Prompt is a question you put to the user in the Zero app (not an MCP prompt template). The user sees it only when they open it " +
   "in the app; nothing notifies them. They answer with text: one of your suggestions, or their own words, which are always allowed. " +
@@ -172,6 +177,7 @@ export const todoOperations: readonly TodoOperation[] = [
       "null or on/before today, Upcoming shows later ones. Recurring Tasks carry recurrence and recurrenceDate (the current occurrence). " +
       "parent is null for a loose Task, { kind: project, projectId } for a Project Task, or { kind: medicine, medicineId, role } " +
       "for a Medicine Task; role restock means Zero added it because the supply ran low. " +
+      "recordingId is the Recording the Task came from, or null. " +
       "Completing it here does not add pills; the user records the amount in the app.",
     kind: "read",
     input: z.object({ parent: ParentFilter.optional().describe("Only Tasks with this parent") }),
@@ -186,13 +192,15 @@ export const todoOperations: readonly TodoOperation[] = [
     title: "Create a Task",
     description:
       "Create a Task. Omit id to have one generated; pass your own UUID to make retries safe. " +
-      "With a recurrence, the Task first shows up on recurrence.origin.",
+      "With a recurrence, the Task first shows up on recurrence.origin. " +
+      "Pass recordingId when the Task comes from a Recording; fails with missing-recording if it does not exist.",
     kind: "write",
     input: z.object({
       id: Id.optional(),
       text: z.string().trim().min(1),
       showUpDate: PlainDate.nullable().optional().describe("Day the Task becomes current; omit for always current"),
       parent: ParentInput.nullable().optional(),
+      recordingId: RecordingRef.nullable().optional(),
       recurrence: RecurrenceInput.nullable().optional(),
     }),
     run: (ctx, input) => fromModel(todo(ctx).createTask({
@@ -200,19 +208,23 @@ export const todoOperations: readonly TodoOperation[] = [
       text: input.text,
       showUpDate: input.showUpDate ?? null,
       parent: input.parent ?? null,
+      recordingId: input.recordingId ?? null,
       recurrence: (input.recurrence) ?? null,
     })),
   }),
   define({
     name: "tasks_update",
     title: "Update a Task",
-    description: "Change a Task's text, showUpDate, or parent Project. Pass null to clear showUpDate or to make the Task loose.",
+    description:
+      "Change a Task's text, showUpDate, parent Project, or Recording. Pass null to clear showUpDate, to make the Task loose, " +
+      "or to unlink its Recording.",
     kind: "write",
     input: z.object({
       id: Id,
       text: z.string().trim().min(1).optional(),
       showUpDate: PlainDate.nullable().optional(),
       parent: ParentInput.nullable().optional(),
+      recordingId: RecordingRef.nullable().optional(),
     }),
     run: (ctx, { id, ...fields }) => {
       if (Object.values(fields).every((value) => value === undefined)) return { ok: false, error: "nothing to update" };
@@ -452,7 +464,8 @@ export const todoOperations: readonly TodoOperation[] = [
       return read({
         recordings: recordings(ctx).list().map(recordingSummary)
           .filter((recording) => recording.recordedOn >= since)
-          .filter((recording) => input.handled === undefined || (recording.handledAt !== null) === input.handled),
+          .filter((recording) => input.handled === undefined || (recording.handledAt !== null) === input.handled)
+          .map((recording) => ({ ...recording, tasks: linkedTasks(ctx, recording.id) })),
       });
     },
   }),
@@ -466,7 +479,9 @@ export const todoOperations: readonly TodoOperation[] = [
     input: z.object({ id: Id }),
     run: (ctx, input) => {
       const recording = recordings(ctx).get(input.id);
-      return recording ? read(recordingDetail(recording)) : { ok: false, error: "missing-recording" };
+      return recording
+        ? read({ ...recordingDetail(recording), tasks: linkedTasks(ctx, recording.id) })
+        : { ok: false, error: "missing-recording" };
     },
   }),
   define({

@@ -15,6 +15,8 @@ export type Task = {
   createdAt: string;
   completedAt: string | null;
   parent: TaskParent | null;
+  // The Recording this Task came from. A deleted Recording reads as null.
+  recordingId: string | null;
   sortKey: string | null;
 };
 
