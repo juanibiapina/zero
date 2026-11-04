@@ -177,6 +177,8 @@ export function PromptScreen() {
   const [viewport, setViewport] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [answerTop, setAnswerTop] = useState(0);
+  const [documentY, setDocumentY] = useState(0);
+  const [documentHeight, setDocumentHeight] = useState(0);
   useHiddenTabBar();
 
   const missing = prompts !== null && prompt === null;
@@ -267,20 +269,37 @@ export function PromptScreen() {
               <Text className="flex-1 font-semibold">{answered}</Text>
             </View>
           ) : null}
-          <PromptDocument
-            markdown={prompt.text}
-            comments={prompt.comments.map(({ id: commentId, quote, text }) => ({ id: commentId, quote, text }))}
-            pendingQuote={passage}
-            canComment={answered === null}
-            dark={dark}
-            colors={colors}
-            onPassage={async (quote) => { setPassage(quote); }}
-            onRemoveComment={removeComment}
-            onOpenLink={async (url) => { await Linking.openURL(url); }}
-            dom={{ matchContents: true, scrollEnabled: false, containerStyle: { width: '100%' } }}
-          />
-          {answering ? (
-            <View onLayout={(event) => setAnswerTop(event.nativeEvent.layout.y)} className="gap-2 px-screen-x pt-4">
+          <View
+            onLayout={(event) => {
+              setDocumentY(event.nativeEvent.layout.y);
+              setDocumentHeight(event.nativeEvent.layout.height);
+            }}
+          >
+            <PromptDocument
+              markdown={prompt.text}
+              comments={prompt.comments.map(({ id: commentId, quote, text }) => ({ id: commentId, quote, text }))}
+              pendingQuote={passage}
+              canComment={answered === null}
+              dark={dark}
+              colors={colors}
+              onPassage={async (quote, top) => {
+                setPassage(quote);
+                if (typeof top === 'number') scroll.current?.scrollTo({ y: Math.max(0, documentY + top - 24), animated: true });
+              }}
+              onRemoveComment={removeComment}
+              onOpenLink={async (url) => { await Linking.openURL(url); }}
+              dom={{ matchContents: true, scrollEnabled: false, containerStyle: { width: '100%' } }}
+            />
+          </View>
+          {answered === null ? (
+            <View
+              onLayout={(event) => setAnswerTop(event.nativeEvent.layout.y)}
+              pointerEvents={answering ? 'auto' : 'none'}
+              accessibilityElementsHidden={!answering}
+              importantForAccessibility={answering ? 'auto' : 'no-hide-descendants'}
+              style={{ opacity: answering && documentHeight > 0 ? 1 : 0 }}
+              className="gap-2 px-screen-x pt-4"
+            >
               {commentCount > 0 ? (
                 <Text variant="caption" className="pb-1">
                   {`${commentCount} ${commentCount === 1 ? 'comment goes' : 'comments go'} with your answer.`}

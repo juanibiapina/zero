@@ -28,7 +28,7 @@ type Props = {
   canComment: boolean;
   dark: boolean;
   colors: PromptDocumentColors;
-  onPassage: (quote: string) => Promise<void>;
+  onPassage: (quote: string, top: number) => Promise<void>;
   onRemoveComment: (id: string) => Promise<void>;
   onOpenLink: (url: string) => Promise<void>;
   dom?: import('expo/dom').DOMProps;
@@ -178,7 +178,7 @@ export default function PromptDocument({
   const palette = useRef(colors);
   useEffect(() => { palette.current = colors; });
   const [rendered, setRendered] = useState(0);
-  const [selection, setSelection] = useState<{ quote: string; top: number; left: number } | null>(null);
+  const [selection, setSelection] = useState<{ quote: string; at: number; top: number; left: number } | null>(null);
 
   useEffect(() => {
     const element = root.current;
@@ -238,7 +238,7 @@ export default function PromptDocument({
         return;
       }
       const rect = current.getRangeAt(0).getBoundingClientRect();
-      setSelection({ quote: cap(quote), top: rect.bottom + window.scrollY + 12, left: Math.max(12, rect.left + window.scrollX) });
+      setSelection({ quote: cap(quote), at: rect.top + window.scrollY, top: rect.bottom + window.scrollY + 12, left: Math.max(12, rect.left + window.scrollX) });
     };
     document.addEventListener('selectionchange', update);
     return () => document.removeEventListener('selectionchange', update);
@@ -261,7 +261,7 @@ export default function PromptDocument({
     }
     if (target.closest('.comment') || !document.getSelection()?.isCollapsed) return;
     const block = target.closest(BLOCKS);
-    if (block && root.current?.contains(block)) void onPassage(passageOf(block));
+    if (block && root.current?.contains(block)) void onPassage(passageOf(block), block.getBoundingClientRect().top + window.scrollY);
   };
 
   return (
@@ -274,7 +274,7 @@ export default function PromptDocument({
           style={{ top: selection.top, left: selection.left }}
           onPointerDown={(event) => event.preventDefault()}
           onClick={() => {
-            void onPassage(selection.quote);
+            void onPassage(selection.quote, selection.at);
             document.getSelection()?.removeAllRanges();
             setSelection(null);
           }}
