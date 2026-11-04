@@ -135,9 +135,13 @@ jobs:
         working-directory: apps/agent-mobile
         run: npx expo prebuild -p android --no-install
 
-      - name: Run Kotlin tests
+      # Compiles every local module, so a module without unit tests still fails
+      # here instead of first breaking in an APK build.
+      - name: Compile local modules and run Kotlin tests
         working-directory: apps/agent-mobile/android
-        run: ./gradlew :zero-notifications:testDebugUnitTest --no-daemon
+        run: |
+          compile=$(for module in ../modules/*/android; do printf ':%s:compileDebugKotlin ' "$(basename "$(dirname "$module")")"; done)
+          ./gradlew $compile :zero-notifications:testDebugUnitTest --no-daemon
 
       - name: Upload test reports
         if: failure()

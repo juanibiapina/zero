@@ -18,6 +18,9 @@ import {
   type WaitingCondition,
 } from "./domain";
 import type { SetTranscriptResult } from "@zero/agent-core";
+import { reportError } from "../reporting/zero-errors";
+import { openaiTranscriber } from "../transcription/openai";
+import { createTranscriptionQueue } from "../transcription/queue";
 
 export const TASKDO_SQL_STORAGE_PREFIX = "taskdo_";
 export const TASKDO_FIXTURE_DELETED_KEY = "fixtureDeleted";
@@ -153,6 +156,27 @@ export class TaskDO extends WsServerDurableObject<Env> {
   setRecordingTranscript(id: string, transcript: Transcript): Promise<SetTranscriptResult> {
     if (this.purging) return Promise.resolve("missing");
     return this.domain.setRecordingTranscript(id, transcript);
+  }
+
+  // Keeps the audio here and transcribes it from the alarm, so the phone can
+  // go to sleep as soon as the upload finishes.
+  queueTranscription(id: string, userId: string, audio: ArrayBuffer): Promise<void> {
+    if (this.purging) return Promise.resolve();
+    return this.transcriptionQueue().enqueue(id, userId, audio);
+  }
+
+  async alarm(): Promise<void> {
+    if (await this.isErased()) return;
+    await this.transcriptionQueue().runDue();
+  }
+
+  private transcriptionQueue() {
+    return createTranscriptionQueue({
+      storage: this.ctx.storage,
+      workspace: this.domain,
+      transcriber: openaiTranscriber(this.env.OPENAI_API_KEY),
+      onGiveUp: (error, userId) => reportError(this.env, error, { site: "transcription", clerk_user_id: userId }),
+    });
   }
 
   // The TinyBase synchronizer has live listeners. Stop them and close sockets

@@ -255,6 +255,10 @@ export class TaskDomain {
     return this.recordings.get(id);
   }
 
+  recordingDeleted(id: string): boolean {
+    return this.recordings.deleted().includes(id);
+  }
+
   async setRecordingTranscript(id: string, transcript: Transcript): Promise<SetTranscriptResult> {
     if (await this.isErased()) return "missing";
     const result = this.recordings.setTranscript(id, transcript);

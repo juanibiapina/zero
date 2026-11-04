@@ -3,7 +3,6 @@ import type { Recording, Transcript } from "@zero/agent-core";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Env } from "../types";
-import type { Transcriber } from "../transcription/transcriber";
 import { createRecordingsRoutes, MAX_AUDIO_BYTES } from "./recordings";
 import { taskDoEnv } from "./taskdo-test-stub";
 
@@ -26,102 +25,60 @@ const transcript: Transcript = {
   transcribedAt: "2026-10-20T18:31:00.000Z",
 };
 
-function buildApp(methods: object, transcriber: Transcriber) {
+function buildApp(methods: object) {
   const env = taskDoEnv(methods);
   const app = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
   app.use("/api/*", async (context, next) => {
     context.set("userId", "user-abc");
     await next();
   });
-  app.route("/", createRecordingsRoutes({ transcriber: () => transcriber }));
+  app.route("/", createRecordingsRoutes());
   return (path: string, init?: RequestInit) => app.fetch(new Request(`http://localhost${path}`, init), env);
 }
 
-const upload = (audio: Blob | null = new Blob([new Uint8Array(1000)], { type: "audio/mp4" })): RequestInit => {
+const upload = (audio: Blob | null = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mp4" })): RequestInit => {
   const form = new FormData();
   if (audio) form.append("audio", audio, "r1.m4a");
   return { method: "POST", body: form };
 };
 
 describe("recording transcript route", () => {
-  it("transcribes the audio with the workspace's Project names and stores the transcript", async () => {
-    const transcriber = vi.fn<Transcriber>(async () => transcript);
-    const setRecordingTranscript = vi.fn(async () => "set");
-    const app = buildApp({
-      recording: async () => recording,
-      listProjects: async () => [{ title: "Boiler repair" }, { title: "ZeroVault" }],
-      setRecordingTranscript,
-    }, transcriber);
+  it("hands the audio to the account's TaskDO and answers before transcribing", async () => {
+    const queueTranscription = vi.fn(async () => {});
+    const app = buildApp({ recording: async () => recording, queueTranscription });
+
+    const response = await app("/api/recordings/r1/transcript", upload());
+
+    expect(response.status).toBe(202);
+    expect(queueTranscription).toHaveBeenCalledWith("r1", "user-abc", expect.any(ArrayBuffer));
+    expect([...new Uint8Array((queueTranscription.mock.calls[0] as unknown[])[2] as ArrayBuffer)]).toEqual([1, 2, 3]);
+  });
+
+  it("returns a stored transcript without queueing the audio", async () => {
+    const queueTranscription = vi.fn();
+    const app = buildApp({ recording: async () => ({ ...recording, transcript }), queueTranscription });
 
     const response = await app("/api/recordings/r1/transcript", upload());
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ transcript });
-    expect(transcriber).toHaveBeenCalledWith(expect.any(Blob), { keywords: ["Zero", "Boiler repair", "ZeroVault"] });
-    expect(setRecordingTranscript).toHaveBeenCalledWith("r1", transcript);
+    expect(queueTranscription).not.toHaveBeenCalled();
   });
 
-  it("returns a stored transcript without transcribing again", async () => {
-    const transcriber = vi.fn<Transcriber>();
-    const app = buildApp({ recording: async () => ({ ...recording, transcript }) }, transcriber);
+  it("queues the audio of a Recording whose row has not synced yet", async () => {
+    const queueTranscription = vi.fn(async () => {});
+    const app = buildApp({ recording: async () => null, queueTranscription });
 
-    const response = await app("/api/recordings/r1/transcript", upload());
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ transcript });
-    expect(transcriber).not.toHaveBeenCalled();
-  });
-
-  it("answers 404 for a Recording the server does not have yet", async () => {
-    const transcriber = vi.fn<Transcriber>();
-    const app = buildApp({ recording: async () => null }, transcriber);
-
-    expect((await app("/api/recordings/r1/transcript", upload())).status).toBe(404);
-    expect(transcriber).not.toHaveBeenCalled();
-  });
-
-  it("answers 404 when the Recording is deleted while it is being transcribed", async () => {
-    const app = buildApp({
-      recording: async () => recording,
-      listProjects: async () => [],
-      setRecordingTranscript: async () => "missing",
-    }, async () => transcript);
-
-    expect((await app("/api/recordings/r1/transcript", upload())).status).toBe(404);
-  });
-
-  it("keeps the first transcript when two uploads race", async () => {
-    const first = { ...transcript, text: "First." };
-    let stored: Transcript | null = null;
-    const app = buildApp({
-      recording: async () => ({ ...recording, transcript: stored }),
-      listProjects: async () => [],
-      setRecordingTranscript: async () => { stored = first; return "exists"; },
-    }, async () => transcript);
-
-    const response = await app("/api/recordings/r1/transcript", upload());
-
-    expect(await response.json()).toEqual({ transcript: first });
+    expect((await app("/api/recordings/r1/transcript", upload())).status).toBe(202);
+    expect(queueTranscription).toHaveBeenCalledWith("r1", "user-abc", expect.any(ArrayBuffer));
   });
 
   it("refuses a request with no audio or audio over 25 MB", async () => {
-    const transcriber = vi.fn<Transcriber>();
-    const app = buildApp({ recording: async () => recording }, transcriber);
+    const queueTranscription = vi.fn();
+    const app = buildApp({ recording: async () => recording, queueTranscription });
 
     expect((await app("/api/recordings/r1/transcript", upload(null))).status).toBe(400);
     expect((await app("/api/recordings/r1/transcript", upload(new Blob([new Uint8Array(MAX_AUDIO_BYTES + 1)])))).status).toBe(413);
-    expect(transcriber).not.toHaveBeenCalled();
-  });
-
-  it("answers 502 and stores nothing when transcription fails", async () => {
-    const setRecordingTranscript = vi.fn();
-    const app = buildApp({
-      recording: async () => recording,
-      listProjects: async () => [],
-      setRecordingTranscript,
-    }, async () => { throw new Error("provider down"); });
-
-    expect((await app("/api/recordings/r1/transcript", upload())).status).toBe(502);
-    expect(setRecordingTranscript).not.toHaveBeenCalled();
+    expect(queueTranscription).not.toHaveBeenCalled();
   });
 });

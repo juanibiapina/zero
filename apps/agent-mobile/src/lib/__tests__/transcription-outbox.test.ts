@@ -23,6 +23,7 @@ function setup(initial: Recording[], onDisk: string[], outcomes: Outcome[] = [])
   let recordings = initial;
   const listeners = new Set<() => void>();
   const resumers = new Set<() => void>();
+  const busy: boolean[] = [];
   const upload = jest.fn(async (_id: string, _uri: string): Promise<TranscriptionUpload> => {
     const outcome = outcomes.shift() ?? 'done';
     if (outcome instanceof Error) throw outcome;
@@ -36,10 +37,12 @@ function setup(initial: Recording[], onDisk: string[], outcomes: Outcome[] = [])
     localAudio: (id) => (onDisk.includes(id) ? `file:///recordings/${id}.m4a` : null),
     upload,
     onResume: (resume) => { resumers.add(resume); return () => resumers.delete(resume); },
+    onBusy: (value) => { busy.push(value); },
     retryDelaysMs: [2_000, 5_000],
   });
   return {
     upload,
+    busy,
     stop,
     change: (next: Recording[]) => { recordings = next; listeners.forEach((listener) => listener()); },
     resume: () => resumers.forEach((resume) => resume()),
@@ -83,6 +86,23 @@ describe('transcription outbox', () => {
     finish('done');
     await settle();
     expect(uploaded(outbox.upload)).toEqual(['a', 'b']);
+  });
+
+  it('says it is busy from the first upload until the last one finishes', async () => {
+    let finish!: (outcome: TranscriptionUpload) => void;
+    const first = new Promise<TranscriptionUpload>((resolve) => { finish = resolve; });
+    const outbox = setup([recording('a'), recording('b')], ['a', 'b'], [first]);
+    await settle();
+    expect(outbox.busy).toEqual([true]);
+
+    finish('done');
+    await settle();
+    expect(uploaded(outbox.upload)).toEqual(['a', 'b']);
+    expect(outbox.busy).toEqual([true, false]);
+
+    outbox.change([recording('a'), recording('b')]);
+    await settle();
+    expect(outbox.busy).toEqual([true, false]);
   });
 
   it('tries again shortly while the server has not received the voice note, then waits for the app to return', async () => {
