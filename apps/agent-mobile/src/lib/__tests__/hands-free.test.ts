@@ -96,7 +96,7 @@ describe('Hands-free', () => {
 
   it('answers with the first suggestion on accept, even while still reading, and moves on', async () => {
     const h = harness({ flight, hotel });
-    await h.press('accept');
+    await h.press('up');
     expect(h.prompts.get('flight')?.answer?.text).toBe('The 9:40');
     expect(h.lastSaid()).toMatch(/^Answered: The 9:40\.\nWhich hotel\?/);
     expect(h.session.state().prompt?.id).toBe('hotel');
@@ -105,21 +105,21 @@ describe('Hands-free', () => {
   it('skips a Prompt without suggestions on accept and leaves it unanswered', async () => {
     const h = harness({ open });
     expect(h.lastSaid()).toContain('Volume up skips it.');
-    await h.press('accept');
+    await h.press('up');
     expect(h.prompts.get('open')?.answer).toBeNull();
     expect(h.lastSaid()).toBe(`Skipped.\n${NOTHING_LEFT}`);
   });
 
   it('records a spoken answer as a Recording for the Prompt and takes the Prompt out of the queue', async () => {
     const h = harness({ flight, hotel });
-    await h.press('speak');
+    await h.press('down');
     expect(h.lastSaid()).toBe('Speak your answer.');
     expect(h.recording).toBe(false);
     await h.finishSpeaking();
     expect(h.session.state()).toMatchObject({ phase: 'recording', prompt: { id: 'flight' } });
     expect(h.recording).toBe(true);
 
-    await h.press('accept');
+    await h.press('up');
     expect(h.recording).toBe(false);
     expect(h.recordings.list()).toEqual([expect.objectContaining({ promptId: 'flight', durationMs: 4_000, device: 'Pixel 10 Pro', source: 'app' })]);
     expect(h.audio).toEqual(['file:///take.m4a']);
@@ -130,14 +130,14 @@ describe('Hands-free', () => {
   it('records a plain note when no Prompts are left, and accept ends the session', async () => {
     const h = harness();
     expect(h.lastSaid()).toBe(`Hands-free on.\n${NOTHING_LEFT}`);
-    await h.press('speak');
+    await h.press('down');
     expect(h.lastSaid()).toBe('Speak your note.');
     await h.finishSpeaking();
-    await h.press('speak');
+    await h.press('down');
     expect(h.recordings.list()).toEqual([expect.not.objectContaining({ promptId: expect.anything() })]);
     expect(h.lastSaid()).toBe(`Note saved.\n${NOTHING_LEFT}`);
 
-    await h.press('accept');
+    await h.press('up');
     expect(h.session.state().phase).toBe('ended');
     expect(h.ended).toBe(true);
   });
@@ -158,22 +158,29 @@ describe('Hands-free', () => {
     expect(h.session.state().prompt?.id).toBe('hotel');
   });
 
-  it('repeats the current Prompt', async () => {
+  it('cancels a spoken answer when a key is pressed before the microphone opens', async () => {
     const h = harness({ flight });
     await h.finishSpeaking();
-    await h.press('repeat');
-    expect(h.lastSaid()).toMatch(/^Which flight\?/);
+    await h.press('down');
+    expect(h.session.state().phase).toBe('cue');
+    await h.press('up');
+    expect(h.lastSaid()).toBe('Cancelled.');
+    await h.finishSpeaking();
+    expect(h.session.state()).toMatchObject({ phase: 'waiting', prompt: { id: 'flight' } });
+    expect(h.recording).toBe(false);
+    expect(h.recordings.list()).toEqual([]);
+    expect(h.prompts.get('flight')?.answer).toBeNull();
   });
 
   it('saves a recording in progress when stopped, then ignores keys', async () => {
     const h = harness({ flight });
-    await h.press('speak');
+    await h.press('down');
     await h.finishSpeaking();
     await h.session.stop();
     expect(h.recordings.list()).toHaveLength(1);
     expect(h.ended).toBe(true);
     const said = h.spoken.length;
-    await h.press('accept');
+    await h.press('up');
     expect(h.spoken).toHaveLength(said);
     expect(h.prompts.get('flight')?.answer).toBeNull();
   });

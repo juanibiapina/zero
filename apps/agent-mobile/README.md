@@ -198,7 +198,7 @@ module owns each binding:
 | `home-app-icon` | `src/components/home-app-icon-sync.tsx` | Switches the launcher icon to match the Home task count |
 | `headset-mic` | `src/lib/voice-capture.ts` | Makes a connected Bluetooth headset the communication device so a voice note records from its mic, and reports the input Android actually records from |
 | `screen-lock` | `src/components/night-routine.tsx` | Locks the phone after Going to bed through an accessibility service; opens Accessibility settings when the service is off |
-| `hands-free` | `src/components/hands-free.tsx` | Runs a foreground service with a media session that turns volume keys and headset buttons into hands-free keys, and records spoken answers inside that service |
+| `hands-free` | `src/components/hands-free.tsx` | Runs a foreground service with a media session that turns the volume keys into hands-free keys, and records spoken answers inside that service |
 | `background-upload` | `src/lib/taskdo-replica.ts` | Runs a `dataSync` foreground service with a "Sending voice note" notification while voice notes upload, so Android does not freeze the app before the upload finishes |
 | `record-widget` | none (no binding) | Home screen widget that opens `zeroagent:///browse/record?source=widget` |
 

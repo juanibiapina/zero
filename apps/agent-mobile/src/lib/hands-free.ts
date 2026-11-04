@@ -1,6 +1,6 @@
 import type { NewRecording, Prompt, Recording } from '@zero/agent-core';
 
-export type HandsFreeKey = 'accept' | 'speak' | 'repeat' | 'stop';
+export type HandsFreeKey = 'up' | 'down' | 'stop';
 
 export type HandsFreePhase = 'reading' | 'waiting' | 'cue' | 'recording' | 'saving' | 'ended';
 
@@ -167,20 +167,29 @@ export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
     else present(prompt ? 'Answer saved.\n' : 'Note saved.\n');
   };
 
+  const cancelCue = (prompt: Prompt | null) => {
+    interrupt();
+    set('reading', prompt);
+    void say('Cancelled.', () => set('waiting', prompt));
+  };
+
   const onKey = (key: HandsFreeKey) => {
     if (key === 'stop') {
       void stop();
       return;
     }
     const { phase, prompt } = current;
-    if (phase === 'ended' || phase === 'saving' || phase === 'cue') return;
+    if (phase === 'ended' || phase === 'saving') return;
+    if (phase === 'cue') {
+      cancelCue(prompt);
+      return;
+    }
     if (phase === 'recording') {
       void finishRecording();
       return;
     }
     interrupt();
-    if (key === 'repeat') present();
-    else if (key === 'speak') void record(prompt);
+    if (key === 'down') void record(prompt);
     else void accept(prompt);
   };
 
