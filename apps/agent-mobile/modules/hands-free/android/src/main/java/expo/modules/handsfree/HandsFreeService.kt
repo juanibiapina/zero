@@ -17,8 +17,6 @@ import android.os.SystemClock
 
 class HandsFreeService : Service() {
   private var session: MediaSession? = null
-  private var lastKey: String? = null
-  private var lastKeyAt = 0L
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -52,20 +50,12 @@ class HandsFreeService : Service() {
     super.onDestroy()
   }
 
-  private fun emit(key: String) {
-    val now = SystemClock.elapsedRealtime()
-    val held = key == lastKey && now - lastKeyAt < REPEAT_GUARD_MS
-    lastKey = key
-    lastKeyAt = now
-    if (!held) onKey?.invoke(key)
-  }
-
   private fun createSession() = MediaSession(this, "ZeroHandsFree").apply {
     setPlaybackToRemote(object : VolumeProvider(VOLUME_CONTROL_RELATIVE, VOLUME_STEPS, VOLUME_STEPS / 2) {
       override fun onAdjustVolume(direction: Int) {
         when {
-          direction > 0 -> emit(KEY_UP)
-          direction < 0 -> emit(KEY_DOWN)
+          direction > 0 -> press(KEY_UP)
+          direction < 0 -> press(KEY_DOWN)
         }
       }
     })
@@ -121,5 +111,17 @@ class HandsFreeService : Service() {
     @Volatile
     var running = false
       private set
+
+    private var lastKey: String? = null
+    private var lastKeyAt = 0L
+
+    @Synchronized
+    fun press(key: String) {
+      val now = SystemClock.elapsedRealtime()
+      val held = key == lastKey && now - lastKeyAt < REPEAT_GUARD_MS
+      lastKey = key
+      lastKeyAt = now
+      if (!held) onKey?.invoke(key)
+    }
   }
 }

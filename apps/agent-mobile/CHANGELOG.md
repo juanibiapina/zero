@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-04: Fix the volume panel popping up when you press a volume key in hands-free with the screen on.
+
 - 2026-11-04: Change hands-free to start with a short chime instead of a spoken introduction. Zero no longer explains the keys aloud; it reads each Prompt and the answer volume up gives.
 
 - 2026-11-04: Change hands-free to use only the volume keys, one press each. Headset buttons no longer do anything, so tapping your earbuds can't trigger it. Press either key while Zero says "Speak your answer" to cancel, or while recording to stop and save.

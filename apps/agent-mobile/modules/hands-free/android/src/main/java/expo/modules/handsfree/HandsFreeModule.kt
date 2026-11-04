@@ -1,6 +1,7 @@
 package expo.modules.handsfree
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -8,6 +9,8 @@ import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
+import android.view.KeyEvent
+import android.view.Window
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
@@ -16,6 +19,7 @@ class HandsFreeModule : Module() {
   private var recorder: MediaRecorder? = null
   private var take: File? = null
   private var startedAt = 0L
+  private var capture: Capture? = null
 
   private val context: Context
     get() = requireNotNull(appContext.reactContext)
@@ -32,6 +36,7 @@ class HandsFreeModule : Module() {
       HandsFreeService.onKey = { key -> sendEvent(KEY_EVENT, mapOf("key" to key)) }
       val intent = Intent(context, HandsFreeService::class.java)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent)
+      appContext.currentActivity?.let { activity -> activity.runOnUiThread { captureVolumeKeys(activity) } }
       true
     }
 
@@ -90,7 +95,37 @@ class HandsFreeModule : Module() {
     }
   }
 
+  private fun captureVolumeKeys(activity: Activity) {
+    releaseVolumeKeys()
+    val window = activity.window ?: return
+    val original = window.callback ?: return
+    val next = Capture(window, original)
+    window.callback = next
+    capture = next
+  }
+
+  private fun releaseVolumeKeys() {
+    val current = capture ?: return
+    capture = null
+    current.window.decorView.post {
+      if (current.window.callback === current) current.window.callback = current.original
+    }
+  }
+
+  private class Capture(val window: Window, val original: Window.Callback) : Window.Callback by original {
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+      val key = when (event.keyCode) {
+        KeyEvent.KEYCODE_VOLUME_UP -> HandsFreeService.KEY_UP
+        KeyEvent.KEYCODE_VOLUME_DOWN -> HandsFreeService.KEY_DOWN
+        else -> return original.dispatchKeyEvent(event)
+      }
+      if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) HandsFreeService.press(key)
+      return true
+    }
+  }
+
   private fun stop() {
+    releaseVolumeKeys()
     HandsFreeService.onKey = null
     context.stopService(Intent(context, HandsFreeService::class.java))
   }
