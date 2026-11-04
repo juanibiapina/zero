@@ -29,11 +29,11 @@ An agent working on its own often needs a decision only you can make, and you ar
 
 A question-bubble button in Home's header, left of the mic, with a badge counting the Prompts you have not answered. Tapping it opens the oldest one; with none left, it opens the list.
 
-A Prompt opens full screen, without the tab bar: its title, the question rendered as a document, one button per suggestion, and a text field with a send button. An answered Prompt shows its answer highlighted.
+A Prompt opens full screen, without the tab bar: its title, the question rendered as a document, and after the document one button per suggestion and a text field with a send button. The document colors its headings, inline code, list markers, and quotes with the accent, and highlights code blocks. While the answer controls are below the screen, a floating Answer button scrolls to them. An answered Prompt shows its answer in a box under the title and no answer controls.
 
-Picking a passage tints it and swaps the answer controls for a comment field that names the passage. A comment shows under its passage, in a box with an accent edge, and the passage gets an accent mark. A line above the suggestions says how many comments go with your answer.
+Picking a passage tints it and replaces the answer controls with a comment field, docked at the bottom, that names the passage. A comment shows under its passage, in a box with an accent edge, and the passage stays tinted. Once a Prompt has comments, a line above the suggestions says how many go with your answer.
 
-Browse lists Prompts, newest first. A new one has a dot and a bold title. Below the title is the answer when there is one, otherwise the date and time it arrived.
+Browse lists Prompts in two groups, Open and Answered, newest first. A circle in front of each shows its state: filled accent for a new Prompt, light accent for one you opened, grey with a check for an answered one. A new Prompt has a bold title. Below the title is the answer when there is one, otherwise how long ago it arrived, or its date after a week.
 
 ## Interactions
 

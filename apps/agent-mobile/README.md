@@ -32,6 +32,11 @@ locally (pnpm isolated installs keep them scoped to this app):
   `eslint-plugin-react` (pulled in by `eslint-config-expo`) does not yet run on
   the repo's eslint 10.
 - **TypeScript**: extends `expo/tsconfig.base`, not `@zero/typescript-config`.
+- **DOM components** (`'use dom'`) compile with babel-preset-expo's webview
+  profile, which rewrites Unicode regex literals such as `/\p{P}/u`. A library
+  that splices regex sources together breaks there and not in Jest: `marked`
+  left bold text as literal `**`, so the Prompt document uses `markdown-it`.
+  Check a new library for the DOM side in an `expo export` bundle.
 
 ## Styling and UI
 

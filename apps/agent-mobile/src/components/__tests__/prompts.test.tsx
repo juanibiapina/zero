@@ -71,7 +71,7 @@ async function open(initialUrl: string, seed: (model: PromptModel) => void = (mo
 }
 
 describe('Prompts', () => {
-  it('lists new and answered Prompts under Browse', async () => {
+  it('lists open and answered Prompts under Browse', async () => {
     const { screen, result } = await open('/browse', (model) => {
       model.create('p1', flight);
       model.create('p2', { title: 'Dinner?', text: 'Where should we eat?', suggestions: [] });
@@ -79,7 +79,9 @@ describe('Prompts', () => {
     });
     await fireEvent.press(screen.getByLabelText('Prompts'));
     expect(result.getPathname()).toBe('/browse/prompts');
+    expect(screen.getByText('Open')).toBeTruthy();
     expect(screen.getByLabelText('New: Which flight?')).toBeTruthy();
+    expect(screen.getByText('Answered')).toBeTruthy();
     expect(screen.getByText('The Thai place')).toBeTruthy();
 
     await fireEvent.press(screen.getByLabelText('New: Which flight?'));
@@ -109,7 +111,7 @@ describe('Prompts', () => {
 
   it('keeps comments on passages, which go with the answer', async () => {
     const { screen, model } = await open('/browse/prompt/p1?from=list');
-    expect(screen.getByText('Tap a passage or select words to comment on them.')).toBeTruthy();
+    expect(screen.queryByText(/comments? go/)).toBeNull();
 
     await fireEvent.press(screen.getByLabelText('Passage'));
     expect(screen.getByText('Comment on “Two flights fit the trip.”')).toBeTruthy();
@@ -144,8 +146,7 @@ describe('Prompts', () => {
     });
     expect(screen.getByText('Book the cheaper one')).toBeTruthy();
     expect(screen.queryByLabelText('Answer')).toBeNull();
-    expect(screen.getByText('The 9:40')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'The 9:40' }).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.queryByText('The 9:40')).toBeNull();
   });
 
   it('goes back to Prompts when the Prompt was deleted', async () => {

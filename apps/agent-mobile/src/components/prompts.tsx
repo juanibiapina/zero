@@ -1,11 +1,12 @@
 import { Host, Icon } from '@expo/ui';
 import { messageOf, type Prompt } from '@zero/agent-core';
 import { router, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { BackHandler, FlatList, Linking, Pressable, useColorScheme, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { BackHandler, Linking, Pressable, ScrollView, SectionList, useColorScheme, View, type ScrollViewInstance } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BackRow } from '@/components/back-row';
 import PromptDocument from '@/components/prompt-document';
 import { ScreenHeader } from '@/components/screen-header';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,9 @@ import { useColor } from '@/lib/theme';
 const PROMPT_ICON = Icon.select({ ios: 'questionmark.bubble', android: import('@expo/material-symbols/live_help.xml') });
 const SEND_ICON = Icon.select({ ios: 'paperplane.fill', android: import('@expo/material-symbols/send.xml') });
 const CLOSE_ICON = Icon.select({ ios: 'xmark', android: import('@expo/material-symbols/close.xml') });
+const QUESTION_ICON = Icon.select({ ios: 'questionmark', android: import('@expo/material-symbols/question_mark.xml') });
+const CHECK_ICON = Icon.select({ ios: 'checkmark', android: import('@expo/material-symbols/check.xml') });
+const DOWN_ICON = Icon.select({ ios: 'chevron.down', android: import('@expo/material-symbols/keyboard_arrow_down.xml') });
 
 type Origin = 'home' | 'list';
 
@@ -34,10 +38,16 @@ export function openPrompt(id: string, from: Origin) {
   router.navigate({ pathname: '/browse/prompt/[id]', params: { id, from } }, { withAnchor: true });
 }
 
-function formatCreatedAt(createdAt: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).format(new Date(createdAt));
+function arrivedAt(createdAt: string, now = Date.now()): string {
+  const minutes = Math.floor((now - Date.parse(createdAt)) / 60_000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(createdAt));
 }
 
 export function PromptButton() {
@@ -65,30 +75,69 @@ export function PromptButton() {
   );
 }
 
+function PromptState({ prompt }: { prompt: Prompt }) {
+  const accent = useColor('--color-accent');
+  const onAccent = useColor('--color-on-accent');
+  const secondary = useColor('--color-foreground-secondary');
+  if (prompt.answer) {
+    return (
+      <View className="h-[22px] w-[22px] items-center justify-center rounded-full bg-surface-muted">
+        <Host matchContents><Icon name={CHECK_ICON} size={14} color={secondary} /></Host>
+      </View>
+    );
+  }
+  const unseen = !prompt.seenAt;
+  return (
+    <View className={unseen
+      ? 'h-[22px] w-[22px] items-center justify-center rounded-full bg-accent'
+      : 'h-[22px] w-[22px] items-center justify-center rounded-full bg-accent-soft'}
+    >
+      <Host matchContents><Icon name={QUESTION_ICON} size={14} color={unseen ? onAccent : accent} /></Host>
+    </View>
+  );
+}
+
 function PromptRow({ prompt }: { prompt: Prompt }) {
-  const when = formatCreatedAt(prompt.createdAt);
+  const answer = prompt.answer?.text ?? null;
+  const unseen = answer === null && !prompt.seenAt;
   return (
     <ListRow
-      leading={<View className={prompt.seenAt ? 'h-2 w-2' : 'h-2 w-2 rounded-full bg-accent'} />}
-      accessibilityLabel={prompt.seenAt ? prompt.title : `New: ${prompt.title}`}
+      leading={<PromptState prompt={prompt} />}
+      accessibilityLabel={unseen ? `New: ${prompt.title}` : prompt.title}
       onPress={() => openPrompt(prompt.id, 'list')}
       className="min-h-12"
     >
-      <Text numberOfLines={1} className={prompt.seenAt ? undefined : 'font-semibold'}>{prompt.title}</Text>
-      <Text variant="subtitle" numberOfLines={1}>{prompt.answer?.text ?? when}</Text>
+      <Text numberOfLines={1} className={unseen ? 'font-semibold' : answer !== null ? 'text-foreground-secondary' : undefined}>
+        {prompt.title}
+      </Text>
+      <Text variant="subtitle" numberOfLines={1}>{answer ?? arrivedAt(prompt.createdAt)}</Text>
     </ListRow>
   );
 }
 
 export function PromptsScreen() {
   const { prompts } = usePrompts();
+  const sections = [
+    { title: 'Open', data: (prompts ?? []).filter((prompt) => !prompt.answer) },
+    { title: 'Answered', data: (prompts ?? []).filter((prompt) => prompt.answer) },
+  ].filter((section) => section.data.length > 0);
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Prompts" back={{ label: 'Browse', accessibilityLabel: 'Back to Browse', onPress: backToBrowse }} />
       {prompts === null ? null : prompts.length === 0 ? (
         <Text variant="subtitle" className="px-screen-x py-6">No prompts yet.</Text>
       ) : (
-        <FlatList data={prompts} keyExtractor={(prompt) => prompt.id} renderItem={({ item }) => <PromptRow prompt={item} />} />
+        <SectionList
+          sections={sections}
+          keyExtractor={(prompt) => prompt.id}
+          renderItem={({ item }) => <PromptRow prompt={item} />}
+          renderSectionHeader={({ section }) => (
+            <View className="bg-background px-screen-x pb-1 pt-5">
+              <Text variant="section">{section.title}</Text>
+            </View>
+          )}
+          stickySectionHeadersEnabled={false}
+        />
       )}
     </View>
   );
@@ -103,6 +152,8 @@ export function PromptScreen() {
   const insets = useSafeAreaInsets();
   const accent = useColor('--color-accent');
   const muted = useColor('--color-foreground-muted');
+  const onAccent = useColor('--color-on-accent');
+  const ripple = useColor('--color-ripple');
   const colors = {
     background: useColor('--color-background'),
     foreground: useColor('--color-foreground'),
@@ -111,7 +162,9 @@ export function PromptScreen() {
     surface: useColor('--color-surface-muted'),
     divider: useColor('--color-divider'),
     accent,
-    onAccent: useColor('--color-on-accent'),
+    accentSoft: useColor('--color-accent-soft'),
+    onAccent,
+    danger: useColor('--color-danger'),
   };
   const dark = useColorScheme() === 'dark';
   const [draft, setDraft] = useState('');
@@ -119,6 +172,11 @@ export function PromptScreen() {
   const [comment, setComment] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const scroll = useRef<ScrollViewInstance>(null);
+  const answerFocused = useRef(false);
+  const [viewport, setViewport] = useState(0);
+  const [scrollY, setScrollY] = useState(0);
+  const [answerTop, setAnswerTop] = useState(0);
   useHiddenTabBar();
 
   const missing = prompts !== null && prompt === null;
@@ -150,7 +208,7 @@ export function PromptScreen() {
     }
   }, [replica, sending, id, close]);
 
-  const addComment = useCallback(async () => {
+  const addComment = async () => {
     if (!replica || passage === null || sending || !comment.trim()) return;
     setSending(true);
     setError(null);
@@ -162,7 +220,7 @@ export function PromptScreen() {
       setError(messageOf(cause));
     }
     setSending(false);
-  }, [replica, passage, sending, comment, id]);
+  };
 
   const removeComment = useCallback(async (commentId: string) => {
     if (!replica) return;
@@ -177,17 +235,38 @@ export function PromptScreen() {
   if (!prompt) return <View className="flex-1 bg-background" />;
   const answered = prompt.answer?.text ?? null;
   const commentCount = prompt.comments.length;
+  const answering = answered === null && passage === null;
+  const answerBelow = answering && answerTop > 0 && viewport > 0 && answerTop > scrollY + viewport - 48;
 
   return (
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-      <View className="flex-1 bg-background" style={{ paddingBottom: insets.bottom + 12 }}>
-        <ScreenHeader
-          title={prompt.title}
-          back={from === 'home'
+      <View className="flex-1 bg-background">
+        <BackRow
+          {...(from === 'home'
             ? { label: 'Home', accessibilityLabel: 'Back to Home', onPress: close }
-            : { label: 'Prompts', accessibilityLabel: 'Back to Prompts', onPress: close }}
+            : { label: 'Prompts', accessibilityLabel: 'Back to Prompts', onPress: close })}
         />
-        <View className="flex-1">
+        <ScrollView
+          ref={scroll}
+          className="flex-1"
+          keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={32}
+          onScroll={(event) => setScrollY(event.nativeEvent.contentOffset.y)}
+          onLayout={(event) => {
+            setViewport(event.nativeEvent.layout.height);
+            if (answerFocused.current) requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: true }));
+          }}
+          contentContainerStyle={{ paddingBottom: passage === null ? insets.bottom + 24 : 16 }}
+        >
+          <View className="mb-2 min-h-12 justify-center px-screen-x">
+            <Text variant="title">{prompt.title}</Text>
+          </View>
+          {answered !== null ? (
+            <View className="mx-screen-x mb-4 flex-row items-start gap-3 rounded-2xl bg-accent-soft px-4 py-3">
+              <Host matchContents><Icon name={CHECK_ICON} size={20} color={accent} /></Host>
+              <Text className="flex-1 font-semibold">{answered}</Text>
+            </View>
+          ) : null}
           <PromptDocument
             markdown={prompt.text}
             comments={prompt.comments.map(({ id: commentId, quote, text }) => ({ id: commentId, quote, text }))}
@@ -198,12 +277,73 @@ export function PromptScreen() {
             onPassage={async (quote) => { setPassage(quote); }}
             onRemoveComment={removeComment}
             onOpenLink={async (url) => { await Linking.openURL(url); }}
-            dom={{ style: { flex: 1, backgroundColor: colors.background } }}
+            dom={{ matchContents: true, scrollEnabled: false, containerStyle: { width: '100%' } }}
           />
-        </View>
+          {answering ? (
+            <View onLayout={(event) => setAnswerTop(event.nativeEvent.layout.y)} className="gap-2 px-screen-x pt-4">
+              {commentCount > 0 ? (
+                <Text variant="caption" className="pb-1">
+                  {`${commentCount} ${commentCount === 1 ? 'comment goes' : 'comments go'} with your answer.`}
+                </Text>
+              ) : null}
+              {prompt.suggestions.map((suggestion) => (
+                <View key={suggestion} className="overflow-hidden rounded-2xl">
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: sending }}
+                    disabled={sending}
+                    onPress={() => void send(suggestion)}
+                    android_ripple={{ color: ripple }}
+                    className="min-h-[52px] justify-center bg-accent-soft px-4 py-3"
+                  >
+                    <Text className="font-semibold">{suggestion}</Text>
+                  </Pressable>
+                </View>
+              ))}
+              <View className="min-h-[52px] flex-row items-center gap-2 rounded-2xl bg-surface-muted pl-4">
+                <Input
+                  accessibilityLabel="Answer"
+                  placeholder="Your answer"
+                  value={draft}
+                  onChangeText={setDraft}
+                  onFocus={() => { answerFocused.current = true; }}
+                  onBlur={() => { answerFocused.current = false; }}
+                  multiline
+                  editable={!sending}
+                  className="max-h-32 flex-1 py-3"
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Send"
+                  accessibilityState={{ disabled: !draft.trim() || sending }}
+                  disabled={!draft.trim() || sending}
+                  onPress={() => void send(draft)}
+                  className="h-12 w-12 items-center justify-center"
+                >
+                  <Host matchContents><Icon name={SEND_ICON} size={22} color={draft.trim() ? accent : muted} /></Host>
+                </Pressable>
+              </View>
+              {error ? <Text variant="error">{error}</Text> : null}
+            </View>
+          ) : null}
+        </ScrollView>
+        {answerBelow ? (
+          <View pointerEvents="box-none" className="absolute inset-x-0 items-center" style={{ bottom: insets.bottom + 16 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go to answer"
+              onPress={() => scroll.current?.scrollToEnd({ animated: true })}
+              className="h-11 flex-row items-center gap-1 rounded-full bg-accent pl-5 pr-3 shadow-raised"
+            >
+              <Text className="font-semibold text-on-accent">Answer</Text>
+              <Host matchContents><Icon name={DOWN_ICON} size={22} color={onAccent} /></Host>
+            </Pressable>
+          </View>
+        ) : null}
         {passage !== null ? (
-          <View className="gap-2 px-screen-x pt-2">
-            <View className="flex-row items-center gap-2">
+          <View className="gap-2 border-t border-divider px-screen-x pt-3" style={{ paddingBottom: insets.bottom + 12 }}>
+            <View className="flex-row items-center gap-3">
+              <View className="w-[3px] self-stretch rounded-full bg-accent" />
               <Text variant="caption" numberOfLines={2} className="flex-1">Comment on “{passage}”</Text>
               <Pressable
                 accessibilityRole="button"
@@ -214,7 +354,7 @@ export function PromptScreen() {
                 <Host matchContents><Icon name={CLOSE_ICON} size={20} color={muted} /></Host>
               </Pressable>
             </View>
-            <View className="min-h-14 flex-row items-center gap-2 rounded-dialog bg-surface-muted pl-4">
+            <View className="min-h-[52px] flex-row items-center gap-2 rounded-2xl bg-surface-muted pl-4">
               <Input
                 accessibilityLabel="Comment"
                 value={comment}
@@ -237,59 +377,7 @@ export function PromptScreen() {
             </View>
             {error ? <Text variant="error">{error}</Text> : null}
           </View>
-        ) : (
-        <View className="gap-2 px-screen-x pt-2">
-          {answered === null ? (
-            <Text variant="caption">
-              {commentCount === 0
-                ? 'Tap a passage or select words to comment on them.'
-                : `${commentCount} ${commentCount === 1 ? 'comment goes' : 'comments go'} with your answer.`}
-            </Text>
-          ) : null}
-          {prompt.suggestions.map((suggestion) => (
-            <Pressable
-              key={suggestion}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: answered !== null || sending, selected: answered === suggestion }}
-              disabled={answered !== null || sending}
-              onPress={() => void send(suggestion)}
-              className={answered === suggestion
-                ? 'min-h-14 justify-center rounded-dialog bg-accent px-4'
-                : 'min-h-14 justify-center rounded-dialog bg-surface-muted px-4'}
-            >
-              <Text className={answered === suggestion ? 'font-semibold text-on-accent' : 'font-semibold'}>{suggestion}</Text>
-            </Pressable>
-          ))}
-          {answered !== null && !prompt.suggestions.includes(answered) ? (
-            <View className="min-h-14 justify-center rounded-dialog bg-accent px-4">
-              <Text className="font-semibold text-on-accent">{answered}</Text>
-            </View>
-          ) : null}
-          {answered === null ? (
-            <View className="min-h-14 flex-row items-center gap-2 rounded-dialog bg-surface-muted pl-4">
-              <Input
-                accessibilityLabel="Answer"
-                value={draft}
-                onChangeText={setDraft}
-                multiline
-                editable={!sending}
-                className="max-h-32 flex-1 py-3"
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Send"
-                accessibilityState={{ disabled: !draft.trim() || sending }}
-                disabled={!draft.trim() || sending}
-                onPress={() => void send(draft)}
-                className="h-12 w-12 items-center justify-center"
-              >
-                <Host matchContents><Icon name={SEND_ICON} size={22} color={draft.trim() ? accent : muted} /></Host>
-              </Pressable>
-            </View>
-          ) : null}
-          {error ? <Text variant="error">{error}</Text> : null}
-        </View>
-        )}
+        ) : null}
       </View>
     </KeyboardAvoidingView>
   );

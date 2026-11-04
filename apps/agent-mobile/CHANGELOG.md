@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-04: Make Prompts easier to read. Bold text no longer shows as `**`, headings and code have color, and code blocks are highlighted. The answer buttons now come after the text, with an Answer button that jumps to them, so they no longer cover half the screen. Answered Prompts show your answer at the top, and the Prompts list groups open and answered Prompts.
+
 - 2026-11-03: Fix voice notes waiting for their transcript until you opened Zero again. Once you stop recording, the transcript arrives even if you leave the app right away; a "Sending voice note" notification shows while the audio uploads.
 
 - 2026-11-03: Add hands-free Prompts under Browse. Zero reads your unanswered Prompts aloud, even with the screen off. Press volume up to take the first suggestion, or volume down to speak your answer, which Zero sends once it is transcribed. When none are left, volume down records a voice note. Headset buttons work too: tap to accept, double tap to speak, triple tap to hear the Prompt again.
