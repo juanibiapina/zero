@@ -212,6 +212,11 @@ jobs:
 
       - name: Publish Android preview update
         working-directory: apps/agent-mobile
+        env:
+          # Expo CLI 58.1 fails the DOM component export (prompt-document.tsx) when
+          # it splits mermaid into chunks: renaming them to md5 names leaves a
+          # dangling `__common` reference ("Asset not found"). One bundle avoids it.
+          EXPO_NO_BUNDLE_SPLITTING: '1'
         run: |
           SUBJECT=$(git log -1 --pretty=%s)
           SHORT_SHA=$(git rev-parse --short HEAD)

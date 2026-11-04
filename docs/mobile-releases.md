@@ -27,13 +27,17 @@ tests pass. The CI job publishes only for changes to these paths:
 CI runs this command from `apps/agent-mobile`:
 
 ```bash
-eas update \
+EXPO_NO_BUNDLE_SPLITTING=1 eas update \
   --channel preview \
   --platform android \
   --environment preview \
   --message "<commit subject> (<short SHA>)" \
   --non-interactive
 ```
+
+`EXPO_NO_BUNDLE_SPLITTING=1` works around an Expo CLI 58.1 bug: with bundle
+splitting, exporting the Prompt document DOM component fails with `Asset not
+found: _expo/static/js/web/__common-….js`.
 
 The `preview` environment contains the public
 `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`. The app uses
