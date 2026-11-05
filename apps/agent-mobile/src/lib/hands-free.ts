@@ -2,7 +2,7 @@ import type { NewRecording, Prompt, Recording } from '@zero/agent-core';
 
 export type HandsFreeKey = 'up' | 'down' | 'stop';
 
-export type HandsFreePhase = 'reading' | 'waiting' | 'cue' | 'recording' | 'saving' | 'ended';
+export type HandsFreePhase = 'ready' | 'reading' | 'waiting' | 'cue' | 'recording' | 'saving' | 'ended';
 
 export type HandsFreeState = { phase: HandsFreePhase; prompt: Prompt | null };
 
@@ -58,6 +58,8 @@ export function readAloud(prompt: Prompt): string {
 
 export const NOTHING_LEFT = 'No prompts left.';
 
+export const PROMPT_READY = 'Prompt ready.';
+
 const byAge = (a: Prompt, b: Prompt) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id);
 
 export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
@@ -98,9 +100,14 @@ export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
       void say(prefix + NOTHING_LEFT, () => set('waiting', null));
       return;
     }
+    set('ready', prompt);
+    void say(prefix + PROMPT_READY, () => {});
+  };
+
+  const read = (prompt: Prompt) => {
     set('reading', prompt);
     void data.markSeen(prompt.id).catch(() => {});
-    void say(prefix + readAloud(prompt), () => set('waiting', prompt));
+    void say(readAloud(prompt), () => set('waiting', prompt));
   };
 
   const accept = async (prompt: Prompt | null) => {
@@ -170,6 +177,10 @@ export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
 
   const cancelCue = (prompt: Prompt | null) => {
     interrupt();
+    if (!prompt) {
+      present('Cancelled.\n');
+      return;
+    }
     set('reading', prompt);
     void say('Cancelled.', () => set('waiting', prompt));
   };
@@ -190,16 +201,26 @@ export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
       return;
     }
     interrupt();
+    if (phase === 'ready' && prompt) {
+      if (key === 'up') read(prompt);
+      else void record(null);
+      return;
+    }
     if (key === 'down') void record(prompt);
     else void accept(prompt);
   };
 
   const onData = () => {
     const { phase, prompt } = current;
-    if (phase !== 'waiting') return;
+    if (phase !== 'waiting' && phase !== 'ready') return;
     const open = queue();
-    if (prompt === null && open.length > 0) present('New prompt.\n');
-    else if (prompt !== null && !open.some((candidate) => candidate.id === prompt.id)) present();
+    if (prompt === null && open.length > 0) {
+      interrupt();
+      present('New prompt.\n');
+    } else if (prompt !== null && !open.some((candidate) => candidate.id === prompt.id)) {
+      interrupt();
+      present();
+    }
   };
 
   const stopKeys = ports.keys.onKey(onKey);
@@ -217,7 +238,7 @@ export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
   };
 
   const [first] = queue();
-  current = { phase: 'reading', prompt: first ?? null };
+  current = { phase: first ? 'ready' : 'reading', prompt: first ?? null };
   void (async () => {
     const mine = turn;
     await ports.chime().catch(() => {});

@@ -134,6 +134,7 @@ function useHandsFree(): { state: HandsFreeState | null; problem: Problem | null
 }
 
 const PHASE_TEXT: Record<HandsFreeState['phase'], string> = {
+  ready: 'Prompt waiting',
   reading: 'Reading aloud',
   waiting: 'Waiting for a key',
   cue: 'Get ready to speak',
@@ -146,6 +147,7 @@ function keys({ phase, prompt }: HandsFreeState): [string, string][] {
   if (phase === 'cue') return [['Any key', 'Cancel']];
   if (phase === 'recording') return [['Any key', 'Stop and save']];
   if (!prompt) return [['Volume up', 'End hands-free'], ['Volume down', 'Record a note']];
+  if (phase === 'ready') return [['Volume up', 'Read it aloud'], ['Volume down', 'Record a note']];
   return [
     ['Volume up', prompt.suggestions[0] ?? 'Skip'],
     ['Volume down', 'Speak your answer'],
@@ -180,7 +182,7 @@ export function HandsFreeScreen() {
           <>
             <View className="gap-2">
               <Text variant="caption" className="text-center">{PHASE_TEXT[state.phase]}</Text>
-              <Text className="text-center text-2xl font-semibold">{state.prompt?.title ?? 'No prompts left'}</Text>
+              <Text className="text-center text-2xl font-semibold">{state.prompt?.title ?? (state.phase === 'cue' || state.phase === 'recording' || state.phase === 'saving' ? 'Voice note' : 'No prompts left')}</Text>
             </View>
             <View className="gap-3">
               {keys(state).map(([key, action]) => (
