@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-05: Fix hands-free ignoring the volume keys with the screen off. Volume down now records your voice note or answer, and the recording shows up in Recordings like any other.
+
 - 2026-11-04: Fix the volume panel popping up when you press a volume key in hands-free with the screen on.
 
 - 2026-11-04: Change hands-free to start with a short chime instead of a spoken introduction. Zero no longer explains the keys aloud; it reads each Prompt and the answer volume up gives.

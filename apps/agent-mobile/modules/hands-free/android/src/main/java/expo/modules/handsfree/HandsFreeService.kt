@@ -51,6 +51,10 @@ class HandsFreeService : Service() {
   }
 
   private fun createSession() = MediaSession(this, "ZeroHandsFree").apply {
+    // A session delivers VolumeProvider calls through its callback's handler and
+    // drops them while it has no callback, which lost every volume key pressed
+    // with the screen off.
+    setCallback(object : MediaSession.Callback() {})
     setPlaybackToRemote(object : VolumeProvider(VOLUME_CONTROL_RELATIVE, VOLUME_STEPS, VOLUME_STEPS / 2) {
       override fun onAdjustVolume(direction: Int) {
         when {
