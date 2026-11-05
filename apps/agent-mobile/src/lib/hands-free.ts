@@ -133,15 +133,11 @@ export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
   const record = async (prompt: Prompt | null) => {
     set('cue', prompt);
     const mine = turn;
-    console.log('HFDEBUG cue start', mine);
     const outcome = await speech.say(prompt ? 'Speak your answer.' : 'Speak your note.').catch(() => 'done' as const);
-    console.log('HFDEBUG cue said', outcome, mine, turn, current.phase);
     if (mine !== turn || outcome !== 'done' || current.phase !== 'cue') return;
     try {
       await recorder.start();
-      console.log('HFDEBUG recorder started');
-    } catch (e) {
-      console.log('HFDEBUG recorder failed', String(e));
+    } catch {
       present('Recording failed.\n');
       return;
     }
@@ -157,8 +153,7 @@ export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
   const save = async (): Promise<boolean> => {
     const { prompt } = current;
     set('saving', prompt);
-    const take = await recorder.finish().catch((e) => { console.log('HFDEBUG finish failed', String(e)); return null; });
-    console.log('HFDEBUG take', JSON.stringify(take));
+    const take = await recorder.finish().catch(() => null);
     if (!take) return false;
     await data.saveRecording(take.uri, {
       id: ports.newId(),
@@ -191,7 +186,6 @@ export function startHandsFree(ports: HandsFreePorts): HandsFreeSession {
   };
 
   const onKey = (key: HandsFreeKey) => {
-    console.log('HFDEBUG key', key, current.phase);
     if (key === 'stop') {
       void stop();
       return;
