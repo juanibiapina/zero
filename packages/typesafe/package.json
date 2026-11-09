@@ -13,7 +13,7 @@
     "src"
   ],
   "devDependencies": {
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.6.6",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.8.0",
