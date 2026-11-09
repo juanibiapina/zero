@@ -5,6 +5,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+      time: "03:00"
+      timezone: "Europe/Berlin"
     ignore:
       # The Expo SDK pins these as one set; upgrade them together with
       # `npx expo install --fix` in apps/agent-mobile. React moves with the SDK,
@@ -48,3 +50,5 @@ updates:
     schedule:
       interval: weekly
       day: monday
+      time: "03:00"
+      timezone: "Europe/Berlin"
