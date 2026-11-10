@@ -21,7 +21,7 @@
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.8.0",
     "typescript": "6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^5.1.0"
   },
   "scripts": {
     "generate": "node scripts/generate-catalog.mjs",
