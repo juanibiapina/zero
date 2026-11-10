@@ -27,15 +27,15 @@
     "prepublishOnly": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "commander": "^15.0.0"
+    "commander": "^15.1.0"
   },
   "devDependencies": {
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "@types/node": "^26.1.2",
-    "eslint": "10.8.0",
-    "tsx": "^4.23.1",
+    "@types/node": "^26.6.6",
+    "eslint": "10.14.0",
+    "tsx": "^4.23.15",
     "typescript": "6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.12"
   }
 }
