@@ -60,17 +60,17 @@ importers:
         specifier: 2.2.0
         version: 2.2.0(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@5.0.10))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.3.0)(utf-8-validate@5.0.10))
       '@tanstack/db':
-        specifier: 0.12.1
-        version: 0.12.1(typescript@6.0.3)
+        specifier: 0.15.2
+        version: 0.15.2(typescript@6.0.3)
       '@tanstack/query-db-collection':
-        specifier: 1.4.0
-        version: 1.4.0(@tanstack/query-core@5.104.1)(typescript@6.0.3)
+        specifier: 1.5.1
+        version: 1.5.1(@tanstack/db@0.15.2(typescript@6.0.3))(@tanstack/query-core@5.107.1)(typescript@6.0.3)
       '@tanstack/react-db':
-        specifier: 0.5.5
-        version: 0.5.5(react@19.3.0)(typescript@6.0.3)
+        specifier: 0.5.12
+        version: 0.5.12(react@19.3.0)(typescript@6.0.3)
       '@tanstack/react-query':
-        specifier: 5.104.1
-        version: 5.104.1(react@19.3.0)
+        specifier: 5.107.1
+        version: 5.107.1(@types/react@19.3.0)(react@19.3.0)
       '@zero/agent-core':
         specifier: workspace:*
         version: link:../../packages/agent-core
@@ -275,7 +275,7 @@ importers:
         version: link:../../packages/typesafe
       do-orm:
         specifier: github:juanibiapina/do-orm
-        version: https://codeload.github.com/juanibiapina/do-orm/tar.gz/c4d23d476ed2f5222ef87fa250b2fdedccd8c05e
+        version: https://codeload.github.com/juanibiapina/do-orm/tar.gz/1f9a2ecaafd2d023c48ccd8e5cc5532d211a4c58
       hono:
         specifier: ^4.12.33
         version: 4.12.33
@@ -347,14 +347,14 @@ importers:
         specifier: ^1.3.3
         version: 1.3.3(@types/react@19.2.18)(react@19.2.8)
       '@tanstack/db':
-        specifier: 0.12.1
-        version: 0.12.1(typescript@6.0.3)
+        specifier: 0.15.2
+        version: 0.15.2(typescript@6.0.3)
       '@tanstack/react-db':
-        specifier: 0.5.5
-        version: 0.5.5(react@19.2.8)(typescript@6.0.3)
+        specifier: 0.5.12
+        version: 0.5.12(react@19.2.8)(typescript@6.0.3)
       '@tanstack/react-query':
-        specifier: 5.104.1
-        version: 5.104.1(react@19.2.8)
+        specifier: 5.107.1
+        version: 5.107.1(@types/react@19.2.18)(react@19.2.8)
       '@zero/agent-core':
         specifier: workspace:*
         version: link:../../packages/agent-core
@@ -460,7 +460,7 @@ importers:
         version: link:../../packages/errors-core
       do-orm:
         specifier: github:juanibiapina/do-orm
-        version: https://codeload.github.com/juanibiapina/do-orm/tar.gz/c4d23d476ed2f5222ef87fa250b2fdedccd8c05e
+        version: https://codeload.github.com/juanibiapina/do-orm/tar.gz/1f9a2ecaafd2d023c48ccd8e5cc5532d211a4c58
       hono:
         specifier: ^4.12.33
         version: 4.12.33
@@ -697,11 +697,11 @@ importers:
   packages/agent-core:
     dependencies:
       '@tanstack/db':
-        specifier: 0.12.1
-        version: 0.12.1(typescript@6.0.3)
+        specifier: 0.15.2
+        version: 0.15.2(typescript@6.0.3)
       '@tanstack/query-db-collection':
-        specifier: 1.4.0
-        version: 1.4.0(@tanstack/query-core@5.104.1)(typescript@6.0.3)
+        specifier: 1.5.1
+        version: 1.5.1(@tanstack/db@0.15.2(typescript@6.0.3))(@tanstack/query-core@5.107.1)(typescript@6.0.3)
       '@zeroapps/recurrence':
         specifier: workspace:*
         version: link:../recurrence
@@ -719,8 +719,8 @@ importers:
         version: 4.6.5
     devDependencies:
       '@tanstack/react-query':
-        specifier: 5.104.1
-        version: 5.104.1(react@19.3.0)
+        specifier: 5.107.1
+        version: 5.107.1(@types/react@19.3.0)(react@19.3.0)
       '@types/node':
         specifier: ^26.1.2
         version: 26.6.4
@@ -4469,13 +4469,13 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@tanstack/db-ivm@0.1.26':
-    resolution: {integrity: sha512-Td2HbR68RfpMPv4zyMNQk83z/5gTjGl/I1LA/07A26LXMEPGh+hTsNbfPSr5YPZhq6KXX9lDFjDzv3Qz3DjV5w==}
+  '@tanstack/db-ivm@0.2.0':
+    resolution: {integrity: sha512-AuMuGzVdWR5qzJPRYajmrUp95vMo0duvMZ0zBjMOvaI9rkh2GHZWCsJ/p7s81UN4Lep6HHJjahnYUF+XVL0+AQ==}
     peerDependencies:
       typescript: '>=4.7'
 
-  '@tanstack/db@0.12.1':
-    resolution: {integrity: sha512-nSLr/NUDdN/rnM66qZaBY0Xl5pKikv2T5aANSNyVN1/NY86Y8erhVRSh9Cm20t1tAZkikqJWfID23S5sejR82w==}
+  '@tanstack/db@0.15.2':
+    resolution: {integrity: sha512-s7CR8kOgkF1oPEGyKWItWHsg7U3hhQQu+k9CPjjAWwS6wzWVvjCbHbu/xnJvO1aPe7v3SBwo1tf6CMyKjNPNxg==}
     peerDependencies:
       typescript: '>=4.7'
 
@@ -4483,27 +4483,29 @@ packages:
     resolution: {integrity: sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==}
     engines: {node: '>=18'}
 
-  '@tanstack/query-core@5.102.7':
-    resolution: {integrity: sha512-4TH8KQrCLoNs9Zvl1LW1iaZ9cZx3dGTgfZ1BnLrcRxMNnX/toe/dGbfvF/DkvbzRyfLfpMKZkembz3o0rnugtw==}
+  '@tanstack/query-core@5.107.1':
+    resolution: {integrity: sha512-PSyAik11oQBEVOiVy5hjZWHmoUqOXqK1WYy4v55mcxozEfKaQgpUMsgnXhWjuESzSht8JfzqMS1m6M/9CpNgvg==}
 
-  '@tanstack/query-core@5.104.1':
-    resolution: {integrity: sha512-TiRghcrGkUTE+M4JBxvpPSpBhxvIzQairw+cksrHYGr+2uwC77yW1SY9nYxnYRYOppvucf8rEg6b5byoz4rTpw==}
-
-  '@tanstack/query-db-collection@1.4.0':
-    resolution: {integrity: sha512-/CfT2VCIJ0vMikfOWP5xE7/0jAcj56gbGT4QReoVMt5QIrVLSwrPYkplguD7Ixj79i7J0MWvubmB8GyaUUco7A==}
+  '@tanstack/query-db-collection@1.5.1':
+    resolution: {integrity: sha512-KPEQHvbBm4BHpsKSoWAndCu/Xy21JyiYx/OISFj+TtPoN5o7ettoYaC8URDmqU5m1zGvji/nZv7SdVPipVcFRw==}
     peerDependencies:
-      '@tanstack/query-core': ^5.0.0
+      '@tanstack/db': ^1.0.0-rc.0
+      '@tanstack/query-core': ^5.90.15
       typescript: '>=4.7'
 
-  '@tanstack/react-db@0.5.5':
-    resolution: {integrity: sha512-zR4cxeJQ8nlSNikrsl0nkG9tNmvW/t32nlMeRpex0AbbkfaW4BLQADpMvBxb9M3AhnW6fO8FGBnyvlrGRS6tgw==}
+  '@tanstack/react-db@0.5.12':
+    resolution: {integrity: sha512-Sq5qtW/vJRzV3+vSFnr5dEk3GHOc/x7aG3lte6Y1wnC3GwsbnrBm1xy7XccPIvkeV8AU88Bo9QJwQXoElYqKLg==}
     peerDependencies:
       react: '>=18.0.0'
 
-  '@tanstack/react-query@5.104.1':
-    resolution: {integrity: sha512-Zz70EgjahNI7aCz8BZxM3vUGU44ycxEAzMuCUjLeA7SVhhOkg3ZgPjPJPvHjs6Rmky/dtmnu1WzjGHNHmhCoZQ==}
+  '@tanstack/react-query@5.107.1':
+    resolution: {integrity: sha512-udCOOLp3ZAheUrIHLCe+ZZge6nr2ZUrGMSWcCuXsjY1Bf2JeeE09oxst97PILiCY6N8xo/7bIo3Hvz13zh06FA==}
     peerDependencies:
+      '@types/react': ^18 || ^19
       react: ^18 || ^19
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -5593,8 +5595,8 @@ packages:
   caniuse-lite@1.0.30001799:
     resolution: {integrity: sha512-hG1bReV+OUU+MOqK4t/ZWI0tZOyz3rqS9XuhOUz1cIcbwBKjOyJEJuw9ER5JuNyqxNk8u/JUVbGibBOL1yrjFw==}
 
-  caniuse-lite@1.0.30001822:
-    resolution: {integrity: sha512-Y3fvWQWzc69dlCyr07tuNrEhotv+db5FpMSPD3slZnkPKwRNOKwFBz2dP966XUmWMXLTOt+YShkFoQoom3U7hg==}
+  caniuse-lite@1.0.30001823:
+    resolution: {integrity: sha512-TQ5s/djDjNk1axreUW+4rULH+BmdCMLiJkhaXnO5wqivG7tITkSUj4ItIdzqdZHKaXcHAV8dhH3JxOM7/7bwqw==}
 
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
@@ -6188,8 +6190,8 @@ packages:
   dnssd-advertise@1.1.6:
     resolution: {integrity: sha512-Ndrrf6BMPalkQPd/zubL+4YghH2J9NspapQ09uDXwYbvOPkP0oaqf5CkcwJ0b50kS2O3ul6yVu+jz+RY62Cejg==}
 
-  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/c4d23d476ed2f5222ef87fa250b2fdedccd8c05e:
-    resolution: {tarball: https://codeload.github.com/juanibiapina/do-orm/tar.gz/c4d23d476ed2f5222ef87fa250b2fdedccd8c05e}
+  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/1f9a2ecaafd2d023c48ccd8e5cc5532d211a4c58:
+    resolution: {tarball: https://codeload.github.com/juanibiapina/do-orm/tar.gz/1f9a2ecaafd2d023c48ccd8e5cc5532d211a4c58}
     version: 0.2.0
 
   doctrine@2.1.0:
@@ -6235,8 +6237,8 @@ packages:
   electron-to-chromium@1.5.376:
     resolution: {integrity: sha512-cUVA7/RvbFTEuw/i3obUwDTRIXojaxkResf+ibByPFxjc6XK3VNtcQXV0NSbAlJ0FMjcJGgftVVB4Qo184EXvA==}
 
-  electron-to-chromium@1.5.477:
-    resolution: {integrity: sha512-PN++F4zWZoVDGWinxMnSCpVqKhqFOJfLXxdU8bYJKudAEsHL/XKVITOKWVbfMt1r276Mi9RDLU9VHx9uKJ4RMQ==}
+  electron-to-chromium@1.5.478:
+    resolution: {integrity: sha512-pftG+ma5Lm8O6/p45bhYT6StBN5ziQymaRzmCZwFl8DwWHKPPD93FdOmP1aqftcepolQYvrcyTLa17kE8Yf+jg==}
 
   elkjs@0.12.1:
     resolution: {integrity: sha512-IhMYKHE4S2vtx0QrhBP3lYOIKDeIiJXBrdq9MGYkuB8ZHqhrBnHNfSUndjXFewrX1CPK8chwq+2NA0K0hliYuw==}
@@ -9812,9 +9814,6 @@ packages:
       react: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
       react-dom: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
 
-  sorted-btree@1.8.1:
-    resolution: {integrity: sha512-395+XIP+wqNn3USkFSrNz7G3Ss/MXlZEqesxvzCRFwL14h6e8LukDHdLBePn5pwbm5OQ9vGu8mDyz2lLDIqamQ==}
-
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
@@ -12097,7 +12096,7 @@ snapshots:
       '@coinbase/wallet-sdk': 4.3.7(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@5.0.10)(zod@4.6.5)
       '@stripe/stripe-js': 5.6.0
       '@swc/helpers': 0.5.21
-      '@tanstack/query-core': 5.104.1
+      '@tanstack/query-core': 5.107.1
       '@wallet-standard/core': 1.1.1
       '@zxcvbn-ts/core': 3.0.4
       '@zxcvbn-ts/language-common': 3.0.4
@@ -12181,7 +12180,7 @@ snapshots:
 
   '@clerk/shared@4.30.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@tanstack/query-core': 5.102.7
+      '@tanstack/query-core': 5.107.1
       dequal: 2.0.3
       glob-to-regexp: 0.4.1
       js-cookie: 3.0.7
@@ -12191,7 +12190,7 @@ snapshots:
 
   '@clerk/shared@4.30.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
-      '@tanstack/query-core': 5.102.7
+      '@tanstack/query-core': 5.107.1
       dequal: 2.0.3
       glob-to-regexp: 0.4.1
       js-cookie: 3.0.7
@@ -12201,7 +12200,7 @@ snapshots:
 
   '@clerk/shared@4.43.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
-      '@tanstack/query-core': 5.104.1
+      '@tanstack/query-core': 5.107.1
       dequal: 2.0.3
       glob-to-regexp: 0.4.1
       js-cookie: 3.0.8
@@ -14770,55 +14769,56 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.2.0(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.1)(yaml@2.9.1)
 
-  '@tanstack/db-ivm@0.1.26(typescript@6.0.3)':
+  '@tanstack/db-ivm@0.2.0(typescript@6.0.3)':
     dependencies:
       fractional-indexing: 3.4.0
-      sorted-btree: 1.8.1
       typescript: 6.0.3
 
-  '@tanstack/db@0.12.1(typescript@6.0.3)':
+  '@tanstack/db@0.15.2(typescript@6.0.3)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db-ivm': 0.1.26(typescript@6.0.3)
+      '@tanstack/db-ivm': 0.2.0(typescript@6.0.3)
       '@tanstack/pacer-lite': 0.2.2
       typescript: 6.0.3
 
   '@tanstack/pacer-lite@0.2.2': {}
 
-  '@tanstack/query-core@5.102.7': {}
+  '@tanstack/query-core@5.107.1': {}
 
-  '@tanstack/query-core@5.104.1': {}
-
-  '@tanstack/query-db-collection@1.4.0(@tanstack/query-core@5.104.1)(typescript@6.0.3)':
+  '@tanstack/query-db-collection@1.5.1(@tanstack/db@0.15.2(typescript@6.0.3))(@tanstack/query-core@5.107.1)(typescript@6.0.3)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': 0.12.1(typescript@6.0.3)
-      '@tanstack/query-core': 5.104.1
+      '@tanstack/db': 0.15.2(typescript@6.0.3)
+      '@tanstack/query-core': 5.107.1
       typescript: 6.0.3
 
-  '@tanstack/react-db@0.5.5(react@19.2.8)(typescript@6.0.3)':
+  '@tanstack/react-db@0.5.12(react@19.2.8)(typescript@6.0.3)':
     dependencies:
-      '@tanstack/db': 0.12.1(typescript@6.0.3)
+      '@tanstack/db': 0.15.2(typescript@6.0.3)
       react: 19.2.8
     transitivePeerDependencies:
       - typescript
 
-  '@tanstack/react-db@0.5.5(react@19.3.0)(typescript@6.0.3)':
+  '@tanstack/react-db@0.5.12(react@19.3.0)(typescript@6.0.3)':
     dependencies:
-      '@tanstack/db': 0.12.1(typescript@6.0.3)
+      '@tanstack/db': 0.15.2(typescript@6.0.3)
       react: 19.3.0
     transitivePeerDependencies:
       - typescript
 
-  '@tanstack/react-query@5.104.1(react@19.2.8)':
+  '@tanstack/react-query@5.107.1(@types/react@19.2.18)(react@19.2.8)':
     dependencies:
-      '@tanstack/query-core': 5.104.1
+      '@tanstack/query-core': 5.107.1
       react: 19.2.8
+    optionalDependencies:
+      '@types/react': 19.2.18
 
-  '@tanstack/react-query@5.104.1(react@19.3.0)':
+  '@tanstack/react-query@5.107.1(@types/react@19.3.0)(react@19.3.0)':
     dependencies:
-      '@tanstack/query-core': 5.104.1
+      '@tanstack/query-core': 5.107.1
       react: 19.3.0
+    optionalDependencies:
+      '@types/react': 19.3.0
 
   '@testing-library/dom@10.4.1':
     dependencies:
@@ -16159,8 +16159,8 @@ snapshots:
   browserslist@4.29.5:
     dependencies:
       baseline-browser-mapping: 2.11.35
-      caniuse-lite: 1.0.30001822
-      electron-to-chromium: 1.5.477
+      caniuse-lite: 1.0.30001823
+      electron-to-chromium: 1.5.478
       node-releases: 2.0.63
       update-browserslist-db: 1.3.4(browserslist@4.29.5)
 
@@ -16206,7 +16206,7 @@ snapshots:
 
   caniuse-lite@1.0.30001799: {}
 
-  caniuse-lite@1.0.30001822: {}
+  caniuse-lite@1.0.30001823: {}
 
   ccount@2.0.1: {}
 
@@ -16785,7 +16785,7 @@ snapshots:
 
   dnssd-advertise@1.1.6: {}
 
-  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/c4d23d476ed2f5222ef87fa250b2fdedccd8c05e: {}
+  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/1f9a2ecaafd2d023c48ccd8e5cc5532d211a4c58: {}
 
   doctrine@2.1.0:
     dependencies:
@@ -16831,7 +16831,7 @@ snapshots:
 
   electron-to-chromium@1.5.376: {}
 
-  electron-to-chromium@1.5.477: {}
+  electron-to-chromium@1.5.478: {}
 
   elkjs@0.12.1: {}
 
@@ -21913,8 +21913,6 @@ snapshots:
     dependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
-
-  sorted-btree@1.8.1: {}
 
   source-map-js@1.2.1: {}
 
