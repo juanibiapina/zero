@@ -250,8 +250,8 @@ importers:
         specifier: ^0.1.98
         version: 0.1.98(hono@4.13.17)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@clerk/mcp-tools':
-        specifier: ^0.6.0
-        version: 0.6.0(@cfworker/json-schema@4.1.1)(@clerk/hono@0.1.98(hono@4.13.17)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(express@5.2.1)(hono@4.13.17)(zod@4.6.7)
+        specifier: ^0.9.0
+        version: 0.9.0(@cfworker/json-schema@4.1.1)(@clerk/hono@0.1.98(hono@4.13.17)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(express@5.2.1)(hono@4.13.17)(zod@4.6.7)
       '@hono/zod-openapi':
         specifier: ^1.6.3
         version: 1.6.3(hono@4.13.17)(zod@4.6.7)
@@ -1921,8 +1921,8 @@ packages:
     peerDependencies:
       hono: '>=4'
 
-  '@clerk/mcp-tools@0.6.0':
-    resolution: {integrity: sha512-YXGZujj6oxD5T4XOi08UsLbPiWYD88Fe1uOwqZQekak8i2vitOgugRw7guwat3GuzQearRGdsW1P5AweQ043Sg==}
+  '@clerk/mcp-tools@0.9.0':
+    resolution: {integrity: sha512-JyX2ny3y6Lve8A66rLEr2jM2P//ONkyBznVMpT5UyzJ21kgqPJ+FjCQEQGXku+Vq2zi1Hihv5pU4Wvn+G2+KHQ==}
     peerDependencies:
       '@clerk/express': ^2.1.5
       '@clerk/hono': ^0.1.0
@@ -1933,6 +1933,7 @@ packages:
       next: ^15.2.8 || ^15.3.8 || ^15.4.10 || ^15.5.9 || ^15.6.0-0 || ^16.0.10 || ^16.1.0-0
       pg: ^8.11.0
       redis: ^4.0.0
+      zod: ^3.25 || ^4.0
     peerDependenciesMeta:
       '@clerk/express':
         optional: true
@@ -12026,9 +12027,10 @@ snapshots:
       - react
       - react-dom
 
-  '@clerk/mcp-tools@0.6.0(@cfworker/json-schema@4.1.1)(@clerk/hono@0.1.98(hono@4.13.17)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(express@5.2.1)(hono@4.13.17)(zod@4.6.7)':
+  '@clerk/mcp-tools@0.9.0(@cfworker/json-schema@4.1.1)(@clerk/hono@0.1.98(hono@4.13.17)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(express@5.2.1)(hono@4.13.17)(zod@4.6.7)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.1)(zod@4.6.7)
+      zod: 4.6.7
     optionalDependencies:
       '@clerk/hono': 0.1.98(hono@4.13.17)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       express: 5.2.1
@@ -12036,7 +12038,6 @@ snapshots:
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
-      - zod
 
   '@clerk/react@6.18.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:

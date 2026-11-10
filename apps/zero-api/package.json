@@ -15,7 +15,7 @@
   "dependencies": {
     "@clerk/backend": "^3.27.0",
     "@clerk/hono": "^0.1.98",
-    "@clerk/mcp-tools": "^0.6.0",
+    "@clerk/mcp-tools": "^0.9.0",
     "@hono/zod-openapi": "^1.6.3",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@zero/agent-core": "workspace:*",
