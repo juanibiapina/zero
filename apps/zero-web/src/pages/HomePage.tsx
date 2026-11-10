@@ -40,7 +40,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
     if (oldIndex < 0 || newIndex < 0) return;
     const moved = arrayMove(list, oldIndex, newIndex);
     const position = moved.findIndex((task) => task.id === active.id);
-    replica.tasks.reorder(String(active.id), orderKeyBetween(moved[position - 1]?.sortKey ?? null, moved[position + 1]?.sortKey ?? null)).isPersisted.promise.catch((cause) => setError(messageOf(cause)));
+    replica.tasks.reorder(String(active.id), orderKeyBetween(moved[position - 1]?.sortKey ?? null, moved[position + 1]?.sortKey ?? null)).when("settled").catch((cause) => setError(messageOf(cause)));
   }, [replica, list]);
   const view = listView({ count: list.length, isLoading });
   const showLoading = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
@@ -55,7 +55,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
           <ul className="flex flex-col gap-3">{list.map((task) => <ChecklistRow key={task.id} id={task.id} text={task.text} icon={taskIcon(task, projects) ?? undefined}
             checkLabel={`Complete "${task.text}"`} onCheck={() => detail.complete(task)} onOpen={() => detail.open(task)}
             openLabel={[`Edit "${task.text}"`, taskRecurrenceLabel(task)].filter(Boolean).join(", ")}
-            trailing={<button type="button" aria-label={`Postpone "${task.text}" to tomorrow`} className="shrink-0 rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-foreground" onClick={() => { void replica.tasks.reschedule(task.id, tomorrow(today)).isPersisted.promise.catch((cause) => setError(messageOf(cause))); }}>Tomorrow</button>}>
+            trailing={<button type="button" aria-label={`Postpone "${task.text}" to tomorrow`} className="shrink-0 rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-foreground" onClick={() => { void replica.tasks.reschedule(task.id, tomorrow(today)).when("settled").catch((cause) => setError(messageOf(cause))); }}>Tomorrow</button>}>
             <TaskRecurrence task={task} />
           </ChecklistRow>)}</ul>
         </SortableContext>

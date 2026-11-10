@@ -115,7 +115,7 @@ function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
     (pid: string, fields: ProjectEditFields) => {
       setError(null);
       const tx = api.edit(pid, fields);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      tx.when("settled").catch((e) => setError(messageOf(e)));
     },
     [api],
   );
@@ -124,7 +124,7 @@ function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
     (pid: string, state: ProjectState) => {
       setError(null);
       const tx = api.setState(pid, state);
-      void tx.isPersisted.promise
+      void tx.when("settled")
         .catch((e) => setError(messageOf(e)));
     },
     [api],
@@ -157,7 +157,7 @@ function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
     (pid: string) => {
       setError(null);
       const tx = api.remove(pid);
-      tx.isPersisted.promise
+      tx.when("settled")
         .catch((e) => { setError(messageOf(e)); reportTodoError(e); });
       void navigate("/projects");
     },
@@ -635,13 +635,13 @@ function ProjectTasks({
     const prev = moved[position - 1]?.sortKey ?? null;
     const next = moved[position + 1]?.sortKey ?? null;
     const tx = api.reorder(String(active.id), orderKeyBetween(prev, next));
-    tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
+    tx.when("settled").catch((error) => onError(messageOf(error)));
   };
 
   const onSchedule = useCallback(
     (t: Task, showUpDate: string | null) => {
       const tx = api.reschedule(t.id, showUpDate);
-      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      tx.when("settled").catch((e) => onError(messageOf(e)));
     },
     [api, onError],
   );
@@ -795,8 +795,8 @@ function ProjectRelations({
   const [afterOpen, setAfterOpen] = useState(false);
   const [text, setText] = useState("");
 
-  const write = (tx: { isPersisted: { promise: Promise<unknown> } }): void => {
-    tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
+  const write = (tx: { when: (state: "settled") => Promise<unknown> }): void => {
+    tx.when("settled").catch((error) => onError(messageOf(error)));
   };
   const addWaiting = () => {
     const trimmed = text.trim();

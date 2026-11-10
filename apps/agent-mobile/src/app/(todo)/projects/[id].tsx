@@ -195,7 +195,7 @@ function useProjectDraft(
       queuedRef.current = null;
       return;
     }
-    void tx.isPersisted.promise.catch(() => {
+    void tx.when('settled').catch(() => {
       const current = queuedRef.current;
       if (current?.projectId === latest.projectId && current.revision === revision) {
         queuedRef.current = null;
@@ -242,7 +242,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
       if (!project || !api.collection.get(project.id)) return null;
       setError(null);
       const tx = api.edit(project.id, fields);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      tx.when('settled').catch((e) => setError(messageOf(e)));
       return tx;
     },
     [api, project],
@@ -263,7 +263,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
         : setError(messageOf(e));
       try {
         const tx = api.setState(project.id, state);
-        void tx.isPersisted.promise.catch(failed);
+        void tx.when('settled').catch(failed);
       } catch (e) { failed(e); }
     },
     [api, project],
@@ -297,7 +297,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
     try {
       setDeletingProject(project);
       const tx = api.remove(project.id);
-      void tx.isPersisted.promise.catch(failed);
+      void tx.when('settled').catch(failed);
     } catch { setDeletingProject(null); failed(); }
   }, [api, project]);
 
@@ -816,8 +816,8 @@ function ProjectWaits({
       condition.resolvedAt == null &&
       !isProjectAfter(condition),
   );
-  const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
-    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  const write = (tx: { when: (state: 'settled') => Promise<unknown> }) => {
+    tx.when('settled').catch((e) => onError(messageOf(e)));
   };
 
   if (list.length === 0 && afters.length === 0) return null;

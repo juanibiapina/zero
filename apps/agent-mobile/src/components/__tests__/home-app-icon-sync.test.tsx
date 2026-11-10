@@ -128,28 +128,28 @@ describe('HomeAppIconSync', () => {
     await expectIcon('Empty');
 
     await act(async () => {
-      await replica.tasks.add('First task').isPersisted.promise;
+      await replica.tasks.add('First task').when('settled');
     });
     await expectIcon('OneTask');
     const first = replica.snapshot().tasks[0]!;
 
     await act(async () => {
-      await replica.tasks.add('Second task').isPersisted.promise;
+      await replica.tasks.add('Second task').when('settled');
     });
     await expectIcon('TwoTasks');
     const second = replica.snapshot().tasks.find((entry) => entry.id !== first.id)!;
 
     await act(async () => {
-      await replica.tasks.complete(first.id).isPersisted.promise;
+      await replica.tasks.complete(first.id).when('settled');
     });
     await expectIcon('OneTask');
     await act(async () => {
-      await replica.tasks.reopen(first).isPersisted.promise;
+      await replica.tasks.reopen(first).when('settled');
     });
     await expectIcon('TwoTasks');
     await act(async () => {
-      await replica.tasks.complete(first.id).isPersisted.promise;
-      await replica.tasks.complete(second.id).isPersisted.promise;
+      await replica.tasks.complete(first.id).when('settled');
+      await replica.tasks.complete(second.id).when('settled');
     });
     await expectIcon('Empty');
   });
@@ -161,11 +161,11 @@ describe('HomeAppIconSync', () => {
     });
     await expectIcon('Empty');
     await act(async () => {
-      await replica.projects.setState('owner', 'in-play').isPersisted.promise;
+      await replica.projects.setState('owner', 'in-play').when('settled');
     });
     await expectIcon('OneTask');
     await act(async () => {
-      await replica.projects.setState('owner', 'backlog').isPersisted.promise;
+      await replica.projects.setState('owner', 'backlog').when('settled');
     });
     await expectIcon('Empty');
   });
@@ -176,7 +176,7 @@ describe('HomeAppIconSync', () => {
     mockSetAppIcon.mockClear();
 
     await act(async () => {
-      await replica.tasks.add('Fifth task').isPersisted.promise;
+      await replica.tasks.add('Fifth task').when('settled');
     });
 
     expect(replica.snapshot().tasks).toHaveLength(5);

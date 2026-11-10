@@ -39,7 +39,7 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
       return null;
     }
     if (prepared.kind === "ready") {
-      replica.tasks.edit(current.id, prepared.text, prepared.schedule).isPersisted.promise.catch(fail);
+      replica.tasks.edit(current.id, prepared.text, prepared.schedule).when("settled").catch(fail);
     }
     const applied = replica.tasks.collection.get(current.id);
     if (!applied) return null;
@@ -60,7 +60,7 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
   const move = (projectId: string | null) => {
     const task = commitDraft();
     if (!task || projectId === taskProjectId(task)) return;
-    replica.tasks.moveToProject(task.id, projectId).isPersisted.promise.catch(fail);
+    replica.tasks.moveToProject(task.id, projectId).when("settled").catch(fail);
   };
 
   return {
@@ -79,11 +79,11 @@ export function useTaskEditor({ replica, projects, tasks, conditions, currentPro
               onPick: (date) => {
                 const task = commitDraft();
                 if (!task || task.showUpDate === date) return;
-                replica.tasks.reschedule(task.id, date).isPersisted.promise.catch(fail);
+                replica.tasks.reschedule(task.id, date).when("settled").catch(fail);
               },
               onStopRecurrence: selected.recurrence ? () => {
                 const task = commitDraft();
-                if (task) replica.tasks.setRecurrence(task.id, null).isPersisted.promise.catch(fail);
+                if (task) replica.tasks.setRecurrence(task.id, null).when("settled").catch(fail);
               } : undefined,
               onCompleteForever: selected.recurrence ? () => {
                 const task = commitDraft();

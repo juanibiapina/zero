@@ -160,7 +160,7 @@ describe('mobile TaskDO replica opener', () => {
     });
     failWrite = true;
     try {
-      await expect(replica.tasks.add('Not durable').isPersisted.promise).rejects.toThrow('Offline persistence failed');
+      await expect(replica.tasks.add('Not durable').when('settled')).rejects.toThrow('Offline persistence failed');
       expect(durability.at(-1)).toEqual([false, 'Offline durability is unavailable: disk full']);
     } finally {
       await replica.close();
@@ -242,7 +242,7 @@ describe('mobile TaskDO replica opener', () => {
       onConnection: () => {},
     });
 
-    await replica.tasks.add('Offline task').isPersisted.promise;
+    await replica.tasks.add('Offline task').when('settled');
 
     expect(replica.snapshot().tasks).toMatchObject([{ text: 'Offline task' }]);
     expect(disk.save).toHaveBeenCalled();
@@ -271,7 +271,7 @@ describe('mobile TaskDO replica opener', () => {
       onDurability: (durable, error) => durability.push([durable, error]),
     });
 
-    await expect(replica.tasks.add('Not durable').isPersisted.promise).rejects.toThrow('disk full');
+    await expect(replica.tasks.add('Not durable').when('settled')).rejects.toThrow('disk full');
     expect(durability).toEqual([
       [true, null],
       [false, 'Offline durability is unavailable: disk full'],

@@ -67,7 +67,7 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
     reset(); setRetryAddition(null); onCreated?.(); input.current?.focus();
   };
   const persist = async (tx: Transaction, onSaved = () => {}) => {
-    try { await tx.isPersisted.promise; }
+    try { await tx.when("settled"); }
     catch (error) {
       const id = String(tx.mutations[0]?.key);
       const snapshot = replica.snapshot();

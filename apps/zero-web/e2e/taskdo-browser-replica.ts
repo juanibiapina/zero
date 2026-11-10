@@ -63,7 +63,7 @@ window.taskdoProof = {
   async add(text) {
     await ready;
     const transaction = replica!.tasks.add(text);
-    await transaction.isPersisted.promise;
+    await transaction.when("settled");
     return replica!.snapshot().tasks.map((task) => task.text).sort();
   },
   async injectInvalidRecurrence(id, text) {

@@ -6,7 +6,7 @@ import { undoableAction } from "./undoable";
 
 // A stub transaction whose settled promise drives the error path.
 function tx(promise: Promise<unknown> = Promise.resolve()): Transaction {
-  return { isPersisted: { promise } } as unknown as Transaction;
+  return { when: () => promise } as unknown as Transaction;
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));

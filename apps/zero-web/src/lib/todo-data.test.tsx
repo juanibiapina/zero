@@ -12,7 +12,7 @@ function Probe() {
   return <div>
     <p>{data.authenticatedFeatures ? "Account workspace" : "Guest workspace"}</p>
     {data.replica?.snapshot().tasks.map((task) => <p key={task.id}>{task.text}</p>)}
-    <button onClick={() => { void data.replica!.tasks.add(`Task for ${auth.userId ?? "guest"}`).isPersisted.promise; }}>Create task</button>
+    <button onClick={() => { void data.replica!.tasks.add(`Task for ${auth.userId ?? "guest"}`).when("settled"); }}>Create task</button>
   </div>;
 }
 

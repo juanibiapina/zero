@@ -491,7 +491,7 @@ export function useTaskDetail({
     if (prepared.kind === 'ready' || retrySave.current) {
       onError(null);
       pendingSave.current = prepared.kind === 'ready'
-        ? api.edit(current.id, prepared.text, prepared.schedule).isPersisted.promise
+        ? api.edit(current.id, prepared.text, prepared.schedule).when('settled')
         : replica.saveLocal();
       retrySave.current = false;
       pendingSave.current.catch((e) => { retrySave.current = true; onError(messageOf(e)); });
@@ -596,7 +596,7 @@ export function useTaskDetail({
       if (selected && selected.showUpDate !== date) {
         onError(null);
         const tx = api.reschedule(selected.id, date);
-        tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+        tx.when('settled').catch((e) => onError(messageOf(e)));
       }
       setScheduling(false);
     },
@@ -607,7 +607,7 @@ export function useTaskDetail({
     if (!selected?.recurrence) return;
     onError(null);
     const tx = api.setRecurrence(selected.id, null);
-    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    tx.when('settled').catch((e) => onError(messageOf(e)));
     setScheduling(false);
   }, [api, selected, onError]);
 
@@ -629,7 +629,7 @@ export function useTaskDetail({
       if (selected && taskProjectId(selected) !== projectId) {
         onError(null);
         const tx = api.moveToProject(selected.id, projectId);
-        tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+        tx.when('settled').catch((e) => onError(messageOf(e)));
       }
       setPicking(false);
     },

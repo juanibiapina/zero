@@ -80,7 +80,7 @@ describe('UpcomingScreen', () => {
     const input = await waitFor(() => screen.getByLabelText('Waiting on'));
     await fireEvent.changeText(input, 'the tailor calls');
     await act(async () => {
-      await screen.data.replica!.projects.remove('p').isPersisted.promise;
+      await screen.data.replica!.projects.remove('p').when('settled');
     });
 
     await fireEvent(screen.getByLabelText('Waiting on'), 'submitEditing');

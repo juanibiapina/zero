@@ -14,8 +14,8 @@
     "src"
   ],
   "dependencies": {
-    "@tanstack/db": "0.12.1",
-    "@tanstack/query-db-collection": "1.4.0",
+    "@tanstack/db": "1.0.0-rc.1.4",
+    "@tanstack/query-db-collection": "1.5.1",
     "@zeroapps/recurrence": "workspace:*",
     "date-fns": "^4.4.0",
     "fractional-indexing": "^4.0.0",
