@@ -332,6 +332,7 @@ podman run --rm --name "$CONTAINER" \
   -v zero-release-pnpm-store:/pnpm-store \
   -v zero-e2e-corepack:/corepack \
   -v "$PERSIST_DIR":/persist \
+  -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro \
   -w /repo \
   "$IMAGE" \
   bash -lc '
