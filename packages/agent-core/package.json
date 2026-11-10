@@ -17,13 +17,13 @@
     "@tanstack/db": "0.12.1",
     "@tanstack/query-db-collection": "1.4.0",
     "@zeroapps/recurrence": "workspace:*",
-    "date-fns": "^4.1.0",
+    "date-fns": "^4.4.0",
     "fractional-indexing": "^4.0.0",
     "marked": "^18.1.3",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "peerDependencies": {
-    "@tanstack/react-query": "5.104.1",
+    "@tanstack/react-query": "5.107.1",
     "tinybase": "10.0.1"
   },
   "scripts": {
@@ -32,13 +32,13 @@
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
-    "@tanstack/react-query": "5.104.1",
-    "@types/node": "^26.1.2",
+    "@tanstack/react-query": "5.107.1",
+    "@types/node": "^26.6.6",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "eslint": "10.8.0",
+    "eslint": "10.14.0",
     "tinybase": "10.0.1",
     "typescript": "6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.12"
   }
 }

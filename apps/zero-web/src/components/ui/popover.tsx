@@ -1,6 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- radix primitives are
-   re-exported as consts (Root/Trigger/Anchor); the rule can't see they are
-   components. This is a shadcn-style primitive barrel, not a screen. */
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { cn } from "@/lib/utils";
