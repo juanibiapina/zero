@@ -38,7 +38,7 @@ appId: dev.juanibiapina.zeroagent
     commands:
       - tapOn:
           id: android:id/expand_button
-          above: E2E medicine.*
+          rightOf: E2E medicine.*
 - tapOn: Taken
 - pressKey: Back
 - tapOn: Import medicine receipts

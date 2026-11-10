@@ -144,6 +144,7 @@ capture_diagnostics() {
     timeout 15 adb -s "$SERIAL" exec-out screencap -p > "$ARTIFACT_DIR/screen.png" 2>/dev/null
     timeout 15 maestro --no-ansi hierarchy --compact > "$ARTIFACT_DIR/hierarchy.txt" 2>&1
     timeout 15 adb -s "$SERIAL" logcat -d -t 5000 > "$ARTIFACT_DIR/logcat.txt" 2>&1
+    timeout 15 adb -s "$SERIAL" logcat -d -b events > "$ARTIFACT_DIR/events.txt" 2>&1
   fi
   set -e
 }
