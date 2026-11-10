@@ -22,7 +22,7 @@
     "@zeroapps/cli": "0.7.0",
     "tsx": "^4.23.15",
     "turbo": "^2.11.10",
-    "wrangler": "4.118.0"
+    "wrangler": "^4.158.0"
   },
   "pnpm": {
     "overrides": {

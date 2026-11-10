@@ -12,7 +12,6 @@ onlyBuiltDependencies:
 patchedDependencies:
   react-native-gesture-handler@3.3.0: patches/react-native-gesture-handler@3.3.0.patch
   rn-emoji-keyboard@1.7.0: patches/rn-emoji-keyboard@1.7.0.patch
-  wrangler@4.118.0: patches/wrangler@4.118.0.patch
 
 # frimousse's type declarations import React but do not declare @types/react,
 # so TypeScript took the hoisted copy, which follows whichever app has the
