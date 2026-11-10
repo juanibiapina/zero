@@ -30,8 +30,8 @@ updates:
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
     groups:
-      # wrangler is pinned and patched (patches/), and @cloudflare/vite-plugin
-      # requires a matching wrangler, so these move together by hand.
+      # @cloudflare/vite-plugin requires a matching wrangler, so these move
+      # together.
       cloudflare:
         patterns: ["wrangler", "@cloudflare/*"]
       # The TaskDO replica depends on TanStack DB behavior; review these alone.
