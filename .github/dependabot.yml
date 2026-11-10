@@ -17,6 +17,10 @@ updates:
       - dependency-name: "jest-expo"
       - dependency-name: "eslint-config-expo"
       - dependency-name: "babel-preset-expo"
+      # Declared only so the EAS local build resolves it; it must match the
+      # Babel 7 that babel-preset-expo runs.
+      - dependency-name: "@babel/plugin-transform-react-jsx"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "react-native"
       - dependency-name: "react-native-*"
       - dependency-name: "@react-native/*"
@@ -25,9 +29,14 @@ updates:
       - dependency-name: "react-dom"
       - dependency-name: "@types/react"
       - dependency-name: "@types/react-dom"
-      # The mobile app stays on ESLint 9 until eslint-plugin-react (through
-      # eslint-config-expo) supports ESLint 10.
+      # The mobile app stays on ESLint 9 until eslint-plugin-react and
+      # eslint-plugin-import (through eslint-config-expo) support ESLint 10:
+      # jsx-eslint/eslint-plugin-react#3977, import-js/eslint-plugin-import#3278.
       - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # TypeScript 7 drops the compiler API that typescript-eslint needs:
+      # typescript-eslint/typescript-eslint#10940. astro check also needs 7.1.
+      - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
     groups:
       # @cloudflare/vite-plugin requires a matching wrangler, so these move
