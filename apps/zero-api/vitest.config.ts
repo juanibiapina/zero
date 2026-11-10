@@ -1,4 +1,4 @@
-import { configDefaults, defineConfig } from "vitest/config";
+import { defineConfig } from "vitest/config";
 import { parseOnlyMermaid, textImports } from "./vite.config";
 
 export default defineConfig({
@@ -6,7 +6,6 @@ export default defineConfig({
   resolve: { alias: parseOnlyMermaid },
   test: {
     include: ["src/**/*.test.ts"],
-    exclude: [...configDefaults.exclude, "src/**/*.workers.test.ts"],
     // Bundle Mermaid like the Worker build does, so its DOMPurify import takes the alias.
     server: { deps: { inline: ["mermaid"] } },
   },

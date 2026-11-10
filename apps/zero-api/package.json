@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.67.0",
-    "@cloudflare/vitest-pool-workers": "0.22.0",
     "@cloudflare/workers-types": "^5.20260801.1",
     "@types/node": "^26.6.6",
     "@zero/eslint-config": "workspace:*",
