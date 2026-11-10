@@ -42,7 +42,7 @@
     "expo-updates": "~58.0.20",
     "expo-web-browser": "~58.0.7",
     "highlight.js": "^11.12.0",
-    "markdown-it": "^14.3.3",
+    "markdown-it": "^15.0.3",
     "mermaid": "^12.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
