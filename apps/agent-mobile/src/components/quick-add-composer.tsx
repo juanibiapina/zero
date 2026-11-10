@@ -48,8 +48,6 @@ export type QuickAddController = {
 
 type Overlay = 'discard' | 'schedule' | 'project' | 'after' | 'icon';
 
-type Persisting = { isPersisted: { promise: Promise<unknown> } };
-
 const PROJECT_MODES: AddMode[] = ['task', 'waiting', 'after', 'project'];
 
 function modesFor(surface: QuickAddSurface['kind'], destination: Project | null): AddMode[] {
@@ -84,15 +82,12 @@ export function useQuickAdd({
   const { getToken } = useAuth();
   const { data: projectRows } = useLiveQuery(
     (q) => q.from({ p: replica.projects.collection }).orderBy(({ p }) => p.createdAt, 'asc'),
-    [replica],
   );
   const { data: openTaskRows } = useLiveQuery(
     (q) => q.from({ t: replica.tasks.collection }).where(({ t }) => isNull(t.completedAt)),
-    [replica],
   );
   const { data: conditionRows } = useLiveQuery(
     (q) => q.from({ w: replica.waits.collection }),
-    [replica],
   );
   const projects = useMemo(() => projectRows ?? [], [projectRows]);
   const openTasks = useMemo(() => openTaskRows ?? [], [openTaskRows]);
@@ -171,9 +166,9 @@ export function useQuickAdd({
   // Every add waits for the local write, then closes. A rejected write keeps
   // the drawer and its draft open and reports the error.
   const persistThen = useCallback(
-    (tx: Persisting, done: () => void) => {
+    (persisted: Promise<unknown>, done: () => void) => {
       saving.current = true;
-      tx.isPersisted.promise.then(
+      persisted.then(
         () => {
           saving.current = false;
           done();
@@ -231,17 +226,17 @@ export function useQuickAdd({
 
     if (mode === 'waiting') {
       if (!contextProject) return;
-      persistThen(replica.waits.addWaiting(contextProject.id, trimmed), closeAdd);
+      persistThen(replica.waits.addWaiting(contextProject.id, trimmed).when('settled'), closeAdd);
       return;
     }
 
     if (mode === 'step') {
-      persistThen({ isPersisted: { promise: replica.nightRoutine.addStep(trimmed) } }, closeAdd);
+      persistThen(replica.nightRoutine.addStep(trimmed), closeAdd);
       return;
     }
 
     if (mode === 'shopping') {
-      persistThen({ isPersisted: { promise: replica.shopping.add(trimmed) } }, () => {
+      persistThen(replica.shopping.add(trimmed), () => {
         closeAdd();
         if (surface.kind === 'shopping-list') return;
         toast('Added to shopping list', {
@@ -259,7 +254,7 @@ export function useQuickAdd({
       const icon = projectIcon.choice.icon;
       const tx = replica.projects.add(trimmed, icon);
       const id = String(tx.mutations[0]?.key);
-      persistThen(tx, () => {
+      persistThen(tx.when('settled'), () => {
         closeAdd();
         if (onProjectCreated) {
           onProjectCreated(id);
@@ -280,7 +275,7 @@ export function useQuickAdd({
     if (prepared.kind !== 'ready') return;
     defaultToastController.dismiss();
     const tx = replica.tasks.add(prepared.text, effectiveDate, addProjectId, effectiveRecurrence);
-    persistThen(tx, () => {
+    persistThen(tx.when('settled'), () => {
       if (addProjectId != null && addProjectId !== contextProjectId) {
         showTaskDestination(
           { showUpDate: effectiveDate, projectId: addProjectId },
@@ -567,7 +562,7 @@ export function useQuickAdd({
         onPick={(afterProjectId) => {
           if (afterProjectId && contextProject && !saving.current) {
             onError(null);
-            persistThen(replica.waits.addAfter(contextProject.id, afterProjectId), closeAdd);
+            persistThen(replica.waits.addAfter(contextProject.id, afterProjectId).when('settled'), closeAdd);
             return;
           }
           setOverlay(null);

@@ -302,8 +302,8 @@ describe("ProjectsPage", () => {
     expect(backlog).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(backlog);
     expect(backlog).toHaveAttribute("aria-expanded", "true");
-    await act(async () => { await h.replica!.projects.setState("6", "in-play").isPersisted.promise; });
-    await act(async () => { await h.replica!.projects.setState("6", "backlog").isPersisted.promise; });
+    await act(async () => { await h.replica!.projects.setState("6", "in-play").when("settled"); });
+    await act(async () => { await h.replica!.projects.setState("6", "backlog").when("settled"); });
     expect(backlog).toHaveAttribute("aria-expanded", "true");
   });
 

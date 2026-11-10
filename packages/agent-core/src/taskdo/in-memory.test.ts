@@ -64,7 +64,7 @@ describe("in-memory TaskDO replica", () => {
       replica.waits.collection.preload(),
     ]);
     expect(replica.tasks.collection.get("task")).toMatchObject({ recurrence: null, recurrenceDate: null });
-    await replica.tasks.edit("task", "Edited").isPersisted.promise;
+    await replica.tasks.edit("task", "Edited").when("settled");
     expect(replica.snapshot().tasks[0]?.text).toBe("Edited");
     await replica.close();
   });

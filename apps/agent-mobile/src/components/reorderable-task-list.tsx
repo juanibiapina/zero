@@ -206,7 +206,7 @@ export function ReorderableTaskList({
       const targetDate =
         swipeAction === 'schedule-today' ? today : tomorrow(today);
       const transaction = api.reschedule(item.id, targetDate);
-      transaction.isPersisted.promise.catch((error) =>
+      transaction.when('settled').catch((error) =>
         onError(messageOf(error)),
       );
     },
@@ -222,7 +222,7 @@ export function ReorderableTaskList({
         item.id,
         orderKeyBetween(previous, next),
       );
-      transaction.isPersisted.promise.catch((error) =>
+      transaction.when('settled').catch((error) =>
         onError(messageOf(error)),
       );
     },

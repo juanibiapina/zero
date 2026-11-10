@@ -36,14 +36,14 @@ describe("recurring task presentation", () => {
       randomId: () => "task", now: () => new Date("2026-10-01T12:00:00Z"), today: () => today,
     });
     try {
-      await replica.tasks.add("Repeat", null, null, { ...recurrence, origin: cursor }).isPersisted.promise;
+      await replica.tasks.add("Repeat", null, null, { ...recurrence, origin: cursor }).when("settled");
       await replica.tasks.collection.preload();
-      await replica.tasks.reschedule("task", showUpDate).isPersisted.promise;
+      await replica.tasks.reschedule("task", showUpDate).when("settled");
       const before = replica.tasks.collection.get("task")!;
       let undoPersisted: Promise<unknown> | undefined;
       undoableAction({
         message: () => taskCompletionMessage(replica.tasks.collection.get("task"), today),
-        act: () => replica.tasks.complete("task", today), undo: () => { const tx = replica.tasks.undoOccurrence(before, today); undoPersisted = tx.isPersisted.promise; return tx; },
+        act: () => replica.tasks.complete("task", today), undo: () => { const tx = replica.tasks.undoOccurrence(before, today); undoPersisted = tx.when("settled"); return tx; },
         onError: (error) => { throw new Error(error); },
       });
       const toast = defaultToastController.getSnapshot()[0];
@@ -52,7 +52,7 @@ describe("recurring task presentation", () => {
       toast.action!.onPress();
       expect(replica.tasks.collection.get("task")).toEqual(before);
       await undoPersisted;
-      await replica.tasks.completeForever("task").isPersisted.promise;
+      await replica.tasks.completeForever("task").when("settled");
       expect(taskCompletionMessage(replica.snapshot().tasks[0], today)).toBe("Completed");
     } finally { await replica.close(); }
   });
@@ -60,7 +60,7 @@ describe("recurring task presentation", () => {
   it("includes the year for next occurrences in another year", async () => {
     const replica = createTaskdoReplica({ store: createMergeableStore(), queryClient: new QueryClient(), queryKeyScope: ["year-test"], randomId: () => "task" });
     try {
-      await replica.tasks.add("Repeat", null, null, { ...daily, origin: "2027-01-01" }).isPersisted.promise;
+      await replica.tasks.add("Repeat", null, null, { ...daily, origin: "2027-01-01" }).when("settled");
       expect(taskCompletionMessage(replica.tasks.collection.get("task"), today)).toContain("2027");
     } finally { await replica.close(); }
   });

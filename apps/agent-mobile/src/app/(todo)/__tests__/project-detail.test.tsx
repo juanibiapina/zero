@@ -196,7 +196,7 @@ describe('ProjectDetailScreen', () => {
     const input = await waitFor(() => screen.getByLabelText('Project description'));
     await fireEvent.changeText(input, 'Finish a community race');
     await act(async () => {
-      await screen.data.replica!.projects.edit('1', { title: 'Run a marathon' }).isPersisted.promise;
+      await screen.data.replica!.projects.edit('1', { title: 'Run a marathon' }).when('settled');
     });
     await waitFor(() => expect(screen.getByDisplayValue('Run a marathon')).toBeTruthy());
 

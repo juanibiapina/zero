@@ -167,7 +167,7 @@ describe("web todo parity", () => {
   it("keeps a title updated elsewhere when completing an unchanged open draft", async () => {
     const replica = open("/home", { tasks: [task("t", "Original")] });
     fireEvent.click(await screen.findByRole("button", { name: 'Edit "Original"' }));
-    await act(async () => { await replica.tasks.edit("t", "Updated elsewhere").isPersisted.promise; });
+    await act(async () => { await replica.tasks.edit("t", "Updated elsewhere").when("settled"); });
     fireEvent.click(screen.getByRole("button", { name: "Complete task" }));
     await act(async () => { defaultToastController.getSnapshot().find((entry) => entry.message === "Completed")!.action!.onPress(); });
     await waitFor(() => expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Updated elsewhere", completedAt: null }));

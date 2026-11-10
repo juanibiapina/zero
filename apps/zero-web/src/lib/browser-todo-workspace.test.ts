@@ -44,7 +44,7 @@ afterEach(async () => {
 describe("browser guest workspaces", () => {
   it("keeps guest work through reopening without making a network request", async () => {
     const guest = await open(null);
-    await guest.tasks.add("Buy milk").isPersisted.promise;
+    await guest.tasks.add("Buy milk").when("settled");
     await guest.close();
     const restored = await open(null);
     expect(restored.durable).toBe(true);
@@ -53,20 +53,20 @@ describe("browser guest workspaces", () => {
 
   it("adopts relationships, repeats, and order alongside existing account work", async () => {
     const account = await open("account-a");
-    await account.tasks.add("Existing account task").isPersisted.promise;
+    await account.tasks.add("Existing account task").when("settled");
     await account.close();
     const guest = await open(null);
     const project = guest.projects.add("Renovate");
-    await project.isPersisted.promise;
+    await project.when("settled");
     const projectId = String(project.mutations[0].key);
     const prerequisite = guest.projects.add("Permit");
-    await prerequisite.isPersisted.promise;
+    await prerequisite.when("settled");
     const prerequisiteId = String(prerequisite.mutations[0].key);
-    await guest.waits.addWaiting(projectId, "Builder reply").isPersisted.promise;
-    await guest.waits.addAfter(projectId, prerequisiteId).isPersisted.promise;
+    await guest.waits.addWaiting(projectId, "Builder reply").when("settled");
+    await guest.waits.addAfter(projectId, prerequisiteId).when("settled");
     const parsed = parseSchedule("Inspect every Monday", { today: "2026-09-30", weekStartsOn: "MO" });
     if (parsed.kind !== "scheduled" || parsed.schedule.kind !== "recurring") throw new Error("Expected recurrence");
-    await guest.tasks.add("Inspect", parsed.schedule.recurrence.origin, projectId, parsed.schedule.recurrence).isPersisted.promise;
+    await guest.tasks.add("Inspect", parsed.schedule.recurrence.origin, projectId, parsed.schedule.recurrence).when("settled");
     const guestSnapshot = guest.snapshot();
     await guest.close();
     const adopted = await open("account-a");
@@ -81,13 +81,13 @@ describe("browser guest workspaces", () => {
 
   it("isolates a fresh signed-out guest and a second account from the first account", async () => {
     const guest = await open(null);
-    await guest.tasks.add("Private to A").isPersisted.promise;
+    await guest.tasks.add("Private to A").when("settled");
     await guest.close();
     const first = await open("account-a");
     await first.close();
     const signedOut = await open(null);
     expect(signedOut.snapshot().tasks).toEqual([]);
-    await signedOut.tasks.add("New guest work").isPersisted.promise;
+    await signedOut.tasks.add("New guest work").when("settled");
     await signedOut.close();
     const second = await open("account-b");
     expect(second.snapshot().tasks.map((task) => task.text)).toEqual(["New guest work"]);
@@ -98,17 +98,17 @@ describe("browser guest workspaces", () => {
   it("rejects old guest-tab writes after the workspace is bound", async () => {
     const firstTab = await open(null);
     const secondTab = await open(null);
-    await secondTab.tasks.add("Saved in second tab").isPersisted.promise;
+    await secondTab.tasks.add("Saved in second tab").when("settled");
     await firstTab.refresh();
     expect(firstTab.snapshot().tasks.map((task) => task.text)).toEqual(["Saved in second tab"]);
     const account = await open("account-a");
-    await expect(secondTab.tasks.add("Stale edit").isPersisted.promise).rejects.toThrow("linked to an account");
+    await expect(secondTab.tasks.add("Stale edit").when("settled")).rejects.toThrow("linked to an account");
     expect(account.snapshot().tasks.map((task) => task.text)).toEqual(["Saved in second tab"]);
   });
 
   it("retries an interrupted adoption only into the account that claimed it", async () => {
     const guest = await open(null);
-    await guest.tasks.add("Keep after interrupted sign-in").isPersisted.promise;
+    await guest.tasks.add("Keep after interrupted sign-in").when("settled");
     await guest.close();
     locks.failAccountSave = true;
     await expect(open("account-a")).rejects.toThrow("Disk unavailable");
@@ -124,7 +124,7 @@ describe("browser guest workspaces", () => {
 
   it("lets only the first competing account claim guest work", async () => {
     const guest = await open(null);
-    await guest.tasks.add("Adopt once").isPersisted.promise;
+    await guest.tasks.add("Adopt once").when("settled");
     await guest.close();
     const [first, second] = await Promise.all([open("account-a"), open("account-b")]);
     expect(first.snapshot().tasks.map((task) => task.text)).toEqual(["Adopt once"]);
@@ -137,7 +137,7 @@ describe("browser guest workspaces", () => {
     JSON.stringify({ version: 1, guest: null, adoptions: [{ workspace: "guest-saved", account: "A" }, { workspace: "guest-saved", account: "B" }] }),
   ])("reports malformed ownership information instead of replacing local work: %s", async (malformed) => {
     const guest = await open(null);
-    await guest.tasks.add("Preserve me").isPersisted.promise;
+    await guest.tasks.add("Preserve me").when("settled");
     await guest.close();
     const saved = localStorage.getItem(BROWSER_WORKSPACE_KEY)!;
     localStorage.setItem(BROWSER_WORKSPACE_KEY, malformed);

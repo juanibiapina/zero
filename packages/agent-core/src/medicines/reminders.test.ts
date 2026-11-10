@@ -21,7 +21,7 @@ describe("medicine reminder durability", () => {
   it("does not reinstall notifications for an unrelated Task mutation", async () => {
     const { replica, device, controller } = await setup();
     const install = vi.spyOn(device, "install");
-    await replica.tasks.add("Unrelated task").isPersisted.promise;
+    await replica.tasks.add("Unrelated task").when("settled");
     expect(install).not.toHaveBeenCalled();
     await controller.close(); await replica.close();
   });

@@ -16,7 +16,7 @@ import {
 //
 // `act`/`undo` return the entity collection's optimistic Transaction (e.g.
 // () => api.complete(id) and () => api.reopen(id)); a page surfaces a write error
-// via tx.isPersisted.promise.
+// via tx.when("settled").
 export function undoableAction(opts: {
   message: string | (() => string);
   act: () => Transaction;
@@ -29,7 +29,7 @@ export function undoableAction(opts: {
   secondaryAction?: ToastAction;
   link?: ToastAction;
 }): void {
-  opts.act().isPersisted.promise.catch((e) => opts.onError(messageOf(e)));
+  opts.act().when("settled").catch((e) => opts.onError(messageOf(e)));
   toast(typeof opts.message === "function" ? opts.message() : opts.message, {
     id: "undo",
     description: opts.description,
@@ -39,7 +39,7 @@ export function undoableAction(opts: {
     action: {
       label: "Undo",
       onPress: () => {
-        opts.undo().isPersisted.promise.catch((e) => opts.onError(messageOf(e)));
+        opts.undo().when("settled").catch((e) => opts.onError(messageOf(e)));
       },
     },
   });
