@@ -315,23 +315,31 @@ describe('A medicine page', () => {
     await waitFor(() => expect(list.getByLabelText('Open Vitamin D')).toBeTruthy());
     expect(list.queryByText('Archived (1)')).toBeNull();
   });
-  it('offers no archive when holding a running medicine in the list', async () => {
+  it('pauses a running medicine by holding its row in the list, with Undo', async () => {
     const data = createInMemoryTodoData();
     await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
     const list = await openScreen(<MedicinesList />, data);
     await fireEvent(list.getByLabelText('Open Vitamin D'), 'longPress');
     expect(list.queryByText('Archive medicine')).toBeNull();
+    await fireEvent.press(list.getByText('Pause medicine'));
+    await waitFor(() => expect(list.getByText('Paused')).toBeTruthy());
+    expect(takenToast()?.message).toBe('Vitamin D paused');
+    await act(async () => { takenToast()!.action!.onPress(); });
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(false));
   });
-  it('pauses and resumes reminders from Medicine options', async () => {
+  it('pauses from Medicine options and resumes from the page', async () => {
     const { screen, data } = await openMedicine();
     await fireEvent.press(screen.getByLabelText('Medicine options'));
     expect(screen.queryByText('Archive medicine')).toBeNull();
-    await fireEvent.press(screen.getByText('Pause reminders'));
+    await fireEvent.press(screen.getByText('Pause medicine'));
     await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(true));
     expect(screen.getByText('Paused')).toBeTruthy();
+    expect(screen.getByText('No reminders, and no pills are used.')).toBeTruthy();
+    expect(screen.queryByText('Pause medicine')).toBeNull();
     expect(screen.queryByLabelText(/^Take /)).toBeNull();
-    await fireEvent.press(screen.getByText('Resume reminders'));
+    await fireEvent.press(screen.getByLabelText('Resume medicine'));
     await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(false));
+    expect(screen.getByLabelText(/^Take /)).toBeTruthy();
   });
   it('says tomorrow for a next dose on the following day, with nothing to take today', async () => {
     const today = medicineToday();

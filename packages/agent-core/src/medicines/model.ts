@@ -127,10 +127,14 @@ export function validateMedicine(input: MedicineInput): void {
 }
 export function medicineState(medicine: Medicine, on = medicineToday()): "scheduled" | "active" | "paused" | "ended" {
   if (medicine.asNeeded) return "active";
-  if (medicine.endsOn && on > medicine.endsOn) return "ended";
   if (medicine.untilEmpty && medicine.supply?.pillsLeft === 0) return "ended";
+  if (medicine.paused && medicine.untilEmpty) return "paused";
+  if (medicine.endsOn && on > medicine.endsOn) return "ended";
   if (medicine.paused) return "paused";
   return on < medicine.startsOn ? "scheduled" : "active";
+}
+export function canArchiveMedicine(medicine: Medicine, on = medicineToday()): boolean {
+  return !!medicine.asNeeded || medicineState(medicine, on) === "ended";
 }
 export function medicineOccurrences(medicine: Medicine, on = medicineToday()): Dose[] {
   if (medicine.paused) return [];
@@ -196,12 +200,20 @@ export class MedicineModel {
   archive(id: string): void {
     const medicine = this.get(id);
     if (!medicine) throw new Error("Medicine was deleted or is not on this device");
-    if (!medicine.asNeeded && medicineState(medicine, medicineToday(this.now())) !== "ended") throw new Error("Only an ended medicine can be archived");
+    if (!canArchiveMedicine(medicine, medicineToday(this.now()))) throw new Error("Only an ended medicine can be archived");
     if (!medicine.archivedAt) this.store.setCell("medicines", id, "archivedAt", this.now().toISOString());
   }
 
   unarchive(id: string): void {
     if (this.get(id)) this.store.delCell("medicines", id, "archivedAt");
+  }
+
+  setPaused(id: string, paused: boolean): void {
+    const medicine = this.get(id);
+    if (!medicine) throw new Error("Medicine was deleted or is not on this device");
+    if (medicine.asNeeded) throw new Error("A medicine taken as needed has no schedule to pause");
+    if (medicine.paused === paused) return;
+    this.watchSupply(id, () => this.store.setCell("medicines", id, "details", storedDetails({ ...medicine, paused })));
   }
 
   private setCount(id: string, pillsLeft: number | undefined): void {

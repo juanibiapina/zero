@@ -1,6 +1,6 @@
 import { Host, Icon } from '@expo/ui';
 import { safeRandomUUID } from '@tanstack/db';
-import { DEFAULT_LEAD_DAYS, doseId, finishesCourse, intakeTime, MedicineDraft, medicineDay, medicineNextDay, medicineOccurrences, medicineState, medicineToday, parseLocalDay, pillCount, restockWithUndo, supplyLabel, toast, type Dose, type Intake, type Medicine, type MedicineSlot } from '@zero/agent-core';
+import { canArchiveMedicine, DEFAULT_LEAD_DAYS, doseId, finishesCourse, intakeTime, MedicineDraft, medicineDay, medicineNextDay, medicineOccurrences, medicineState, medicineToday, parseLocalDay, pillCount, restockWithUndo, supplyLabel, toast, type Dose, type Intake, type Medicine, type MedicineSlot, type TaskdoReplica } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, BackHandler, Pressable, ScrollView, SectionList, View } from 'react-native';
@@ -36,6 +36,11 @@ const errorText = (cause: unknown) => cause instanceof Error ? cause.message : S
 const sortedSlots = (medicine: Medicine) => [...medicine.doses].sort((a, b) => a.alarmAt.localeCompare(b.alarmAt));
 const typedCount = (text: string) => /^\d+$/.test(text.trim()) ? Number(text.trim()) : null;
 const lastTaken = (intakes: Intake[], medicineId: string) => intakes.find((intake) => intake.medicineId === medicineId);
+const pauseLabel = (medicine: Medicine) => medicine.paused ? 'Resume medicine' : 'Pause medicine';
+async function togglePause(replica: TaskdoReplica, medicine: Medicine, onError: (cause: unknown) => void) {
+  await replica.medicines.setPaused(medicine.id, !medicine.paused);
+  if (!medicine.paused) toast(`${medicine.name} paused`, { id: 'undo', action: { label: 'Undo', onPress: () => { replica.medicines.setPaused(medicine.id, false).catch(onError); } } });
+}
 function Action({ label, accessibilityLabel = label, onPress, disabled = false, danger = false }: { label: string; accessibilityLabel?: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} disabled={disabled} onPress={onPress} className="min-h-12 justify-center py-2"><Text className={danger ? 'font-medium text-danger' : 'font-medium text-accent'}>{label}</Text></Pressable>;
 }
@@ -89,13 +94,17 @@ function MedicineListContent({ snapshot, today }: {
   const [adding, setAdding] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [holding, setHolding] = useState<Medicine | null>(null);
+  const showError = (cause: unknown) => toast(errorText(cause));
   const archive = (medicine: Medicine) => {
     setHolding(null);
     if (!replica) return;
-    const showError = (cause: unknown) => toast(errorText(cause));
     replica.medicines.archive(medicine.id).then(() => {
       toast(`${medicine.name} archived`, { id: 'undo', action: { label: 'Undo', onPress: () => { replica.medicines.unarchive(medicine.id).catch(showError); } } });
     }, showError);
+  };
+  const pause = (medicine: Medicine) => {
+    setHolding(null);
+    if (replica) togglePause(replica, medicine, showError).catch(showError);
   };
   const scheduled = snapshot.medicines.filter((medicine) => !medicine.archivedAt && !medicine.asNeeded).sort((a, b) => {
     const order = { active: 0, scheduled: 1, paused: 2, ended: 3 };
@@ -118,9 +127,9 @@ function MedicineListContent({ snapshot, today }: {
         const status = medicine.asNeeded ? medicine.supply ? `${pillCount(medicine.supply.pillsLeft)} left` : null : listStatus(medicine, today, snapshot.doses);
         const taken = lastTaken(snapshot.intakes, medicine.id);
         const detail = medicine.asNeeded ? <Text variant="subtitle">{taken ? `Taken ${intakeTime(taken.takenAt, today)}` : 'Not taken yet'}</Text> : undefined;
-        return medicine.asNeeded || status === 'Ended' ? <MedicineRow medicine={medicine} status={status} detail={detail} onLongPress={() => setHolding(medicine)}
-          accessibilityActions={[{ name: 'archive', label: 'Archive medicine' }]} onAccessibilityAction={(name) => { if (name === 'archive') archive(medicine); }} />
-          : <MedicineRow medicine={medicine} status={status} detail={detail} />;
+        const action = canArchiveMedicine(medicine, today) ? { name: 'archive', label: 'Archive medicine' } : { name: 'pause', label: pauseLabel(medicine) };
+        return <MedicineRow medicine={medicine} status={status} detail={detail} onLongPress={() => setHolding(medicine)}
+          accessibilityActions={[action]} onAccessibilityAction={(name) => { if (name === 'archive') archive(medicine); if (name === 'pause') pause(medicine); }} />;
       }}
       ListFooterComponent={archived.length ? <View>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: archiveOpen }} onPress={() => setArchiveOpen((open) => !open)} className="min-h-14 flex-row items-center justify-between gap-3 px-screen-x pt-4">
@@ -132,9 +141,9 @@ function MedicineListContent({ snapshot, today }: {
     <Sheet open={!!holding} onClose={() => setHolding(null)} contextBridge={null}>
       <View className="pb-4">
         <Text className="px-screen-x pb-2 text-[20px] font-semibold">{holding?.name}</Text>
-        <Pressable accessibilityRole="button" android_ripple={{ color: ripple }} onPress={() => { if (holding) archive(holding); }} className="min-h-14 justify-center px-screen-x">
-          <Text className="text-[16px]">Archive medicine</Text>
-        </Pressable>
+        {holding ? <Pressable accessibilityRole="button" android_ripple={{ color: ripple }} onPress={() => { if (canArchiveMedicine(holding, today)) archive(holding); else pause(holding); }} className="min-h-14 justify-center px-screen-x">
+          <Text className="text-[16px]">{canArchiveMedicine(holding, today) ? 'Archive medicine' : pauseLabel(holding)}</Text>
+        </Pressable> : null}
       </View>
     </Sheet>
     <MedicineDrawer open={adding} onOpen={() => setAdding(true)} onClose={() => setAdding(false)} onSaved={(id) => { setAdding(false); router.push(`/browse/medicines/${id}`); }} />
@@ -241,6 +250,7 @@ export function MedicineDetail() {
     const intake = await replica.medicines.takeAsNeeded(medicine.id, amount);
     toast(`Took ${pillCount(amount)}`, { id: 'undo', action: { label: 'Undo', onPress: () => { replica.medicines.removeIntake(intake.id).catch((cause) => setError(errorText(cause))); } } });
   });
+  const pause = () => run(async () => { await togglePause(replica, medicine, (cause) => setError(errorText(cause))); setOptions(false); });
   const remove = () => Alert.alert('Delete medicine?', 'Its dose history will also be removed.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void run(async () => { await replica.medicines.remove(medicine.id); router.dismissTo('/browse/medicines'); }) }]);
   const saveText = (fields: { name: string; instructions: string | null }) => (async () => {
     setError(null);
@@ -252,12 +262,16 @@ export function MedicineDetail() {
     <Page title={medicine.name} header={<MedicineIdentity key={medicine.id} medicine={medicine} onSave={saveText}
       options={<Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable>} />}>
       {options ? <View className="border-y border-divider py-2">
-        {state === 'ended' || medicine.asNeeded ? archived ? null : <Action label="Archive medicine" disabled={busy} onPress={() => void run(async () => { await replica.medicines.archive(medicine.id); setOptions(false); })} />
-          : <Action label={medicine.paused ? 'Resume reminders' : 'Pause reminders'} disabled={busy} onPress={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))} />}
+        {canArchiveMedicine(medicine, today) ? archived ? null : <Action label="Archive medicine" disabled={busy} onPress={() => void run(async () => { await replica.medicines.archive(medicine.id); setOptions(false); })} />
+          : <Action label={pauseLabel(medicine)} disabled={busy} onPress={() => void pause()} />}
         <Action label="Delete medicine" danger disabled={busy} onPress={remove} />
       </View> : null}
       {error ? <Text variant="error" selectable className="pt-2">{error}</Text> : null}
       <Text accessibilityRole="header" variant="section" className="pb-3 pt-2">{heading}</Text>
+      {state === 'paused' && !archived ? <View className="flex-row flex-wrap items-center justify-between gap-x-4">
+        <Text variant="subtitle" className="min-w-0 flex-1">No reminders, and no pills are used.</Text>
+        <Action label="Resume" accessibilityLabel="Resume medicine" disabled={busy} onPress={() => void pause()} />
+      </View> : null}
       {archived ? <View className="flex-row flex-wrap items-center justify-between gap-x-4">
         <Text variant="subtitle" className="min-w-0 flex-1">{medicine.asNeeded ? 'Hidden from your medicines.' : `Ended ${day(medicine.endsOn ?? today)}. Hidden from your medicines.`}</Text>
         <Action label="Unarchive" disabled={busy} onPress={() => void run(() => replica.medicines.unarchive(medicine.id))} />

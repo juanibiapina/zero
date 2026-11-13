@@ -87,6 +87,7 @@ export type TodoWaits = {
 export type TodoMedicines = {
   add: (input: MedicineInput, creationId?: string, pillsLeft?: number) => Promise<Medicine>;
   edit: (id: string, input: MedicineInput, pillsLeft?: number) => Promise<void>;
+  setPaused: (id: string, paused: boolean) => Promise<void>;
   remove: (id: string) => Promise<void>;
   take: (dose: Dose) => Promise<void>;
   skip: (dose: Dose) => Promise<void>;
@@ -491,6 +492,7 @@ export function createTaskdoReplica({
         return result;
       },
       edit: (id, input, pillsLeft) => write(() => { medicineModel.edit(id, input, pillsLeft); }),
+      setPaused: (id, paused) => write(() => { medicineModel.setPaused(id, paused); }),
       remove: (id) => write(() => { medicineModel.remove(id); }),
       take: (dose) => write(() => { medicineModel.take(dose, randomId()); }),
       skip: (dose) => write(() => { medicineModel.skip(dose, randomId()); }),
