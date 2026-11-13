@@ -65,8 +65,8 @@ it("creates a finite multi-dose course and records, undoes, and retains independ
   expect(screen.getByRole("button", { name: "Taken 23:00 dose" })).toBeVisible();
   await act(async () => { await replica.medicines.edit(replica.snapshot().medicines[0].id, { ...replica.snapshot().medicines[0], doses: [{ id: replica.snapshot().medicines[0].doses[0].id, remindAt: "19:00", alarmAt: "21:30", amount: 1 }] }); });
   expect(screen.getByText(/Scheduled 22:00/)).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Pause reminders" }));
-  expect(await screen.findByRole("button", { name: "Resume reminders" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Pause medicine" }));
+  expect(await screen.findByRole("button", { name: "Resume medicine" })).toBeVisible();
 });
 
 it("runs a medicine until the pills you have run out", async () => {
@@ -124,6 +124,24 @@ it("saves chosen weekdays and shows the next dose on a day off", async () => {
   expect(replica.snapshot().medicines[0].weekdays).toEqual([(weekday % 7) + 1]);
   expect(await screen.findByRole("heading", { name: /^Next dose / })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /^Taken / })).toBeNull();
+});
+
+it("pauses a medicine and resumes it", async () => {
+  const todo = createInMemoryTodoData();
+  replica = todo.replica;
+  const medicine = await replica.medicines.add(MedicineDraft.create(medicineToday()).change({ name: "Magnesium" }).commit());
+  render(<TodoDataContextProvider value={{ ...todo.data, authenticatedFeatures: false }}>
+    <MemoryRouter initialEntries={[`/medicines/${medicine.id}`]}><Routes>
+      <Route path="/medicines/:id" element={<MedicinesPage />} />
+    </Routes></MemoryRouter>
+  </TodoDataContextProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Pause medicine" }));
+  expect(await screen.findByRole("heading", { name: "Paused" })).toBeVisible();
+  expect(screen.getByText("No reminders, and no pills are used.")).toBeVisible();
+  expect(screen.queryByRole("button", { name: /^Taken / })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Resume medicine" }));
+  await waitFor(() => expect(replica.snapshot().medicines[0].paused).toBe(false));
+  expect(await screen.findByRole("button", { name: /^Taken / })).toBeVisible();
 });
 
 it("archives an ended medicine out of the list and brings it back", async () => {

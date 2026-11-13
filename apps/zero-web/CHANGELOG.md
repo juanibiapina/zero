@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-13: Change Pause reminders on a medicine to Pause medicine. A paused medicine's page reads "Paused" and says it sends no reminders and uses no pills; Resume medicine continues it.
+
 - 2026-10-26: Add a Shopping list, under Shopping in the navigation. Add things to buy, drag them into order, click one to edit it, and tick it off when you buy it, with Undo. Choose Shopping in Home's add form to add an item without it showing up as a task.
 
 - 2026-10-25: Remove the Telegram and Google connections and the onboarding steps from Settings. Delete my data now lists what it erases: your tasks, projects, medicines and settings.

@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-13: Add Pause medicine for medicines on a schedule, in a medicine's options or by holding it in the list, with Undo. A paused medicine sends no reminders and uses no pills; its page says so and offers Resume. A paused course that runs until the pills run out no longer shows as Ended while it waits.
+
 - 2026-11-05: Change hands-free to ask before reading a Prompt aloud. Zero says "Prompt ready" and waits; press volume up to hear it, or volume down to record a voice note instead.
 
 - 2026-11-05: Fix hands-free ignoring the volume keys with the screen off. Volume down now records your voice note or answer, and the recording shows up in Recordings like any other.

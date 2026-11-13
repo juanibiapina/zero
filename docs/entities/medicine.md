@@ -41,7 +41,13 @@ only what comes next.
 - Skip records that you chose not to take a Dose. It ends that Dose's
   reminders like Taken but leaves the supply unchanged. Undo makes a skipped
   Dose pending again.
+- Pause stops a scheduled Medicine until you resume it. A paused Medicine
+  has no Doses and no reminders, open notifications close, it uses no pills,
+  and it is never low. Resume continues it from that day. An as-needed
+  Medicine cannot be paused.
 - A course ends on its last day. Pausing and missed doses do not extend it.
+  A paused course that runs until the pills run out stays paused past its
+  planned last day; Resume sets a new one.
 - A course that runs until the pills run out needs a pill count. It ends on
   the last dose the pills cover, counting each chosen day's doses in clock
   order from today and leaving out today's taken and skipped doses. Later
@@ -107,6 +113,12 @@ history on request. On a day that is not chosen, the list and the page show the 
 day as "tomorrow", a weekday within the coming week, or a date. A counted
 Medicine shows "24 pills left · about 12 days" with Restock and Recount; an
 uncounted one offers Count pills.
+
+A scheduled Medicine that has not ended offers Pause medicine in its options
+on mobile, by holding its row in the list on mobile, and as a button on the
+web. Pause shows "<name> paused" with Undo on mobile. A paused Medicine's page
+reads "Paused" with "No reminders, and no pills are used." and Resume; the
+list shows it as Paused.
 
 On mobile, the Medicine's page is also its editor, and every change saves at
 once. The name and notes are text fields at the top and save when you leave

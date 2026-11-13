@@ -96,6 +96,7 @@ export function MedicinesPage() {
   const asNeeded = snapshot.medicines.filter((item) => !item.archivedAt && item.asNeeded);
   const lastTaken = (medicineId: string) => snapshot.intakes.find((intake) => intake.medicineId === medicineId);
   const intakes = medicine ? snapshot.intakes.filter((intake) => intake.medicineId === medicine.id) : [];
+  const state = medicine ? medicineState(medicine, today) : null;
   const amount = medicine && takeAmount?.id === medicine.id ? takeAmount.value : String(intakes[0]?.amount ?? 1);
   const takeAsNeeded = (item: Medicine) => void run(async () => {
     if (!/^\d+$/.test(amount.trim()) || Number(amount) < 1) throw new Error("Take at least one pill");
@@ -140,14 +141,15 @@ export function MedicinesPage() {
         </form>
         <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.archive(medicine.id))}>Archive medicine</Button>
       </> : <>
-      <h2 className="font-semibold">{medicineState(medicine, today) === "active" ? medicineOccurrences(medicine, today).length ? "Today" : (medicineNextDay(medicine, today) ? `Next dose ${medicineDay(medicineNextDay(medicine, today)!, today)}` : "No more doses") : medicineState(medicine, today)}</h2>
+      <h2 className="font-semibold">{state === "active" ? medicineOccurrences(medicine, today).length ? "Today" : (medicineNextDay(medicine, today) ? `Next dose ${medicineDay(medicineNextDay(medicine, today)!, today)}` : "No more doses") : state === "paused" ? "Paused" : state}</h2>
+      {state === "paused" ? <p className="text-sm text-muted-foreground">No reminders, and no pills are used.</p> : null}
       {medicineOccurrences(medicine, today).map((planned) => {
         const dose = snapshot.doses.find((item) => item.id === planned.id) ?? planned;
         return <div key={dose.id} className="flex min-h-12 items-center justify-between gap-3 border-b py-2"><span>{time(dose.scheduledAt)}</span>{dose.takenAt || dose.skippedAt ? <span className="text-sm">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : "Skipped"} <Button variant="ghost" disabled={busy} onClick={() => void run(() => replica.medicines.undo(dose.id))}>Undo</Button></span> : <Button disabled={busy} onClick={() => take(dose)}>Taken {time(dose.scheduledAt)} dose</Button>}</div>;
       })}
       {undo ? <Button variant="ghost" disabled={busy} onClick={() => void run(async () => { await replica.medicines.undo(undo); setUndo(null); })}>Undo last taken dose</Button> : null}
-      {medicineState(medicine, today) === "ended" ? <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.archive(medicine.id))}>Archive medicine</Button>
-        : <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))}>{medicine.paused ? "Resume reminders" : "Pause reminders"}</Button>}
+      {state === "ended" ? <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.archive(medicine.id))}>Archive medicine</Button>
+        : <Button variant="outline" disabled={busy} onClick={() => void run(() => replica.medicines.setPaused(medicine.id, !medicine.paused))}>{medicine.paused ? "Resume medicine" : "Pause medicine"}</Button>}
       </>}
       </>}
       <h2 className="font-semibold">History</h2>
