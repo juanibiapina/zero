@@ -8,6 +8,8 @@ During development, use `gob run bin/ci` to run all necessary checks including b
 
 **Local `workerd` limitation:** on dev boxes where the host `workerd` binary can't start (e.g. NixOS), no local Worker runtime can start (the API Workers' `vite dev`, `wrangler dev`, `dev:worker`), including asset-only ones like `apps/zeroapps-landing` (observed: `write EPIPE` then "NixOS cannot run dynamically linked executables"). The `e2e:pixel` harness is the supported exception: it runs the Task Worker inside rootless Podman. `gob run bin/ci` still can't run whole-repo because it boots host `workerd`. For other changes, verify the touched package directly, e.g. `pnpm --filter @zero/api run test`, plus `pnpm --filter @zero/api run lint` and `pnpm --filter @zero/api run typecheck`. GitHub Actions CI runs lint, typecheck, build, package tests, and the deploy dry-run.
 
+**Vitest on `mini`:** vitest and vite crash with `SIGILL` (exit 132) on `mini`, because rolldown's native x64 binding needs CPU instructions its Celeron G3900 lacks. Install rolldown's WebAssembly binding outside the repo, matching the `rolldown@` version in `pnpm-lock.yaml`: `mkdir -p /tmp/rolldown-wasi && cd /tmp/rolldown-wasi && npm init -y && npm install --cpu=wasm32 --force @rolldown/binding-wasm32-wasi@<version>`. Then prefix vitest runs with `NAPI_RS_FORCE_WASI=true NODE_PATH=/tmp/rolldown-wasi/node_modules`, e.g. `NAPI_RS_FORCE_WASI=true NODE_PATH=/tmp/rolldown-wasi/node_modules pnpm --filter @zero/agent-core run test`. Mobile Jest does not use rolldown and needs none of this.
+
 ## Changelog
 
 Any change a user can observe (new capability, changed behavior, user-visible
