@@ -14,12 +14,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/backend": "^3.27.0",
-    "@clerk/hono": "^0.1.98",
+    "@clerk/backend": "^3.28.0",
+    "@clerk/hono": "^0.1.99",
     "@zero/auth": "workspace:*",
     "@zero/errors-core": "workspace:*",
     "do-orm": "github:juanibiapina/do-orm",
-    "hono": "^4.13.17",
+    "hono": "^4.13.18",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -31,7 +31,7 @@
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.14.0",
     "typescript": "6.0.3",
-    "vite": "8.3.6",
+    "vite": "8.3.8",
     "vitest": "^5.1.0",
     "wrangler": "^4.158.0"
   }

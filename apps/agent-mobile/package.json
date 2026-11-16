@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@clerk/expo": "^4.15.1",
+    "@clerk/expo": "^4.16.0",
     "@expo/material-symbols": "^0.1.1",
     "@expo/metro-runtime": "~58.0.17",
     "@expo/ui": "~58.0.27",
@@ -57,7 +57,7 @@
     "react-native-worklets": "0.13.0",
     "rn-emoji-keyboard": "^1.7.0",
     "tailwind-merge": "^3.7.0",
-    "tinybase": "10.0.1",
+    "tinybase": "10.1.0",
     "uniwind": "^1.13.2"
   },
   "devDependencies": {
