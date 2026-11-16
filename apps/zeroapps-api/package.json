@@ -23,9 +23,9 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.67.0",
-    "@cloudflare/vitest-plugin": "1.7.0",
-    "@cloudflare/workers-types": "^5.20260801.1",
+    "@cloudflare/vite-plugin": "^1.69.1",
+    "@cloudflare/vitest-plugin": "1.8.2",
+    "@cloudflare/workers-types": "^5.20261113.1",
     "@types/node": "^26.6.6",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
@@ -33,6 +33,6 @@
     "typescript": "6.0.3",
     "vite": "8.3.8",
     "vitest": "^5.1.0",
-    "wrangler": "^4.158.0"
+    "wrangler": "^4.162.0"
   }
 }
