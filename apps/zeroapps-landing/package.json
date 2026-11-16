@@ -14,7 +14,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
     "@zero/eslint-config": "workspace:*",
-    "astro": "^7.4.7",
+    "astro": "^7.4.11",
     "eslint": "10.14.0",
     "eslint-plugin-astro": "^3.2.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
