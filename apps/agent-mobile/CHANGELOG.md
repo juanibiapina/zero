@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-11-17: Let agents connected to Zero, such as pi, see just the tasks on your Home today, so they no longer tell you a task is due when it is still scheduled for a later day.
+
 - 2026-11-13: Add Pause medicine for medicines on a schedule, in a medicine's options or by holding it in the list, with Undo. A paused medicine sends no reminders and uses no pills; its page says so and offers Resume. A paused course that runs until the pills run out no longer shows as Ended while it waits.
 
 - 2026-11-05: Change hands-free to ask before reading a Prompt aloud. Zero says "Prompt ready" and waits; press volume up to hear it, or volume down to record a voice note instead.

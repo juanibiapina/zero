@@ -81,6 +81,29 @@ describe("todo operation catalog", () => {
     expect(restock.tasks.map((task) => task.id)).toEqual(["restock"]);
   });
 
+  it("lists only the Tasks on Home today with view home", async () => {
+    const { run, value } = workspace("2026-03-10");
+    value(await run("projects_create", { id: "p", title: "Move flat" }));
+    value(await run("projects_create", { id: "b", title: "Someday", state: "backlog" }));
+    value(await run("tasks_create", { id: "loose-undated", text: "Buy milk" }));
+    value(await run("tasks_create", { id: "loose-today", text: "Call Ana", showUpDate: "2026-03-10" }));
+    value(await run("tasks_create", { id: "loose-later", text: "Book trip", showUpDate: "2026-03-20" }));
+    value(await run("tasks_create", { id: "project-today", text: "Pack boxes", showUpDate: "2026-03-10", parent: { kind: "project", projectId: "p" } }));
+    value(await run("tasks_create", { id: "backlog-today", text: "Learn piano", showUpDate: "2026-03-10", parent: { kind: "project", projectId: "b" } }));
+    value(await run("tasks_create", { id: "project-undated", text: "Hire movers", parent: { kind: "project", projectId: "p" } }));
+    value(await run("tasks_create", { id: "monthly", text: "Pay rent", recurrence: {
+      version: 1, origin: "2026-03-30", anchor: "scheduled", weekStartsOn: "MO",
+      pattern: { unit: "month", interval: 1, on: [{ kind: "day", day: 30 }] },
+    } }));
+    value(await run("tasks_create", { id: "done", text: "File taxes" }));
+    value(await run("tasks_complete", { id: "done" }));
+
+    const ids = async (input: unknown) => value<{ tasks: Array<{ id: string }> }>(await run("tasks_list", input)).tasks.map((task) => task.id);
+    expect(await ids({ view: "home" })).toEqual(["loose-undated", "loose-today", "project-today"]);
+    expect(await ids({})).toEqual(["loose-undated", "loose-today", "loose-later", "project-today", "backlog-today", "project-undated", "monthly"]);
+    expect(await ids({ view: "home", parent: { kind: "project", projectId: "p" } })).toEqual(["project-today"]);
+  });
+
   it("reports model conflicts by name", async () => {
     const { run } = workspace();
     expect(await run("tasks_create", { text: "Orphan", parent: { kind: "project", projectId: "nope" } })).toEqual({ ok: false, error: "missing-project" });
