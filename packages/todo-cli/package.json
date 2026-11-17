@@ -1,0 +1,29 @@
+{
+  "name": "@zero/todo-cli",
+  "version": "0.1.0",
+  "description": "zero-todo: Tasks and Projects in Zero's todo app from the shell",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "zero-todo": "dist/zero-todo.mjs"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "^15.1.0",
+    "openid-client": "^6.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@zero/eslint-config": "workspace:*",
+    "@zero/typescript-config": "workspace:*",
+    "esbuild": "^0.28.2",
+    "eslint": "10.14.0",
+    "typescript": "6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

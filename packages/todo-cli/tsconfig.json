@@ -1,0 +1,9 @@
+{
+  "extends": "@zero/typescript-config/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
