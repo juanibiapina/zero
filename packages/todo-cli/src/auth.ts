@@ -37,8 +37,8 @@ export class CliError extends Error {
   }
 }
 
-const notSignedIn = () => new CliError("not signed in", 1, LOGIN_HINT);
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+export const notSignedIn = () => new CliError("not signed in", 1, LOGIN_HINT);
+export const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function authPaths(env: Env) {

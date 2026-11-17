@@ -1,14 +1,12 @@
-import { accessToken, CliError, LOGIN_HINT, type Env } from "./auth";
+import { accessToken, CliError, errorText, LOGIN_HINT, type Env } from "./auth";
 
 export const DEFAULT_API_URL = "https://zero.juanibiapina.dev";
-
-export type Recurrence = Record<string, unknown>;
 
 export type Task = {
   id: string;
   text: string;
   showUpDate: string | null;
-  recurrence: Recurrence | null;
+  recurrence: Record<string, unknown> | null;
   recurrenceDate: string | null;
   parent: null | { kind: "project"; projectId: string } | { kind: "medicine"; medicineId: string; role: "restock" | null };
   recordingId: string | null;
@@ -60,7 +58,7 @@ export class Api {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (error) {
-      throw new CliError(`could not reach ${this.baseUrl}: ${error instanceof Error ? error.message : String(error)}`, 75);
+      throw new CliError(`could not reach ${this.baseUrl}: ${errorText(error)}`, 75);
     }
   }
 }

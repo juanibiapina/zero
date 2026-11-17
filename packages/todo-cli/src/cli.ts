@@ -1,7 +1,7 @@
 import { Command, CommanderError, Option } from "commander";
 
 import { Api, DEFAULT_API_URL, type Project, type ProjectState, type Task } from "./api";
-import { CliError, deleteLogin, LOGIN_HINT, login, readLogin, type Env } from "./auth";
+import { CliError, deleteLogin, errorText, login, notSignedIn, readLogin, type Env } from "./auth";
 import packageJson from "../package.json" with { type: "json" };
 
 export type Io = {
@@ -20,6 +20,9 @@ function table(rows: string[][]): string {
     .map((row) => row.map((cell, column) => (column === row.length - 1 ? cell : cell.padEnd(widths[column]))).join("  "))
     .join("\n") + "\n";
 }
+
+const taskPath = (id: string, action?: string) => `/api/v1/tasks/${encodeURIComponent(id)}${action ? `/${action}` : ""}`;
+const projectPath = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`;
 
 const taskTable = (tasks: Task[]) => table([
   ["ID", "DATE", "TEXT"],
@@ -53,6 +56,10 @@ function buildProgram(io: Io): Command {
     io.stdout(options.json ? `${JSON.stringify(body, null, 2)}\n` : human(body));
   };
 
+  const printTask = (options: JsonFlag, body: { task: Task }) => print(options, body, ({ task }) => taskTable([task]));
+  const printProject = (options: JsonFlag, body: { project: Project }) =>
+    print(options, body, ({ project }) => projectTable([project]));
+
   const json = (command: Command) => command.option("--json", "Print the response body as JSON");
 
   const auth = program.command("auth").description("Sign in to Zero");
@@ -80,7 +87,7 @@ function buildProgram(io: Io): Command {
         return;
       }
       const stored = await readLogin(io.env);
-      if (!stored) throw new CliError("not signed in", 1, LOGIN_HINT);
+      if (!stored) throw notSignedIn();
       io.stdout(`Signed in to ${stored.issuer} as ${stored.email ?? stored.userId}\n`);
     });
 
@@ -110,7 +117,7 @@ function buildProgram(io: Io): Command {
         ...(options.on ? { showUpDate: options.on } : {}),
         ...(options.project ? { parent: { kind: "project", projectId: options.project } } : {}),
       });
-      print(options, body, ({ task }) => taskTable([task]));
+      printTask(options, body);
     });
 
   json(tasks.command("edit"))
@@ -130,8 +137,8 @@ function buildProgram(io: Io): Command {
         ...(options.loose ? { parent: null } : {}),
       };
       if (Object.keys(patch).length === 0) throw new CliError("nothing to update; pass --text, --on, --no-date, --project, or --loose");
-      const body = await api().request<{ task: Task }>("PATCH", `/api/v1/tasks/${encodeURIComponent(id)}`, patch);
-      print(options, body, ({ task }) => taskTable([task]));
+      const body = await api().request<{ task: Task }>("PATCH", taskPath(id), patch);
+      printTask(options, body);
     });
 
   for (const [name, action, description] of [
@@ -142,8 +149,8 @@ function buildProgram(io: Io): Command {
       .description(description)
       .argument("<id>", "Task id")
       .action(async (id: string, options: JsonFlag) => {
-        const body = await api().request<{ task: Task }>("POST", `/api/v1/tasks/${encodeURIComponent(id)}/${action}`);
-        print(options, body, ({ task }) => taskTable([task]));
+        const body = await api().request<{ task: Task }>("POST", taskPath(id, action));
+        printTask(options, body);
       });
   }
 
@@ -169,7 +176,7 @@ function buildProgram(io: Io): Command {
         ...(options.icon ? { icon: options.icon } : {}),
         ...(options.backlog ? { state: "backlog" } : {}),
       });
-      print(options, body, ({ project }) => projectTable([project]));
+      printProject(options, body);
     });
 
   json(projects.command("edit"))
@@ -186,8 +193,8 @@ function buildProgram(io: Io): Command {
         ...(options.description !== undefined ? { description: options.description || null } : {}),
       };
       if (Object.keys(patch).length === 0) throw new CliError("nothing to update; pass --title, --icon, --description, or --no-description");
-      const body = await api().request<{ project: Project }>("PATCH", `/api/v1/projects/${encodeURIComponent(id)}`, patch);
-      print(options, body, ({ project }) => projectTable([project]));
+      const body = await api().request<{ project: Project }>("PATCH", projectPath(id), patch);
+      printProject(options, body);
     });
 
   json(projects.command("state"))
@@ -195,8 +202,8 @@ function buildProgram(io: Io): Command {
     .argument("<id>", "Project id")
     .addArgument(new Command().createArgument("<state>", "New state").choices(["in-play", "backlog", "done"]))
     .action(async (id: string, state: ProjectState, options: JsonFlag) => {
-      const body = await api().request<{ project: Project }>("PATCH", `/api/v1/projects/${encodeURIComponent(id)}`, { state });
-      print(options, body, ({ project }) => projectTable([project]));
+      const body = await api().request<{ project: Project }>("PATCH", projectPath(id), { state });
+      printProject(options, body);
     });
 
   json(projects.command("delete"))
@@ -209,7 +216,7 @@ function buildProgram(io: Io): Command {
         if (!await io.confirm(`Delete Project ${id} with all its Tasks? [y/N] `)) throw new CliError("not deleted");
       }
       const body = await api().request<{ removed: { tasks: number; conditions: number; afters: number } }>(
-        "DELETE", `/api/v1/projects/${encodeURIComponent(id)}`);
+        "DELETE", projectPath(id));
       print(options, body, ({ removed }) =>
         `Deleted ${id}: ${removed.tasks} Tasks, ${removed.conditions} Waiting conditions, ${removed.afters} Afters\n`);
     });
@@ -227,7 +234,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
       io.stderr(`Error: ${error.message}\n${error.hint ? `${error.hint}\n` : ""}`);
       return error.exitCode;
     }
-    io.stderr(`Error: ${error instanceof Error ? error.message : String(error)}\n`);
+    io.stderr(`Error: ${errorText(error)}\n`);
     return 1;
   }
 }

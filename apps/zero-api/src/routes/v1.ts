@@ -99,6 +99,13 @@ export const createV1Routes = ({ resolveToday = userToday }: { resolveToday?: Re
   const refuse = (c: Context<V1>, error: string, conflicts: Conflicts): never =>
     c.json({ error }, conflicts[error] ?? 400) as never;
 
+  const respond = (
+    c: Context<V1>,
+    outcome: OperationOutcome,
+    { status = 200, conflicts = {}, wrap = (value) => value }:
+      { status?: 200 | 201; conflicts?: Conflicts; wrap?: (value: unknown) => unknown } = {},
+  ): never => (outcome.ok ? c.json(wrap(outcome.value) as never, status) as never : refuse(c, outcome.error, conflicts));
+
   router.openAPIRegistry.registerComponent("securitySchemes", "bearer", {
     type: "http",
     scheme: "bearer",
@@ -129,12 +136,10 @@ export const createV1Routes = ({ resolveToday = userToday }: { resolveToday?: Re
     },
   }), async (c) => {
     const { view, projectId } = c.req.valid("query");
-    const outcome = await run(c, "tasks_list", {
+    return respond(c, await run(c, "tasks_list", {
       ...(view ? { view } : {}),
       ...(projectId ? { parent: { kind: "project", projectId } } : {}),
-    });
-    if (!outcome.ok) return refuse(c, outcome.error, {});
-    return c.json(outcome.value as never, 200);
+    }));
   });
 
   router.openapi(createRoute({
@@ -148,9 +153,8 @@ export const createV1Routes = ({ resolveToday = userToday }: { resolveToday?: Re
       ...errors({ 400: "Invalid body", 409: "The id is taken, or the Project or Recording does not exist" }),
     },
   }), async (c) => {
-    const outcome = await run(c, "tasks_create", c.req.valid("json"));
-    if (!outcome.ok) return refuse(c, outcome.error, TASK_CONFLICTS);
-    return c.json({ task: outcome.value } as never, 201);
+    return respond(c, await run(c, "tasks_create", c.req.valid("json")),
+      { status: 201, conflicts: TASK_CONFLICTS, wrap: (task) => ({ task }) });
   });
 
   router.openapi(createRoute({
@@ -167,9 +171,8 @@ export const createV1Routes = ({ resolveToday = userToday }: { resolveToday?: Re
       ...errors({ 400: "Invalid body or nothing to update", 404: "No such Task", 409: "The Project or Recording does not exist" }),
     },
   }), async (c) => {
-    const outcome = await run(c, "tasks_update", { id: c.req.valid("param").id, ...c.req.valid("json") });
-    if (!outcome.ok) return refuse(c, outcome.error, TASK_CONFLICTS);
-    return c.json({ task: outcome.value } as never, 200);
+    return respond(c, await run(c, "tasks_update", { id: c.req.valid("param").id, ...c.req.valid("json") }),
+      { conflicts: TASK_CONFLICTS, wrap: (task) => ({ task }) });
   });
 
   for (const [action, operation, summary] of [
@@ -187,9 +190,8 @@ export const createV1Routes = ({ resolveToday = userToday }: { resolveToday?: Re
         ...errors({ 404: "No such Task", 409: "The recurrence is invalid" }),
       },
     }), async (c) => {
-      const outcome = await run(c, operation, { id: c.req.valid("param").id });
-      if (!outcome.ok) return refuse(c, outcome.error, TASK_CONFLICTS);
-      return c.json({ task: outcome.value } as never, 200);
+      return respond(c, await run(c, operation, { id: c.req.valid("param").id }),
+        { conflicts: TASK_CONFLICTS, wrap: (task) => ({ task }) });
     });
   }
 
@@ -209,9 +211,7 @@ export const createV1Routes = ({ resolveToday = userToday }: { resolveToday?: Re
     },
   }), async (c) => {
     const { includeDone } = c.req.valid("query");
-    const outcome = await run(c, "projects_list", includeDone === "true" ? { includeDone: true } : {});
-    if (!outcome.ok) return refuse(c, outcome.error, {});
-    return c.json(outcome.value as never, 200);
+    return respond(c, await run(c, "projects_list", includeDone === "true" ? { includeDone: true } : {}));
   });
 
   router.openapi(createRoute({
@@ -225,9 +225,8 @@ export const createV1Routes = ({ resolveToday = userToday }: { resolveToday?: Re
       ...errors({ 400: "Invalid body", 409: "The id is taken" }),
     },
   }), async (c) => {
-    const outcome = await run(c, "projects_create", c.req.valid("json"));
-    if (!outcome.ok) return refuse(c, outcome.error, { "id-conflict": 409 });
-    return c.json({ project: outcome.value } as never, 201);
+    return respond(c, await run(c, "projects_create", c.req.valid("json")),
+      { status: 201, conflicts: { "id-conflict": 409 }, wrap: (project) => ({ project }) });
   });
 
   router.openapi(createRoute({
@@ -283,9 +282,7 @@ export const createV1Routes = ({ resolveToday = userToday }: { resolveToday?: Re
       ...errors({}),
     },
   }), async (c) => {
-    const outcome = await run(c, "projects_delete", { id: c.req.valid("param").id });
-    if (!outcome.ok) return refuse(c, outcome.error, {});
-    return c.json({ removed: outcome.value } as never, 200);
+    return respond(c, await run(c, "projects_delete", { id: c.req.valid("param").id }), { wrap: (removed) => ({ removed }) });
   });
 
   router.all("/api/v1/*", (c) => c.json({ error: "not-found" }, 404));
