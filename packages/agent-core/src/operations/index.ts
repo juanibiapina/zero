@@ -11,6 +11,7 @@ import {
 import { RecordingModel, recordingDetail, recordingSummary } from "../recordings/model";
 import { ShoppingListModel, type ShoppingResult } from "../shopping/model";
 import { TodoModel, type TodoModelResult } from "../taskdo/model";
+import { homeTasks } from "../tasks/home";
 import type { Project, Task, TaskParent } from "../taskdo/types";
 
 export type OperationKind = "read" | "write" | "destructive";
@@ -185,20 +186,27 @@ function withAttention(projects: Project[], model: TodoModel, today: string) {
 export const todoOperations: readonly TodoOperation[] = [
   define({
     name: "tasks_list",
-    title: "List open Tasks",
+    title: "List Tasks",
     description:
-      "List open Tasks in the user's manual order. A Task is the only to-do item; it is loose or belongs to a Project. " +
-      "showUpDate is the day it becomes current (null means always current); Home shows open Tasks whose showUpDate is " +
-      "null or on/before today, Upcoming shows later ones. Recurring Tasks carry recurrence and recurrenceDate (the current occurrence). " +
+      "List Tasks not completed, in the user's manual order, including Tasks scheduled for a later day. " +
+      "A Task is the only to-do item; it is loose or belongs to a Project. " +
+      "showUpDate is the day it becomes current (null means always current). A Task whose showUpDate is after today is hidden " +
+      "from Home until that day: do not report it as due or current. Pass view home to get exactly the Tasks the user sees on Home today. " +
+      "Recurring Tasks carry recurrence and recurrenceDate (the current occurrence). " +
       "parent is null for a loose Task, { kind: project, projectId } for a Project Task, or { kind: medicine, medicineId, role } " +
       "for a Medicine Task; role restock means Zero added it because the supply ran low. " +
       "recordingId is the Recording the Task came from, or null. " +
       "Completing it here does not add pills; the user records the amount in the app.",
     kind: "read",
-    input: z.object({ parent: ParentFilter.optional().describe("Only Tasks with this parent") }),
+    input: z.object({
+      view: z.enum(["all", "home"]).optional()
+        .describe("all (default): every Task not completed; home: exactly the Tasks the user sees on Home today"),
+      parent: ParentFilter.optional().describe("Only Tasks with this parent"),
+    }),
     run: (ctx, input) => {
-      const tasks = todo(ctx).project({ taskOrder: "manual" }).tasks;
-      const { parent } = input;
+      const projection = todo(ctx).project({ taskOrder: "manual" });
+      const { parent, view } = input;
+      const tasks = view === "home" ? homeTasks(projection.tasks, projection.projects, ctx.today) : projection.tasks;
       return read({ today: ctx.today, tasks: parent ? tasks.filter((task) => hasParent(task, parent)) : tasks });
     },
   }),

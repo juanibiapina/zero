@@ -77,6 +77,9 @@ runs against the TinyBase store through `TodoModel`, `MedicineModel`,
 `ShoppingListModel`, and `RecordingModel`. The MCP
 route has no per-tool code; adding an operation to the catalog adds a tool.
 
+- `tasks_list` lists every Task not completed by default. With
+  `view: "home"` it returns the Tasks on the user's Home for the route's today,
+  using the same `homeTasks` rule as the apps.
 - `runTodoOperation` validates input, mints IDs that the caller omits, and
   returns `{ ok: true, changed, value }` or `{ ok: false, error }`. Model
   conflicts such as `missing-project` or `cycle` come back by name and reach the
