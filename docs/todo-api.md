@@ -95,18 +95,8 @@ zero-todo --help
 ### Build and install
 
 `pnpm -F @zero/todo-cli run build` bundles the CLI and its dependencies into
-`packages/todo-cli/dist/zero-todo.mjs`, which runs with plain `node`. The Macs
-install it with Nix from the GitHub release asset.
+`packages/todo-cli/dist/zero-todo.mjs`, which runs with plain `node`.
 
-### Release
-
-`.github/workflows/release-todo-cli.yml` releases on `todo-cli-v*` tags. The
-bare `v*` tags belong to `@zeroapps/cli` (see `docs/cli-releases.md`).
-
-1. Bump `version` in `packages/todo-cli/package.json`, merge to `main`, and wait
-   for CI.
-2. Tag with the release notes as the tag message, and push the tag:
-   `git tag -a todo-cli-vX.Y.Z -m "<notes>" && git push origin todo-cli-vX.Y.Z`.
-3. The workflow checks that the tag matches the package version, builds, and
-   attaches `zero-todo.mjs` to a GitHub release with the tag message as notes.
-4. Point the Nix module in dotfiles at the new release and its hash.
+The CLI has no releases: it is installed from source. The Macs take this repo
+as a Nix flake input in dotfiles, run that build, and wrap the bundle with
+`node`. A newer CLI reaches them with `nix flake update zero`.
