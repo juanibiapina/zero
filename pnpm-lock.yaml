@@ -857,6 +857,37 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.9.0)(@types/node@26.6.6)(jsdom@31.0.1(@noble/hashes@2.3.0))(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/todo-cli:
+    dependencies:
+      commander:
+        specifier: ^15.1.0
+        version: 15.1.0
+      openid-client:
+        specifier: ^6.9.0
+        version: 6.9.0
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      '@zero/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@zero/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      eslint:
+        specifier: 10.14.0
+        version: 10.14.0(jiti@2.7.0)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@opentelemetry/api@1.9.0)(@types/node@26.6.6)(jsdom@31.0.1(@noble/hashes@2.3.0))(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/typesafe:
     devDependencies:
       '@types/node':
@@ -6042,7 +6073,7 @@ packages:
     resolution: {integrity: sha512-Ndrrf6BMPalkQPd/zubL+4YghH2J9NspapQ09uDXwYbvOPkP0oaqf5CkcwJ0b50kS2O3ul6yVu+jz+RY62Cejg==}
 
   do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/8fb0eb3fc1d375d5e91aece840699049f8a4f029:
-    resolution: {tarball: https://codeload.github.com/juanibiapina/do-orm/tar.gz/8fb0eb3fc1d375d5e91aece840699049f8a4f029}
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/juanibiapina/do-orm/tar.gz/8fb0eb3fc1d375d5e91aece840699049f8a4f029}
     version: 0.2.0
 
   doctrine@2.1.0:
@@ -7732,6 +7763,9 @@ packages:
   jose@6.2.12:
     resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
 
+  jose@6.2.17:
+    resolution: {integrity: sha512-wOuK9V1yujQFH5S0ZWmLcDZN7+IKh9bUCC2ZPCf2HDlol3WWHy+PPyNjEI75FXRLMp3vDKQcupP59xhVU95hcg==}
+
   js-cookie@3.0.8:
     resolution: {integrity: sha512-yeJd4aNAdYZQjaon2bpD/Gb0B/omw7HQOsynXXcOiWVCacbBcPlgn8S/d1X6blFSaHao7ozqtW7NZW19xpCtIw==}
 
@@ -8676,6 +8710,9 @@ packages:
   nwsapi@2.2.24:
     resolution: {integrity: sha512-7YRhZ3jS45LwmSCT4b2sVFHt/WuovaktDU07QrtOBY2PXskss5a9jfmR9jptyumwXST+rFjrmppMY1KT/yn35A==}
 
+  oauth4webapi@3.8.8:
+    resolution: {integrity: sha512-8N28E+a/oxfXWBgOMt+ZP/JUf/XR+IFbvkAEPP3gznXOMv9BpAAwiIj0TFNz3tGTPc0ZQ8zmWBNgN1nAys0gng==}
+
   ob1@0.87.1:
     resolution: {integrity: sha512-i8iA8uij0g1YQzS8uOJPSRCgwDjO9warIHUAu1Fqj877Wc3wlfxDYBioYWgKTBF2+URVJttyDWSEpmd99nlvtQ==}
     engines: {node: ^22.13.0 || ^24.3.0 || >= 26.0.0}
@@ -8758,6 +8795,9 @@ packages:
 
   openapi3-ts@4.6.0:
     resolution: {integrity: sha512-a4sfn6L2sIShhtzJqmjGrARvxAW/3F2BJDdyRVvNF9VhAsZSh5hSyI3a9TNvmzBxXmq66nY5LNT5bQcBxYAZZg==}
+
+  openid-client@6.9.0:
+    resolution: {integrity: sha512-2IvamJR8PAnWHngaCsGGA8TYfcLI2egvuqa9cOQYHIISwIUhxJwwwcCnkgVX95fzZ6J0TAna0aVGUMOxnPeRqg==}
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -12389,7 +12429,7 @@ snapshots:
     dependencies:
       '@eslint/object-schema': 3.0.5
       debug: 4.4.3
-      minimatch: 10.2.5
+      minimatch: 10.2.6
     transitivePeerDependencies:
       - supports-color
 
@@ -16833,7 +16873,7 @@ snapshots:
   eslint-scope@9.1.2:
     dependencies:
       '@types/esrecurse': 4.3.1
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       esrecurse: 4.3.0
       estraverse: 5.3.0
 
@@ -16854,7 +16894,7 @@ snapshots:
       '@humanfs/node': 0.16.8
       '@humanwhocodes/module-importer': 1.0.1
       '@humanwhocodes/retry': 0.4.3
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       ajv: 6.15.0
       cross-spawn: 7.0.6
       debug: 4.4.3
@@ -18703,6 +18743,8 @@ snapshots:
 
   jose@6.2.12: {}
 
+  jose@6.2.17: {}
+
   js-cookie@3.0.8: {}
 
   js-tokens@4.0.0: {}
@@ -20070,6 +20112,8 @@ snapshots:
 
   nwsapi@2.2.24: {}
 
+  oauth4webapi@3.8.8: {}
+
   ob1@0.87.1:
     dependencies:
       flow-enums-runtime: 0.0.6
@@ -20167,6 +20211,11 @@ snapshots:
   openapi3-ts@4.6.0:
     dependencies:
       yaml: 2.9.1
+
+  openid-client@6.9.0:
+    dependencies:
+      jose: 6.2.17
+      oauth4webapi: 3.8.8
 
   optionator@0.9.4:
     dependencies:

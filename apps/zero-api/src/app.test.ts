@@ -80,4 +80,13 @@ describe("api auth guard", () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(seen()).not.toBe("not-a-real-jwt");
   });
+
+  it("leaves /api/v1 to its own OAuth guard", async () => {
+    const { env } = fakeEnv("production");
+    const document = await createApp().fetch(new Request("http://localhost/api/v1/openapi.json"), env);
+    const unknown = await createApp().fetch(new Request("http://localhost/api/v1/nope"), env);
+
+    expect(document.status).toBe(200);
+    expect(await unknown.json()).toEqual({ error: "unauthorized" });
+  });
 });

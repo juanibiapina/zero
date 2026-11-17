@@ -1,5 +1,5 @@
-// Middleware order matters: the Clerk webhook and MCP routes are mounted before
-// Clerk (they carry no Clerk session); the user-settings and todo routes are
+// Middleware order matters: the Clerk webhook, MCP, and /api/v1 routes are
+// mounted before Clerk (they carry no Clerk session); the user-settings and todo routes are
 // mounted after Clerk + the auth guard so handlers always see a verified `userId`.
 
 import { OpenAPIHono } from "@hono/zod-openapi";
@@ -16,6 +16,7 @@ import { createWaitsRoutes } from "./routes/waits";
 import { createRecordingsRoutes } from "./routes/recordings";
 import { createTaskSyncRoutes } from "./routes/task-sync";
 import { createMcpRoutes } from "./routes/mcp";
+import { createV1Routes } from "./routes/v1";
 
 type Variables = {
   userId: string;
@@ -47,6 +48,7 @@ export const createApp = () => {
 
   app.route("/", createClerkWebhookRoute());
   app.route("/", createMcpRoutes());
+  app.route("/", createV1Routes());
 
   // Auth guard. Under ENVIRONMENT=test the hermetic release E2E stack has no
   // Clerk secret, so trust the bearer token as the userId and skip Clerk

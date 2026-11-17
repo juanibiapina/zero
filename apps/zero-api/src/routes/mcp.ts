@@ -9,19 +9,10 @@ import { todoOperations, type OperationOutcome } from "@zero/agent-core/operatio
 import { Hono, type MiddlewareHandler } from "hono";
 
 import { clerkClient } from "../clerk";
-import { localDayInZone } from "../dates";
 import { log } from "../log";
 import { getTaskDO } from "../TaskDO/stub";
-import { DEFAULT_TIMEZONE } from "../timezone";
+import { userToday, type ResolveToday } from "../today";
 import type { Env } from "../types";
-import { getUserDO } from "../UserDO/stub";
-
-export type ResolveToday = (env: Env, userId: string) => Promise<string>;
-
-const userToday: ResolveToday = async (env, userId) => {
-  const { timezone } = await getUserDO(env, userId).getSettings();
-  return localDayInZone(new Date(), timezone ?? DEFAULT_TIMEZONE);
-};
 
 const INSTRUCTIONS =
   "Zero's todo workspace for the signed-in user: Tasks, Projects, Waiting conditions, Afters, Shopping list, Medicines, and Recordings (voice notes with transcripts). " +
