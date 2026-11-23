@@ -13,8 +13,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/backend": "^3.28.0",
-    "@clerk/hono": "^0.1.99",
+    "@clerk/backend": "^3.31.2",
+    "@clerk/hono": "^0.1.104",
     "@clerk/mcp-tools": "^0.9.0",
     "@hono/zod-openapi": "^1.6.3",
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -23,7 +23,7 @@
     "@zeroapps/recurrence": "workspace:*",
     "@zeroapps/typesafe": "workspace:*",
     "do-orm": "github:juanibiapina/do-orm",
-    "hono": "^4.13.18",
+    "hono": "^4.13.19",
     "mermaid": "^12.3.0",
     "tinybase": "10.1.0",
     "zod": "^4.6.7"
@@ -37,7 +37,7 @@
     "eslint": "10.14.0",
     "typescript": "6.0.3",
     "vite": "8.3.8",
-    "vitest": "^5.1.0",
+    "vitest": "^5.1.1",
     "wrangler": "^4.165.0"
   }
 }

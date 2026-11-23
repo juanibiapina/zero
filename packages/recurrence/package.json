@@ -14,7 +14,7 @@
   ],
   "dependencies": {
     "chrono-node": "^2.10.3",
-    "rrule-temporal": "^2.2.8",
+    "rrule-temporal": "^2.3.0",
     "temporal-polyfill": "^1.0.8"
   },
   "devDependencies": {
@@ -23,7 +23,7 @@
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.14.0",
     "typescript": "6.0.3",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   },
   "scripts": {
     "lint": "eslint .",
