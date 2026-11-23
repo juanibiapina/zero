@@ -22,7 +22,7 @@
     "@radix-ui/react-slot": "^1.5.0",
     "@tanstack/db": "1.0.0-rc.1.5",
     "@tanstack/react-db": "1.0.0-rc.1.5",
-    "@tanstack/react-query": "5.107.1",
+    "@tanstack/react-query": "5.108.1",
     "@zero/agent-core": "workspace:*",
     "@zeroapps/recurrence": "workspace:*",
     "class-variance-authority": "^0.7.1",
